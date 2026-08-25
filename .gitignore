@@ -1,0 +1,17 @@
+# Gradle / build
+.gradle-user-home/
+.gradle/
+build/
+run/
+run-*/
+out/
+# IDE
+.idea/
+*.iml
+.classpath
+.project
+.settings/
+.vscode/
+# misc
+*.log
+hs_err_pid*
