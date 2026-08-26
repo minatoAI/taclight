@@ -1,5 +1,11 @@
 # TacLight Changelog
 
+## v0.8.4(坐标约定修复——光终于画出来了!)
+- **根因**:Iris/Oculus 的 composite 后处理 pass 里 `gbufferModelView` 是**纯旋转矩阵(无平移)**——坐标体系是"场景相对坐标"(world − cameraPosition);我们按"完整视图矩阵"换算,导致灯被算到 ~275 格外 → `dist>radius` 全部拒绝 → **光从未渲染过**(用户看到的"白团"= iterationT 内置传统手持光,HELDLIGHT_MODE=0)
+- **修复**:`lightView = mat3(gbufferModelView) * posRadius`(纯旋转,场景相对→视图);surface/specular/beam 三处同步(与旧项目 tarkovline 的全程 scene-relative 约定一致)
+- **端到端验证**:探针 `reserved=0x22fb` 全位通过;实机截图确认绿色锥形光 + 距离衰减可见
+- 新增分阶段探针位与 GPU 回读(纠正 cookie 读回偏移 80→96 的 bug)
+
 ## v0.8.3(选包自检 + K 键反馈)
 - **症状**:用户按 K 无反应、光仍为"无衰减白团" → 调查:代码无误,最可能是**选中的是原包迭代T而非派生包**,SSBO 通道根本没运行
 - **新增开机自检**(ShaderPackDiag):读 config/oculus.properties + 检查活动包里是否有 TACLIGHT_PATCH_BEGIN 标记 → 每 5 秒检测,状态变化时聊天栏+日志提示(未激活/原包/派生包/无法判定)

@@ -7,6 +7,10 @@
 > E2E 探针回读确认 SSBO 通道闭环(最终证据: E2E-PROBE: reserved=0x1)。
 > 本文件保留完整调查史(含被排除/被证伪的假设),供后来者少走弯路。
 
+## 结论(v0.8.4 最终修订)
+**外部 SSBO 从未被 Oculus 阻断。** 三个"阻断假象"的真正根因:① v3-p2 起 composite5 的 f0 类型错误→管线编译失败;② 坐标约定错误——Iris 的 composite 中 `gbufferModelView` 是无平移的纯旋转矩阵,坐标体系为场景相对坐标(world − cameraPosition),我们按全视图矩阵把灯送到 275 格外 → 每盏灯 `dist>radius` 被拒;③ 两次诊断自身的读回/声明 bug(偏移 80 vs 96、探针块同名成员)掩盖真相。
+**正确约定(与旧项目 tarkovline 一致):全管线场景相对坐标;视图空间 = mat3(gbufferModelView) × 场景相对坐标;cameraPosition 仅用于恢复绝对世界坐标。**
+
 ## 证据链(2026-08-26,dev 环境)
 1. 补丁管线正确:composite.fsh 里注入代码在 [补丁日志 sha 与行级检查] 均在;
 2. **include 确已内联进编译产物**:向 taclight_lights.glsl 注入语法错误 → 报错

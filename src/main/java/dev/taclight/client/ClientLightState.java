@@ -24,4 +24,5 @@ public final class ClientLightState {
     /** 霓虹调试模式(K 键):GLSL 输出纯色锥形光,与内置手电一眼区分。 */
     public static boolean debugMode() { return debugMode; }
     public static void toggleDebug() { debugMode = !debugMode; }
+    public static void setDebug(boolean on) { debugMode = on; }
 }

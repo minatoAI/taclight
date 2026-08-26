@@ -51,6 +51,10 @@ public final class LightBuffer {
             GL15.glBufferSubData(GL43.GL_SHADER_STORAGE_BUFFER, 0L, buf);
             if (!uploadLogged) { uploadLogged = true; LOGGER.info("[TacLight] upload {} light(s), flags={}", count, flags); }
             GL30.glBindBufferBase(GL43.GL_SHADER_STORAGE_BUFFER, SpotlightBufferLayout.BINDING, ssboId);
+            // SLOT PROBE: same buffer also at candidate bindings 0/1/8 (one of them may be Iris-free)
+            GL30.glBindBufferBase(GL43.GL_SHADER_STORAGE_BUFFER, 0, ssboId);
+            GL30.glBindBufferBase(GL43.GL_SHADER_STORAGE_BUFFER, 1, ssboId);
+            GL30.glBindBufferBase(GL43.GL_SHADER_STORAGE_BUFFER, 8, ssboId);
         } catch (Throwable t) {
             LOGGER.warn("[TacLight] SSBO upload failed: {}", t.toString());
         }
@@ -86,6 +90,29 @@ public final class LightBuffer {
             return word.getInt(0);
         } catch (Throwable t) {
             return 0;
+        }
+    }
+
+    /** 诊断:直读 GPU 缓冲 light0 与 cookie(GLSL 写回),验证 Java 上传 vs GLSL 布局。 */
+    public static synchronized String dumpLight0() {
+        try {
+            if (ssboId == -1 || !isGpuUsable()) return "ssbo-not-created";
+            java.nio.ByteBuffer buf = SpotlightBufferLayout.newBuffer(1);
+            GL15.glBindBuffer(GL43.GL_SHADER_STORAGE_BUFFER, ssboId);
+            org.lwjgl.opengl.GL42.glMemoryBarrier(GL43.GL_SHADER_STORAGE_BARRIER_BIT);
+            GL15.glGetBufferSubData(GL43.GL_SHADER_STORAGE_BUFFER, 0L, buf);
+            buf.rewind();
+            int count = buf.getInt();
+            int flags = buf.getInt(8);
+            int reserved = buf.getInt(12);
+            float px = buf.getFloat(16), py = buf.getFloat(20), pz = buf.getFloat(24), rad = buf.getFloat(28);
+            float dx = buf.getFloat(48), dy = buf.getFloat(52), dz = buf.getFloat(56), type = buf.getFloat(60);
+            float co = buf.getFloat(64), ci = buf.getFloat(68);
+            float ckX = buf.getFloat(96), ckY = buf.getFloat(100), ckZ = buf.getFloat(104), ckW = buf.getFloat(108);
+            return String.format("count=%d flags=0x%x reserved=0x%x | L0 pos=(%.2f,%.2f,%.2f) r=%.1f dir=(%.3f,%.3f,%.3f) type=%.1f cos=(%.3f,%.3f) | cookie(glsl)=(%.1f,%.1f,%.1f,%.1f)",
+                    count, flags, reserved, px, py, pz, rad, dx, dy, dz, type, co, ci, ckX, ckY, ckZ, ckW);
+        } catch (Throwable t) {
+            return "dump-error:" + t.getClass().getSimpleName();
         }
     }
 

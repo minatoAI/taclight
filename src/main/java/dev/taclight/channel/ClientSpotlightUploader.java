@@ -58,6 +58,7 @@ public final class ClientSpotlightUploader {
         }
         int extraFlags = ClientLightState.debugMode() ? SpotlightBufferLayout.FLAG_DEBUG : 0;
         LightBuffer.upload(lights, extraFlags);
+        dumpDiagOnce();
     }
 
     /** ABI:posRadius.xyz = 场景相对坐标(world - cameraPosition);vlParams 开启体积束。 */
@@ -68,6 +69,20 @@ public final class ClientSpotlightUploader {
                 R, G, B, intensity() * mult,
                 (float) dir.x, (float) dir.y, (float) dir.z,
                 cosOuter(), cosInner(), beamDensity(), 1.0f);
+    }
+
+    private static boolean diagDumped;
+
+    /** 诊断:打印相机与灯参数(确认 Java 侧上传值)。 */
+    private static void dumpDiagOnce() {
+        if (diagDumped) return;
+        diagDumped = true;
+        if (!"1".equals(System.getenv("TACLIGHT_PROBE"))) return;
+        var cam = Minecraft.getInstance().gameRenderer.getMainCamera();
+        var l = cam.getLookVector();
+        dev.taclight.TacLightMod.LOGGER.info("[TacLight] LIGHT0 eye=({},{},{}) dir=({},{},{}) r={} cos=({},{}) intensity={}",
+            cam.getPosition().x, cam.getPosition().y, cam.getPosition().z,
+            l.x(), l.y(), l.z(), radius(), cosOuter(), cosInner(), intensity());
     }
 
     private static Vec3 right(Vec3 look) {

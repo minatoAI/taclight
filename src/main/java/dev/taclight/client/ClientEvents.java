@@ -21,18 +21,34 @@ public class ClientEvents {
 
     /** 端到端探针回读(仅 TACLIGHT_PROBE=1 时启用;诊断用,默认静默)。 */
     private static void probeIfEnabled() {
-        if (!"1".equals(System.getenv("TACLIGHT_PROBE")) || e2eLogged) return;
-        if (++e2eTick % 30 != 0) return;
+        if (!"1".equals(System.getenv("TACLIGHT_PROBE"))) return;
+        if (++e2eTick % 60 != 0) return;
         int bits = dev.taclight.channel.LightBuffer.readReserved();
-        if ((bits & 1) != 0) {
-            e2eLogged = true;
-            TacLightMod.LOGGER.info("[TacLight] E2E-PROBE: SSBO surface pass fired (reserved=0x{}), pipeline verified", Integer.toHexString(bits));
-        }
+        TacLightMod.LOGGER.info("[TacLight] E2E-PROBE reserved=0x{} {}", Integer.toHexString(bits), decodeProbe(bits));
+        TacLightMod.LOGGER.info("[TacLight] GPU-READBACK {}", dev.taclight.channel.LightBuffer.dumpLight0());
+        if (!e2eLogged && (bits & 3) == 3) { e2eLogged = true; }
+    }
+
+    /** 解码 GLSL 探针位:1=surface 进入,2=门通过,4=光已贡献,8=debug 标志已见,0x10=beam,0x20=specular。 */
+    private static String decodeProbe(int bits) {
+        StringBuilder sb = new StringBuilder();
+        if ((bits & 1) != 0) sb.append(" |surface-entered");
+        if ((bits & 2) != 0) sb.append(" |gate-passed");
+        if ((bits & 4) != 0) sb.append(" |light-contributed");
+        if ((bits & 8) != 0) sb.append(" |debug-flag-seen");
+        if ((bits & 16) != 0) sb.append(" |beam-entered");
+        if ((bits & 32) != 0) sb.append(" |specular-entered");
+        if ((bits & 1024) != 0) sb.append(" |slot0-sees-our-data");
+        if ((bits & 2048) != 0) sb.append(" |slot1-sees-our-data");
+        if ((bits & 4096) != 0) sb.append(" |slot8-sees-our-data");
+        return sb.length() == 0 ? "(none)" : sb.toString().substring(1);
     }
     private static int probeTick;
     private static boolean probeConfirmed;
     private static int diagTick;
     private static ShaderPackDiag.Status lastDiagStatus;
+    private static boolean diagAutoApplied;
+    private static int boardTick;
     private static final String DERIVED_PACK = "iterationT 3.2.0 (taclight)";
 
     @Mod.EventBusSubscriber(modid = TacLightMod.MODID, value = Dist.CLIENT, bus = Mod.EventBusSubscriber.Bus.MOD)
@@ -107,6 +123,11 @@ public class ClientEvents {
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null || mc.player == null) return;
 
+        if (!diagAutoApplied && "1".equals(System.getenv("TACLIGHT_DIAG"))) {
+            diagAutoApplied = true;
+            ClientLightState.setDebug(true);
+            TacLightMod.LOGGER.info("[TacLight] DIAG auto: debug neon ON at login");
+        }
         GunLaserReader.Status status = GunLaserReader.Status.NONE;
         String detail = "no-tacz";
         if (TaczCompat.present()) {
@@ -126,6 +147,13 @@ public class ClientEvents {
         ClientLightState.setGunLight(status == GunLaserReader.Status.OUR_LIGHT);
         probeIfEnabled();
         checkShaderPackDiag(mc);
+        if ("1".equals(System.getenv("TACLIGHT_PROBE")) && ++boardTick % 60 == 0) {
+            TacLightMod.LOGGER.info("[TacLight] BOARD pack={} debug={} binding7={} reserved=0x{}",
+                    dev.taclight.client.ShaderPackDiag.activeStatus(),
+                    ClientLightState.debugMode(),
+                    dev.taclight.channel.LightBuffer.binding7(),
+                    Integer.toHexString(dev.taclight.channel.LightBuffer.readReserved()));
+        }
         dev.taclight.channel.ClientSpotlightUploader.onFrame();
         if (status != lastGunStatus) {
             TacLightMod.LOGGER.info("[TacLight] gun light {} ({})",
