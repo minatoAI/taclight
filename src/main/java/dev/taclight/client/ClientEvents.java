@@ -55,6 +55,7 @@ public class ClientEvents {
         }
 
         ClientLightState.setGunLight(status == GunLaserReader.Status.OUR_LIGHT);
+        dev.taclight.channel.ClientSpotlightUploader.onFrame();
         if (status != lastGunStatus) {
             TacLightMod.LOGGER.info("[TacLight] gun light {} ({})",
                     status == GunLaserReader.Status.OUR_LIGHT ? "ON" : "OFF", detail);

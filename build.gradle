@@ -86,5 +86,18 @@ tasks.named('jar', Jar).configure {
 tasks.register('taclightContracts', JavaExec) {
     dependsOn tasks.named('testClasses')
     classpath = sourceSets.test.runtimeClasspath
-    mainClass = 'dev.taclight.tacz.GunLaserReaderContract'
+    mainClass = 'dev.taclight.AllContracts'
+}
+
+// 光影包补丁(开发/构建期):输入原包目录,输出派生包目录,原包不动
+// 用法:gradlew patchIterationT [-PtaclightPackDir=...] [--args 覆盖]
+tasks.register('patchIterationT', JavaExec) {
+    dependsOn tasks.named('classes')
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'dev.taclight.tools.PackPatcherTool'
+    args = [
+        file('../iterationT 3.2.0').absolutePath,
+        file('src/main/resources/shader_patches/iterationT-3.2.0-v3.patch.json').absolutePath,
+        file('run/shaderpacks/iterationT 3.2.0 (taclight)').absolutePath
+    ]
 }

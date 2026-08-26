@@ -1,0 +1,38 @@
+{
+  "packId": "iterationT-3.2.0",
+  "patchId": "v3-p1",
+  "marker": "TACLIGHT_PATCH_BEGIN iterationT-3.2.0 v3-p1",
+  "description": "Derived pack: adds TacLight SSBO (binding 7) surface spotlight with screen-space occlusion to iterationT 3.2.0 (original pack left unmodified).",
+  "addFiles": [
+    {
+      "path": "shaders/Lib/taclight_lights.glsl",
+      "resource": "shader_patches/taclight_lights.glsl"
+    }
+  ],
+  "patchFiles": [
+    {
+      "file": "shaders/shaders.properties",
+      "op": "insertBefore",
+      "anchor": "clouds           =off",
+      "content": "iris.features.optional = SSBO\n"
+    },
+    {
+      "file": "shaders/composite.fsh",
+      "op": "replace",
+      "anchor": "#version 330",
+      "content": "#version 430 core"
+    },
+    {
+      "file": "shaders/composite.fsh",
+      "op": "insertAfter",
+      "anchor": "#include \"/Lib/BasicFounctions/Blocklight.glsl\"",
+      "content": "\n#include \"/Lib/taclight_lights.glsl\"\n"
+    },
+    {
+      "file": "shaders/composite.fsh",
+      "op": "insertAfter",
+      "anchor": "finalComposite += HeldLighting(viewPos, viewDir, gbuffer.normalL, gbuffer.material.roughness, ao, materialMask.hand > 0.5);",
+      "content": "\n\t\t// TACLIGHT_PATCH_BEGIN iterationT-3.2.0 v3-p1\n\t\tfinalComposite += taclight_surface(viewPos, viewDir, gbuffer.normalL, gbuffer.albedo, gbuffer.material.roughness, ao, materialMask.hand > 0.5 ? 1.0 : 0.0);\n\t\t// TACLIGHT_PATCH_END iterationT-3.2.0 v3-p1\n"
+    }
+  ]
+}
