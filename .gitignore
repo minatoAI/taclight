@@ -15,3 +15,8 @@ out/
 # misc
 *.log
 hs_err_pid*
+
+# accidental tooling output
+net/
+err-lines.txt
+jar-list.txt
