@@ -10,6 +10,8 @@ public final class ClientLightState {
 
     /** 手持手电筒开关(IrisItemLightProvider 读取) */
     public static boolean isOn() { return handheldOn; }
+    /** 强制开启(调试模式自动开灯时用)。 */
+    public static void forceHandheldOn() { handheldOn = true; }
     public static void toggle() { handheldOn = !handheldOn; }
 
     /** 枪挂灯状态(TaCZ 附件探针写入) */

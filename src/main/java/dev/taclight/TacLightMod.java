@@ -13,10 +13,11 @@ import org.slf4j.Logger;
 @Mod(TacLightMod.MODID)
 public class TacLightMod {
     public static final String MODID = "taclight";
+    public static final String VERSION = "0.8.3";
     public static final Logger LOGGER = LogUtils.getLogger();
 
     public TacLightMod() {
-        LOGGER.info("[TacLight] loading: spotlight device mod");
+        LOGGER.info("[TacLight] v{} loading: spotlight device mod", VERSION);
         net.minecraftforge.fml.ModLoadingContext.get().registerConfig(net.minecraftforge.fml.config.ModConfig.Type.CLIENT, TacLightConfig.SPEC, "taclight-client.toml");
         var bus = FMLJavaModLoadingContext.get().getModEventBus();
         ModItems.register(bus);
