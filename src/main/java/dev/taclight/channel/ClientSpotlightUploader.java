@@ -39,8 +39,19 @@ public final class ClientSpotlightUploader {
             lights.add(toSpot(p, eye, look, 0.9f));
         }
         if (ClientLightState.gunLightOn()) {
-            Vec3 p = eye.add(look.scale(0.55)).add(right(look).scale(0.18)).add(0, -0.10, 0);
-            lights.add(toSpot(p, eye, look, 1.1f));
+            dev.taclight.pose.MuzzlePoseMath.Pose muzzle = dev.taclight.client.MuzzlePoseCapture.consumeFresh();
+            if (muzzle != null && mc.options.getCameraType().isFirstPerson()) {
+                // 视图空间 → 场景空间:相机旋转共轭
+                org.joml.Quaternionf rotConj = new org.joml.Quaternionf(cam.rotation()).conjugate();
+                org.joml.Vector3f off = new org.joml.Vector3f(muzzle.ox(), muzzle.oy(), muzzle.oz()).rotate(rotConj);
+                org.joml.Vector3f fwd = new org.joml.Vector3f(muzzle.fx(), muzzle.fy(), muzzle.fz()).rotate(rotConj);
+                Vec3 pos = eye.add(off.x(), off.y(), off.z());
+                Vec3 dir = new Vec3(fwd.x(), fwd.y(), fwd.z());
+                lights.add(toSpot(pos, eye, dir, 1.1f));
+            } else {
+                Vec3 p = eye.add(look.scale(0.55)).add(right(look).scale(0.18)).add(0, -0.10, 0);
+                lights.add(toSpot(p, eye, look, 1.1f));
+            }
         }
         LightBuffer.upload(lights);
     }

@@ -29,6 +29,7 @@ minecraft {
         }
         client {
             property 'forge.enabledGameTestNamespaces', mod_id
+            args '-mixin.config=taclight.mixins.json'
             jvmArgs '-Xmx4G'
         }
         server {
@@ -54,6 +55,8 @@ dependencies {
     runtimeOnly fg.deobf("blank:tacz:1.1.8-hotfix")
     runtimeOnly fg.deobf("blank:oculus:1.8.0")
     runtimeOnly fg.deobf("blank:embeddium:0.3.31")
+    // mixin 注解(运行时由 FML 提供,仅编译期引用)
+    compileOnly 'org.spongepowered:mixin:0.8.5'
 }
 
 tasks.named('processResources', ProcessResources).configure {
@@ -76,7 +79,8 @@ tasks.named('jar', Jar).configure {
                 'Specification-Version': '1',
                 'Implementation-Title': project.name,
                 'Implementation-Version': project.jar.archiveVersion,
-                'Implementation-Vendor': mod_authors
+                'Implementation-Vendor': mod_authors,
+                'MixinConfigs': 'taclight.mixins.json'
         ])
     }
     finalizedBy 'reobfJar'

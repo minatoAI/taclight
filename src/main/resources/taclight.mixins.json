@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "dev.taclight.mixin",
+  "plugin": "dev.taclight.mixin.TacLightMixinPlugin",
+  "compatibilityLevel": "JAVA_17",
+  "client": [
+    "BeamRendererMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

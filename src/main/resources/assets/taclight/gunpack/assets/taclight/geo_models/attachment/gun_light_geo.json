@@ -12,7 +12,7 @@
       },
       "bones": [
         {
-          "name": "taclight_gun_light",
+          "name": "laser_beam",
           "pivot": [0, 0, 0],
           "cubes": [
             {
