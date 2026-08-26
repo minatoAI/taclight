@@ -1,6 +1,7 @@
 package dev.taclight;
 
 import com.mojang.logging.LogUtils;
+import dev.taclight.config.TacLightConfig;
 import dev.taclight.registry.ModItems;
 import dev.taclight.tacz.TaczCompat;
 import net.minecraftforge.fml.common.Mod;
@@ -16,6 +17,7 @@ public class TacLightMod {
 
     public TacLightMod() {
         LOGGER.info("[TacLight] loading: spotlight device mod");
+        net.minecraftforge.fml.ModLoadingContext.get().registerConfig(net.minecraftforge.fml.config.ModConfig.Type.CLIENT, TacLightConfig.SPEC, "taclight-client.toml");
         var bus = FMLJavaModLoadingContext.get().getModEventBus();
         ModItems.register(bus);
         bus.addListener(ModItems::onCreativeTabLoad);

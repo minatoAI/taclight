@@ -10,6 +10,9 @@
 - 数据通道:官方 Iris API(IrisItemLightProvider)→ 兼容所有支持手持光的包;
   V3 起 SSBO+补丁通道实现"光从枪口出"(详见调查报告)
 
+## 配置
+所有光效参数在 `run/config/taclight-client.toml`(半径/强度/内外锥角/光束密度/枪灯倍率)或发布后 `config/taclight-client.toml`。
+
 ## 常用命令(纯离线,复用本地 Gradle 缓存)
 ```powershell
 .\gradlew-java17.cmd build        # 编译 + 打包(离线 --offline 可加)

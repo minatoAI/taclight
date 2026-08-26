@@ -14,11 +14,14 @@ import java.util.List;
  * 枪口精确矩阵(BeamRenderer 捕获)列为 V4 增强。
  */
 public final class ClientSpotlightUploader {
-    private static final float RADIUS = 24.0f;
-    private static final float INTENSITY = 6.0f;
-    private static final float COS_OUTER = 0.848f;  // 约 32 度半角
-    private static final float COS_INNER = 0.951f;  // 约 18 度半角
     private static final float R = 1.0f, G = 0.96f, B = 0.88f;
+
+    private static float radius() { return dev.taclight.config.TacLightConfig.RADIUS.get().floatValue(); }
+    private static float intensity() { return dev.taclight.config.TacLightConfig.INTENSITY.get().floatValue(); }
+    private static float cosOuter() { return dev.taclight.config.TacLightConfig.cosDeg(dev.taclight.config.TacLightConfig.CONE_OUTER_DEG.get()); }
+    private static float cosInner() { return dev.taclight.config.TacLightConfig.cosDeg(dev.taclight.config.TacLightConfig.CONE_INNER_DEG.get()); }
+    private static float beamDensity() { return dev.taclight.config.TacLightConfig.BEAM_DENSITY.get().floatValue(); }
+    private static float gunMult() { return dev.taclight.config.TacLightConfig.GUN_MULTIPLIER.get().floatValue(); }
 
     private ClientSpotlightUploader() {}
 
@@ -47,10 +50,10 @@ public final class ClientSpotlightUploader {
                 org.joml.Vector3f fwd = new org.joml.Vector3f(muzzle.fx(), muzzle.fy(), muzzle.fz()).rotate(rotConj);
                 Vec3 pos = eye.add(off.x(), off.y(), off.z());
                 Vec3 dir = new Vec3(fwd.x(), fwd.y(), fwd.z());
-                lights.add(toSpot(pos, eye, dir, 1.1f));
+                lights.add(toSpot(pos, eye, dir, gunMult()));
             } else {
                 Vec3 p = eye.add(look.scale(0.55)).add(right(look).scale(0.18)).add(0, -0.10, 0);
-                lights.add(toSpot(p, eye, look, 1.1f));
+                lights.add(toSpot(p, eye, look, gunMult()));
             }
         }
         LightBuffer.upload(lights);
@@ -60,10 +63,10 @@ public final class ClientSpotlightUploader {
     private static SpotlightData toSpot(Vec3 worldPos, Vec3 eye, Vec3 dir, float mult) {
         Vec3 rel = worldPos.subtract(eye);
         return SpotlightData.spotBeam(
-                (float) rel.x, (float) rel.y, (float) rel.z, RADIUS,
-                R, G, B, INTENSITY * mult,
+                (float) rel.x, (float) rel.y, (float) rel.z, radius(),
+                R, G, B, intensity() * mult,
                 (float) dir.x, (float) dir.y, (float) dir.z,
-                COS_OUTER, COS_INNER, 0.05f, 1.0f);
+                cosOuter(), cosInner(), beamDensity(), 1.0f);
     }
 
     private static Vec3 right(Vec3 look) {
