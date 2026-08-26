@@ -20,10 +20,17 @@ layout(std430, binding = 7) buffer TacLightBuffer {
 
 #define TACLIGHT_EPS 1e-4
 
+// V5 diagnostics: one-pixel timing probe (Java reads back, see LightBuffer.readReserved)
+#define TACLIGHT_FLAG_TIMING_PROBE 8u
+void taclight_probe_pass(uint pass_bit) {
+    atomicOr(reserved, pass_bit); // atomics survive DCE; unguarded run
+}
+
 // ---- V3-p1: surface spotlight (view-space, aligned with HeldLighting conventions) ----
 vec3 taclight_surface(vec3 viewPos, vec3 viewDir, vec3 normal, vec3 albedo,
                       float roughness, vec3 ao, float handMask) {
     vec3 result = vec3(0.0);
+    taclight_probe_pass(1u);
     if (lightCount == 0u || handMask > 0.5) return result;
     for (uint i = 0u; i < lightCount; i++) {
         TacLightSpot L = lights[i];

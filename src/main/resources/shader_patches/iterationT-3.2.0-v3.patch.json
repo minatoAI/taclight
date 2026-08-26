@@ -30,9 +30,9 @@
     },
     {
       "file": "shaders/composite.fsh",
-      "op": "insertAfter",
-      "anchor": "finalComposite += HeldLighting(viewPos, viewDir, gbuffer.normalL, gbuffer.material.roughness, ao, materialMask.hand > 0.5);",
-      "content": "\n\t\t// TACLIGHT_PATCH_BEGIN iterationT-3.2.0 v3-p1\n\t\tfinalComposite += taclight_surface(viewPos, viewDir, gbuffer.normalL, gbuffer.albedo, gbuffer.material.roughness, ao, materialMask.hand > 0.5 ? 1.0 : 0.0);\n\t\tfinalComposite += taclight_beam(cameraPosition, cameraPosition + mat3(gbufferModelViewInverse) * viewPos, BlueNoise().x);\n\t\t// TACLIGHT_PATCH_END iterationT-3.2.0 v3-p1\n"
+      "op": "insertBefore",
+      "anchor": "\t\tif(heldBlockLightValue + heldBlockLightValue2 > 0.0)",
+      "content": "\t\t// TACLIGHT_PATCH_BEGIN iterationT-3.2.0 v3-p1\n\t\tfinalComposite += taclight_surface(viewPos, viewDir, gbuffer.normalL, gbuffer.albedo, gbuffer.material.roughness, ao, materialMask.hand > 0.5 ? 1.0 : 0.0);\n\t\tfinalComposite += taclight_beam(cameraPosition, cameraPosition + mat3(gbufferModelViewInverse) * viewPos, BlueNoise().x);\n\t\t// TACLIGHT_PATCH_END iterationT-3.2.0 v3-p1\n"
     },
     {
       "file": "shaders/composite5.fsh",
@@ -48,9 +48,9 @@
     },
     {
       "file": "shaders/composite5.fsh",
-      "op": "insertAfter",
-      "anchor": "TorchSpecularHighlight(color, viewPos, viewDir, waterDist, gbuffer.albedo, gbuffer.normalW, gbuffer.material);",
-      "content": "\n\t\t// TACLIGHT_PATCH_BEGIN iterationT-3.2.0 v3-p1\n\t\ttaclight_specular(color, viewPos, viewDir, gbuffer.normalL, gbuffer.albedo, gbuffer.material.roughness, gbuffer.material.f0, materialMask.hand > 0.5 ? 1.0 : 0.0);\n\t\t// TACLIGHT_PATCH_END iterationT-3.2.0 v3-p1\n"
+      "op": "insertBefore",
+      "anchor": "\t\tif (heldBlockLightValue + heldBlockLightValue2 > 0.0 && materialMask.sky < 0.5)",
+      "content": "\t\t// TACLIGHT_PATCH_BEGIN iterationT-3.2.0 v3-p1\n\t\ttaclight_specular(color, viewPos, viewDir, gbuffer.normalL, gbuffer.albedo, gbuffer.material.roughness, gbuffer.material.f0, materialMask.hand > 0.5 ? 1.0 : 0.0);\n\t\t// TACLIGHT_PATCH_END iterationT-3.2.0 v3-p1\n"
     }
   ]
 }

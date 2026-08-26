@@ -99,6 +99,7 @@ tasks.register('patchIterationT', JavaExec) {
     dependsOn tasks.named('classes')
     classpath = sourceSets.main.runtimeClasspath
     mainClass = 'dev.taclight.tools.PackPatcherTool'
+    inputs.files(file('src/main/resources/shader_patches'))
     args = [
         file('../iterationT 3.2.0').absolutePath,
         file('src/main/resources/shader_patches/iterationT-3.2.0-v3.patch.json').absolutePath,

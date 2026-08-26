@@ -1,0 +1,45 @@
+package dev.taclight.mixin;
+
+import com.tacz.guns.api.item.IAttachment;
+import com.tacz.guns.api.item.IGun;
+import com.tacz.guns.api.item.attachment.AttachmentType;
+import com.tacz.guns.item.ModernKineticGunItem;
+import net.irisshaders.iris.api.v0.item.IrisItemLightProvider;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import org.joml.Vector3f;
+import org.spongepowered.asm.mixin.Mixin;
+
+/**
+ * B 计划:给 TaCZ 统一枪物品(X)动态添加 IrisItemLightProvider 接口。
+ * 手持枪械时由 Iris 回调(每帧):枪上装有 taclight:gun_light → 15 光强。
+ * 效果:满载 light-value 的枪触发 iterationT 内置 FLASHLIGHT(锥形+遮挡)。
+ * 接口注入是 mixin 的合法用途(不触碰 TaCZ 私有内部),全部走官方 API。
+ */
+@Mixin(value = ModernKineticGunItem.class, remap = false)
+public abstract class GunItemLightProviderMixin implements IrisItemLightProvider {
+    @Override
+    public int getLightEmission(Player player, ItemStack stack) {
+        return hasOurLight(stack) ? 15 : 0;
+    }
+
+    @Override
+    public Vector3f getLightColor(Player player, ItemStack stack) {
+        return new Vector3f(1.0f, 0.96f, 0.88f); // warm tactical white
+    }
+
+    private static boolean hasOurLight(ItemStack stack) {
+        if (stack == null || stack.isEmpty()) return false;
+        IGun gun = IGun.getIGunOrNull(stack);
+        if (gun == null) return false;
+        ItemStack laser = gun.getAttachment(stack, AttachmentType.LASER);
+        if (laser.isEmpty()) {
+            laser = gun.getBuiltinAttachment(stack, AttachmentType.LASER);
+        }
+        if (laser.isEmpty()) return false;
+        IAttachment ia = IAttachment.getIAttachmentOrNull(laser);
+        if (ia == null) return false;
+        var id = ia.getAttachmentId(laser);
+        return id != null && "taclight:gun_light".equals(id.toString());
+    }
+}

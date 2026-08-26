@@ -26,6 +26,8 @@ public final class SpotlightBufferLayout {
     public static final int OFF_COOKIE = 80;
 
     public static final int FLAG_HAS_DATA = 1;
+    /** bit3: 时序探针(G0 风格)——GLSL 在表面 pass 用 atomicOr 写回 reserved。 */
+    public static final int FLAG_TIMING_PROBE = 1 << 3;
 
     private SpotlightBufferLayout() {}
 

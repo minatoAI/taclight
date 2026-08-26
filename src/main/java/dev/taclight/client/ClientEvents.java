@@ -15,6 +15,9 @@ import net.minecraftforge.fml.common.Mod;
 @Mod.EventBusSubscriber(modid = TacLightMod.MODID, value = Dist.CLIENT)
 public class ClientEvents {
     private static GunLaserReader.Status lastGunStatus = GunLaserReader.Status.NONE;
+    private static int probeTick;
+    private static boolean probeConfirmed;
+    private static int diagTick;
 
     @Mod.EventBusSubscriber(modid = TacLightMod.MODID, value = Dist.CLIENT, bus = Mod.EventBusSubscriber.Bus.MOD)
     public static class ModBus {
@@ -29,6 +32,13 @@ public class ClientEvents {
         while (KeyBindings.FLASHLIGHT_TOGGLE.consumeClick()) {
             ClientLightState.toggle();
             TacLightMod.LOGGER.info("[TacLight] handheld flashlight {}", ClientLightState.isOn() ? "ON" : "OFF");
+        }
+    }
+
+    @SubscribeEvent
+    public static void onRenderLevel(net.minecraftforge.client.event.RenderLevelStageEvent event) {
+        if (event.getStage() == net.minecraftforge.client.event.RenderLevelStageEvent.Stage.AFTER_LEVEL) {
+            dev.taclight.channel.LightBuffer.rebindBase();
         }
     }
 

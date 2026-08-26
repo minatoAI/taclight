@@ -18,6 +18,7 @@ public final class LightBuffer {
 
     private static int ssboId = -1;
     private static int lastCapacity = -1;
+    private static boolean uploadLogged;
 
     private LightBuffer() {}
 
@@ -30,7 +31,8 @@ public final class LightBuffer {
                 LOGGER.info("[TacLight] SSBO created (id={})", ssboId);
             }
             ByteBuffer buf = SpotlightBufferLayout.newBuffer(count);
-            SpotlightBufferLayout.writeHeader(buf, count, 1.0f, count > 0 ? SpotlightBufferLayout.FLAG_HAS_DATA : 0);
+            SpotlightBufferLayout.writeHeader(buf, count, 1.0f,
+                    (count > 0 ? SpotlightBufferLayout.FLAG_HAS_DATA : 0) | SpotlightBufferLayout.FLAG_TIMING_PROBE);
             for (int i = 0; i < count; i++) {
                 SpotlightBufferLayout.writeLight(buf, i, lights.get(i));
             }
@@ -41,9 +43,43 @@ public final class LightBuffer {
                 lastCapacity = bytes;
             }
             GL15.glBufferSubData(GL43.GL_SHADER_STORAGE_BUFFER, 0L, buf);
+            if (!uploadLogged) { uploadLogged = true; LOGGER.info("[TacLight] upload {} light(s), flags={}", count, (count > 0 ? SpotlightBufferLayout.FLAG_HAS_DATA : 0) | SpotlightBufferLayout.FLAG_TIMING_PROBE); }
             GL30.glBindBufferBase(GL43.GL_SHADER_STORAGE_BUFFER, SpotlightBufferLayout.BINDING, ssboId);
         } catch (Throwable t) {
             LOGGER.warn("[TacLight] SSBO upload failed: {}", t.toString());
+        }
+    }
+
+    /** 槽位7当前绑定对象(0 = 未绑定)。诊断用。 */
+    public static synchronized int binding7() {
+        try {
+            if (!isGpuUsable()) return -1;
+            return GL30.glGetIntegeri(GL43.GL_SHADER_STORAGE_BUFFER_BINDING, SpotlightBufferLayout.BINDING);
+        } catch (Throwable t) {
+            return -2;
+        }
+    }
+
+    /** 每渲染帧重绑定(老项目经验:不要假定 Iris 绑定不被覆盖)。渲染线程调用。 */
+    public static synchronized void rebindBase() {
+        try {
+            if (ssboId == -1 || !isGpuUsable()) return;
+            GL30.glBindBufferBase(GL43.GL_SHADER_STORAGE_BUFFER, SpotlightBufferLayout.BINDING, ssboId);
+        } catch (Throwable ignored) {}
+    }
+
+    /** 回读 reserved 字(时序探针,诊断用)。必须在渲染线程调用。 */
+    public static synchronized int readReserved() {
+        try {
+            if (ssboId == -1 || !isGpuUsable()) return 0;
+            GL15.glBindBuffer(GL43.GL_SHADER_STORAGE_BUFFER, ssboId);
+            org.lwjgl.opengl.GL42.glMemoryBarrier(
+                    GL43.GL_SHADER_STORAGE_BARRIER_BIT | org.lwjgl.opengl.GL42.GL_BUFFER_UPDATE_BARRIER_BIT);
+            java.nio.ByteBuffer word = java.nio.ByteBuffer.allocateDirect(4).order(java.nio.ByteOrder.nativeOrder());
+            GL15.glGetBufferSubData(GL43.GL_SHADER_STORAGE_BUFFER, (long) SpotlightBufferLayout.OFF_RESERVED, word);
+            return word.getInt(0);
+        } catch (Throwable t) {
+            return 0;
         }
     }
 

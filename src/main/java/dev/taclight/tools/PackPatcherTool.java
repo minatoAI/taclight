@@ -87,8 +87,8 @@ public final class PackPatcherTool {
             Path path = outDir.resolve(file);
             String text = Files.readString(path, StandardCharsets.UTF_8);
 
-            if (text.contains(marker)) {
-                System.out.println("[PackPatcher] skip (already patched): " + file);
+            if (text.contains(content)) {
+                System.out.println("[PackPatcher] skip (content already present): " + file);
                 continue;
             }
             int idx = indexOfUnique(text, anchor, file);
