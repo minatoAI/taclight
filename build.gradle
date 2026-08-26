@@ -81,3 +81,10 @@ tasks.named('jar', Jar).configure {
     }
     finalizedBy 'reobfJar'
 }
+
+// 纯 JVM 契约测试(离线、无 JUnit 依赖,遵循项目【单一真源】纪律)
+tasks.register('taclightContracts', JavaExec) {
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.taclight.tacz.GunLaserReaderContract'
+}
