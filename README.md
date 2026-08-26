@@ -34,8 +34,8 @@
 7. 证据自动化(OFF-A/OFF-B 像素基线),每阶段 git tag。
 
 ## 路线图
-- [x] V0 环境与工程骨架(本里程碑)
-- [ ] V1 手电筒物品 + IrisItemLightProvider + 开关
+- [x] V0 环境与工程骨架(离线构建验证通过)
+- [x] V1 手电筒物品 + IrisItemLightProvider + 开关(代码完成,**待实机验收**:runClient 手持手电筒按 L 验证锥形光)
 - [ ] V2 TaCZ 枪挂灯附件(gunpack + IAttachment)
 - [ ] V3 SSBO 真通道(枪口朝向/体积束/屏幕空间遮挡)
 - [ ] V4 打磨(多灯/UI/性能/多人可选)
