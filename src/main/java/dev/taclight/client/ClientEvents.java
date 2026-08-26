@@ -15,6 +15,19 @@ import net.minecraftforge.fml.common.Mod;
 @Mod.EventBusSubscriber(modid = TacLightMod.MODID, value = Dist.CLIENT)
 public class ClientEvents {
     private static GunLaserReader.Status lastGunStatus = GunLaserReader.Status.NONE;
+    private static int e2eTick;
+    private static boolean e2eLogged;
+
+    /** 端到端探针回读(仅 TACLIGHT_PROBE=1 时启用;诊断用,默认静默)。 */
+    private static void probeIfEnabled() {
+        if (!"1".equals(System.getenv("TACLIGHT_PROBE")) || e2eLogged) return;
+        if (++e2eTick % 30 != 0) return;
+        int bits = dev.taclight.channel.LightBuffer.readReserved();
+        if ((bits & 1) != 0) {
+            e2eLogged = true;
+            TacLightMod.LOGGER.info("[TacLight] E2E-PROBE: SSBO surface pass fired (reserved=0x{}), pipeline verified", Integer.toHexString(bits));
+        }
+    }
     private static int probeTick;
     private static boolean probeConfirmed;
     private static int diagTick;
@@ -65,6 +78,7 @@ public class ClientEvents {
         }
 
         ClientLightState.setGunLight(status == GunLaserReader.Status.OUR_LIGHT);
+        probeIfEnabled();
         dev.taclight.channel.ClientSpotlightUploader.onFrame();
         if (status != lastGunStatus) {
             TacLightMod.LOGGER.info("[TacLight] gun light {} ({})",

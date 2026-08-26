@@ -43,7 +43,7 @@
 - [x] V2 TaCZ 枪挂灯附件(taclight:gun_light gunpack + EXTRA_ENTRIES 官方注册 + 探针识别;契约测试 6/6;冒烟:2 个 gunpack 注册成功,**待实机验收**:枪匠台合成→改装界面装上 HK416D→日志出现 gun light ON)
 - [x] V3-p1 SSBO 通道(binding 7,std430 96B/灯)+ iterationT 补丁管线(锚点/SHA512/幂等)+ 表面锥光 GLSL(软边+屏幕空间遮挡);契约 18/18;补丁包在 Oculus 加载成功
 - [x] V3-p2 体积光束(composite.fsh 16 步 raymarch + 光束遮挡)+ 高光(composite5 GGX);契约 18/18;补丁包加载成功,**待实机验收**:雾中可见光柱、潮湿表面有高光
-- [x] V4 枪口精确姿态(BeamRendererMixin 捕获激光骨矩阵→视图空间→场景换算;软依赖插件门控;MuzzlePoseMath 契约测试);契约 29/29(注:枪口姿态的 SSBO 通道在 Oculus 1.8.0×iterationT 下被阻挡,见 docs/04;现行枪灯走 B 通道)
+- [x] V4 枪口精确姿态 + **SSBO 通道端到端已验证**(v0.8.1 修复 f0 类型后 E2E 探针通过;真相:此前的"Oculus 阻断"是 composite5 编译失败所致,见 docs/04 修订版)
 - [x] B 计划:枪灯走官方 G 通道(GunItemLightProviderMixin 注入 IrisItemLightProvider)→ 持枪即点亮 iterationT 内置 FLASHLIGHT;**待实机验收**:/taclight kit → 持 HK416D(装枪灯)对墙出现锥形光
 - [ ] V3 SSBO 真通道(枪口朝向/体积束/屏幕空间遮挡)
 - [ ] V4 打磨(多灯/UI/性能/多人可选)

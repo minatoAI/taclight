@@ -1,5 +1,10 @@
 # TacLight Changelog
 
+## v0.8.1(热修)
+- **修复**:taclight_specular 的 f0 参数 vec4→float(与 iterationT Material.f0/SpecularGGX 一致);此前导致 composite5 编译失败→整个光影管线关闭(也是 SSBO 探针全线归零的根因)
+- **SSBO 通道端到端验证通过**:E2E 探针回读 reserved=0x1(表面 pass 触发+闭环))
+- docs/04 结论修正:外部 SSBO 绑定可用的(推翻先前"Oculus 转换层阻断"的假设)
+
 ## v0.8.0
 - **B 计划**:GunItemLightProviderMixin 给 ModernKineticGunItem 注入 IrisItemLightProvider 接口(官方 API 判定战术枪灯 → 光强 15),枪灯经 G 通道点亮 iterationT 内置 FLASHLIGHT
 - 补丁工具修复:patchIterationT inputs 声明(消除 up-to-date 误判);PackPatcher 幂等改按内容判断

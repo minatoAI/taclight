@@ -117,7 +117,7 @@ vec3 taclight_beam(vec3 worldStart, vec3 worldEnd, float dither) {
 
 // ---- V3-p2: specular highlight (mirrors TorchSpecularHighlight conventions) ----
 void taclight_specular(inout vec3 color, vec3 viewPos, vec3 viewDir, vec3 normal,
-                       vec3 albedo, float roughness, vec4 f0, float handMask) {
+                       vec3 albedo, float roughness, float f0, float handMask) {
     if (lightCount == 0u || handMask > 0.5) return;
     for (uint i = 0u; i < lightCount; i++) {
         TacLightSpot L = lights[i];

@@ -1,8 +1,11 @@
 # SSBO 外挂绑定调查记录(Oculus 1.8.0 × iterationT 3.2.0)
 
-> 结论先行:**外部 SSBO(binding 7/9)写入在当前栈上不可观测**,已将枪灯切换为
-> **B 通道**(GunItemLightProviderMixin 注入 IrisItemLightProvider + iterationT 内置 FLASHLIGHT)。
-> 本文件保留全部证据链与假设排序,供后续(或 Oculus 升级后)重启调查。
+> **结论(已修正,2026-08-26 终版)**:外部 SSBO(binding 7)写入**已验证可用**!
+> 真根因 = 补丁中 `taclight_specular` 的 `f0` 参数用了 `vec4`,而 iterationT 的
+> Material.f0 与 SpecularGGX 都是 `float` → GLSL 编译失败 → **整个流水线从未编译,
+> 所有探针归零(与绑定、转换层均无关)**。修复后:表面锥光/体积束/高光全部可编译,
+> E2E 探针回读确认 SSBO 通道闭环(最终证据: E2E-PROBE: reserved=0x1)。
+> 本文件保留完整调查史(含被排除/被证伪的假设),供后来者少走弯路。
 
 ## 证据链(2026-08-26,dev 环境)
 1. 补丁管线正确:composite.fsh 里注入代码在 [补丁日志 sha 与行级检查] 均在;
