@@ -1,6 +1,7 @@
 package dev.taclight;
 
 import dev.taclight.channel.SpotlightBufferLayoutContract;
+import dev.taclight.channel.UploaderSemanticContract;
 import dev.taclight.pose.MuzzlePoseMathContract;
 import dev.taclight.tacz.GunLaserReaderContract;
 
@@ -11,6 +12,8 @@ public class AllContracts {
         GunLaserReaderContract.main(args);
         System.out.println("== SpotlightBufferLayoutContract ==");
         SpotlightBufferLayoutContract.main(args);
+        System.out.println("== UploaderSemanticContract ==");
+        UploaderSemanticContract.main(args);
         System.out.println("== MuzzlePoseMathContract ==");
         MuzzlePoseMathContract.main(args);
         System.out.println("AllContracts: ALL PASS");

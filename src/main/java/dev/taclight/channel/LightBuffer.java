@@ -51,10 +51,8 @@ public final class LightBuffer {
             GL15.glBufferSubData(GL43.GL_SHADER_STORAGE_BUFFER, 0L, buf);
             if (!uploadLogged) { uploadLogged = true; LOGGER.info("[TacLight] upload {} light(s), flags={}", count, flags); }
             GL30.glBindBufferBase(GL43.GL_SHADER_STORAGE_BUFFER, SpotlightBufferLayout.BINDING, ssboId);
-            // SLOT PROBE: same buffer also at candidate bindings 0/1/8 (one of them may be Iris-free)
-            GL30.glBindBufferBase(GL43.GL_SHADER_STORAGE_BUFFER, 0, ssboId);
-            GL30.glBindBufferBase(GL43.GL_SHADER_STORAGE_BUFFER, 1, ssboId);
-            GL30.glBindBufferBase(GL43.GL_SHADER_STORAGE_BUFFER, 8, ssboId);
+            // v0.9.0:路线 P 时代的 SLOT PROBE(binding 0/1/8 冗余绑定)已删除,
+            // 防 Iris/Embeddium 其它缓冲位被遮蔽(docs/06 §8.2)。
         } catch (Throwable t) {
             LOGGER.warn("[TacLight] SSBO upload failed: {}", t.toString());
         }

@@ -106,3 +106,10 @@ tasks.register('patchIterationT', JavaExec) {
         file('run/shaderpacks/iterationT 3.2.0 (taclight)').absolutePath
     ]
 }
+
+// 路线 S(M0):把自研包骨架同步进运行实例(doc06 §8·① 内包开发,M4 抽独立仓库)
+// 用法:gradlew syncShaderPack,然后游戏内选择光影包 taclight-shaders-dev
+tasks.register('syncShaderPack', Copy) {
+    from file('pack/shaders')
+    into file('run/shaderpacks/taclight-shaders-dev/shaders')
+}

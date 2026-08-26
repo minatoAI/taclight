@@ -7,6 +7,11 @@ import java.nio.ByteOrder;
  * TacLight SSBO std430 契约唯一真源(与 shader_patches/taclight_lights.glsl 对齐)。
  * 头:16 字节(uint lightCount, float vlIntensity, uint flags, uint reserved)
  * 灯:6 x vec4 = 96 字节。N 灯总长 16 + 96N。
+ *
+ * <p>坐标语义(v0.9.0 起,doc06 §2.5 铁律 3):<b>posRadius.xyz = world 坐标</b>,
+ * dirType.xyz = world 方向;scene-relative 转换一律由光影包消费侧执行
+ * (pack/shaders/lib/taclight_common.glsl)。GLSL 侧镜像见
+ * pack/shaders/lib/taclight_common.glsl(路线 S 主契约)。</p>
  */
 public final class SpotlightBufferLayout {
     public static final int HEADER_BYTES = 16;

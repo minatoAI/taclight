@@ -112,16 +112,23 @@ public class ClientEvents {
 
     @SubscribeEvent
     public static void onRenderLevel(net.minecraftforge.client.event.RenderLevelStageEvent event) {
-        if (event.getStage() == net.minecraftforge.client.event.RenderLevelStageEvent.Stage.AFTER_LEVEL) {
-            dev.taclight.channel.LightBuffer.rebindBase();
-        }
+        if (event.getStage() != net.minecraftforge.client.event.RenderLevelStageEvent.Stage.AFTER_LEVEL) return;
+        // SSBO 数据必须按"渲染帧"刷新(v0.9.0 热修:原挂在 ClientTick 仅 20Hz,
+        // 转视角时灯位滞后相机最多 50ms,肉眼可见拖拽)。AFTER_LEVEL 时相机已是
+        // 本帧终值,且先于 Iris composite 执行;社区同型案例共识 = 每帧更新数据。
+        dev.taclight.channel.ClientSpotlightUploader.onFrame();
+        dev.taclight.channel.LightBuffer.rebindBase();
     }
 
     @SubscribeEvent
     public static void onClientTick(TickEvent.ClientTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;
         Minecraft mc = Minecraft.getInstance();
-        if (mc.level == null || mc.player == null) return;
+        if (mc.level == null || mc.player == null) {
+            // 退出世界后停摆 SSBO(清空灯光,防残留数据被后续上下文读到)
+            dev.taclight.channel.LightBuffer.upload(java.util.List.of());
+            return;
+        }
 
         if (!diagAutoApplied && "1".equals(System.getenv("TACLIGHT_DIAG"))) {
             diagAutoApplied = true;
