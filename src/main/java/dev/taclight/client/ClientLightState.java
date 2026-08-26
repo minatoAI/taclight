@@ -4,6 +4,7 @@ package dev.taclight.client;
 public final class ClientLightState {
     private static boolean handheldOn = true;
     private static boolean gunLightOn = false;
+    private static boolean debugMode = false;
 
     private ClientLightState() {}
 
@@ -17,4 +18,8 @@ public final class ClientLightState {
 
     /** 是否有任一设备激活供渲染层消费 */
     public static boolean anyDeviceOn() { return handheldOn || gunLightOn; }
+
+    /** 霓虹调试模式(K 键):GLSL 输出纯色锥形光,与内置手电一眼区分。 */
+    public static boolean debugMode() { return debugMode; }
+    public static void toggleDebug() { debugMode = !debugMode; }
 }

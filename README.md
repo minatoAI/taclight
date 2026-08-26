@@ -13,6 +13,10 @@
 ## 配置
 所有光效参数在 `run/config/taclight-client.toml`(半径/强度/内外锥角/光束密度/枪灯倍率)或发布后 `config/taclight-client.toml`。
 
+## 实机体验提示
+- **分通道验证**:iterationT 设置里把 `HELDLIGHT_MODE` 设为 0,此时只有 TacLight 的 SSBO 锥形光(排除内置手电干扰);按 **K** 切霓虹调试模式,纯绿锥形光 = 我们注入的 pass 在画;
+- 距离衰减修复后:近处亮、远处渐暗,不再均匀白团;
+
 ## 常用命令(纯离线,复用本地 Gradle 缓存)
 ```powershell
 .\gradlew-java17.cmd build        # 编译 + 打包(离线 --offline 可加)
@@ -37,6 +41,7 @@
 7. 证据自动化(OFF-A/OFF-B 像素基线),每阶段 git tag。
 
 ## 路线图
+- [x] v0.8.2 注入光 soft-knee 整形(距离衰减可见)+ K 键霓虹调试模式(通道可辨识)
 - [x] v0.7.0 发布构建(clean build + 契约 29/29 + jar 完整性审计)
 - [x] V0 环境与工程骨架(离线构建验证通过)
 - [x] V1 手电筒物品 + IrisItemLightProvider + 开关(代码完成,**待实机验收**:runClient 手持手电筒按 L 验证锥形光)

@@ -37,6 +37,7 @@ public class ClientEvents {
         @SubscribeEvent
         public static void onRegisterKeys(RegisterKeyMappingsEvent event) {
             event.register(KeyBindings.FLASHLIGHT_TOGGLE);
+            event.register(KeyBindings.DEBUG_TOGGLE);
         }
     }
 
@@ -45,6 +46,10 @@ public class ClientEvents {
         while (KeyBindings.FLASHLIGHT_TOGGLE.consumeClick()) {
             ClientLightState.toggle();
             TacLightMod.LOGGER.info("[TacLight] handheld flashlight {}", ClientLightState.isOn() ? "ON" : "OFF");
+        }
+        while (KeyBindings.DEBUG_TOGGLE.consumeClick()) {
+            ClientLightState.toggleDebug();
+            TacLightMod.LOGGER.info("[TacLight] debug neon mode {}", ClientLightState.debugMode() ? "ON" : "OFF");
         }
     }
 

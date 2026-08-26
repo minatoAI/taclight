@@ -19,12 +19,21 @@ layout(std430, binding = 7) buffer TacLightBuffer {
 };
 
 #define TACLIGHT_EPS 1e-4
-
+// Header flag bits (single source: SpotlightBufferLayout.java)
+#define TACLIGHT_FLAG_HAS_DATA 1u
+#define TACLIGHT_FLAG_DEBUG 2u
 // V5 diagnostics: one-pixel timing probe (Java reads back, see LightBuffer.readReserved)
 #define TACLIGHT_FLAG_TIMING_PROBE 8u
 void taclight_probe_pass(uint pass_bit) {
     atomicOr(reserved, pass_bit); // atomics survive DCE; unguarded run
 }
+
+// ---- v0.8.2: filmic-style soft knee for injected radiance ----
+// Removes the "flat clamped white" look: e=5 -> 0.93, e=1.5 -> 0.79, e=0.17 -> 0.30.
+float taclight_knee(float e) {
+    return e / (1.0 + e);
+}
+#define TACLIGHT_KNEE_GAIN 2.5
 
 // ---- V3-p1: surface spotlight (view-space, aligned with HeldLighting conventions) ----
 vec3 taclight_surface(vec3 viewPos, vec3 viewDir, vec3 normal, vec3 albedo,
@@ -32,6 +41,7 @@ vec3 taclight_surface(vec3 viewPos, vec3 viewDir, vec3 normal, vec3 albedo,
     vec3 result = vec3(0.0);
     taclight_probe_pass(1u);
     if (lightCount == 0u || handMask > 0.5) return result;
+    bool debug = (flags & TACLIGHT_FLAG_DEBUG) != 0u;
     for (uint i = 0u; i < lightCount; i++) {
         TacLightSpot L = lights[i];
         if (L.dirType.w < 0.5) continue;
@@ -47,11 +57,18 @@ vec3 taclight_surface(vec3 viewPos, vec3 viewDir, vec3 normal, vec3 albedo,
         float spot = smoothstep(L.cone.x, L.cone.y, cosAng);
         if (spot <= 0.0) continue;
         float atten = pow(max(1.0 - dist / radius, 0.0), 2.0);
+        float visibility = TorchScreenSpaceShadow(viewPos, viewDir, normal, -dirToFrag);
+        if (debug) {
+            // Neon diagnostic: pure tinted cone, no albedo/AO - unmistakable "our pass".
+            result += vec3(0.12, 1.0, 0.40)
+                    * taclight_knee(L.colorIntensity.a * atten * spot * visibility * TACLIGHT_KNEE_GAIN);
+            continue;
+        }
         float ndl = max(dot(normal, -dirToFrag), 0.0);
         if (ndl <= 0.0) continue;
-        float visibility = TorchScreenSpaceShadow(viewPos, viewDir, normal, -dirToFrag);
         float diffuse = Fd_Burley(normal, -viewDir, -dirToFrag, roughness) * 1.7 + 0.05;
-        result += normalize(L.colorIntensity.rgb) * (L.colorIntensity.a * atten * spot * visibility * ndl * diffuse) * albedo;
+        float e = L.colorIntensity.a * atten * spot * visibility * ndl * diffuse * TACLIGHT_KNEE_GAIN;
+        result += normalize(L.colorIntensity.rgb) * taclight_knee(e) * albedo;
     }
     return result * (ao * 0.5 + 0.5);
 }
@@ -112,7 +129,8 @@ vec3 taclight_beam(vec3 worldStart, vec3 worldEnd, float dither) {
                        * L.vlParams.y * L.vlParams.z * stepLen);
         }
     }
-    return result;
+    // soft-knee the accumulated fog energy: near = warm glow, far = faint, never clipped flat
+    return (result * 1.5) / (1.0 + result * 1.5);
 }
 
 // ---- V3-p2: specular highlight (mirrors TorchSpecularHighlight conventions) ----
@@ -138,8 +156,8 @@ void taclight_specular(inout vec3 color, vec3 viewPos, vec3 viewDir, vec3 normal
         if (ndl <= 0.0) continue;
         float visibility = TorchScreenSpaceShadow(viewPos, viewDir, normal, -dirToFrag);
         float spec = SpecularGGX(normal, -viewDir, -dirToFrag, roughness, f0);
-        color += normalize(L.colorIntensity.rgb)
-                * (L.colorIntensity.a * atten * spot * visibility * ndl * spec) * albedo;
+        float e = L.colorIntensity.a * atten * spot * visibility * ndl * spec * 2.0;
+        color += normalize(L.colorIntensity.rgb) * taclight_knee(e) * albedo;
     }
 }
 // TACLIGHT_PATCH_END iterationT-3.2.0 v3-p1

@@ -23,6 +23,11 @@ public final class LightBuffer {
     private LightBuffer() {}
 
     public static synchronized void upload(List<SpotlightData> lights) {
+        upload(lights, 0);
+    }
+
+    /** @param extraFlags 附加头部标志位(如 FLAG_DEBUG),与灯光数据一起写入。 */
+    public static synchronized void upload(List<SpotlightData> lights, int extraFlags) {
         try {
             if (!isGpuUsable()) return;
             int count = Math.min(lights.size(), 8);
@@ -30,9 +35,10 @@ public final class LightBuffer {
                 ssboId = GL15.glGenBuffers();
                 LOGGER.info("[TacLight] SSBO created (id={})", ssboId);
             }
+            int flags = (count > 0 ? SpotlightBufferLayout.FLAG_HAS_DATA : 0)
+                    | SpotlightBufferLayout.FLAG_TIMING_PROBE | extraFlags;
             ByteBuffer buf = SpotlightBufferLayout.newBuffer(count);
-            SpotlightBufferLayout.writeHeader(buf, count, 1.0f,
-                    (count > 0 ? SpotlightBufferLayout.FLAG_HAS_DATA : 0) | SpotlightBufferLayout.FLAG_TIMING_PROBE);
+            SpotlightBufferLayout.writeHeader(buf, count, 1.0f, flags);
             for (int i = 0; i < count; i++) {
                 SpotlightBufferLayout.writeLight(buf, i, lights.get(i));
             }
@@ -43,7 +49,7 @@ public final class LightBuffer {
                 lastCapacity = bytes;
             }
             GL15.glBufferSubData(GL43.GL_SHADER_STORAGE_BUFFER, 0L, buf);
-            if (!uploadLogged) { uploadLogged = true; LOGGER.info("[TacLight] upload {} light(s), flags={}", count, (count > 0 ? SpotlightBufferLayout.FLAG_HAS_DATA : 0) | SpotlightBufferLayout.FLAG_TIMING_PROBE); }
+            if (!uploadLogged) { uploadLogged = true; LOGGER.info("[TacLight] upload {} light(s), flags={}", count, flags); }
             GL30.glBindBufferBase(GL43.GL_SHADER_STORAGE_BUFFER, SpotlightBufferLayout.BINDING, ssboId);
         } catch (Throwable t) {
             LOGGER.warn("[TacLight] SSBO upload failed: {}", t.toString());

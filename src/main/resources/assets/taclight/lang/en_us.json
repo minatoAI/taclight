@@ -2,5 +2,6 @@
   "item.taclight.flashlight": "Flashlight",
   "item.taclight.flashlight.tip": "Held-light. Use with a shaderpack for a real spotlight cone.",
   "key.taclight.flashlight_toggle": "Toggle Flashlight",
+  "key.taclight.debug_toggle": "Neon Debug Mode (K)",
   "key.categories.taclight": "TacLight"
 }

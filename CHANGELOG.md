@@ -1,5 +1,11 @@
 # TacLight Changelog
 
+## v0.8.2(真实感 + 通道可辨识)
+- **修复削顶**:注入光加 filmic soft-knee(`taclight_knee = e/(1+e)`,增益 2.5)——此前强度 6 直接叠加导致锥形区域内近处远处全部钳到最亮,肉眼看不到距离衰减(用户反馈"无论多远亮度一样"的根因,也是"假"的主要来源)
+- **K 键霓虹调试模式**:GLSL 输出纯绿锥形光(无 albedo/AO),与光影包内置手电一眼区分;契约新增 FLAG_DEBUG=2 断言(15 项)
+- 光束/高光同样套用 soft-knee,消除白团
+- 教学手册新增"怎么分辨你看到的是哪条通道"
+
 ## v0.8.1(热修)
 - **修复**:taclight_specular 的 f0 参数 vec4→float(与 iterationT Material.f0/SpecularGGX 一致);此前导致 composite5 编译失败→整个光影管线关闭(也是 SSBO 探针全线归零的根因)
 - **SSBO 通道端到端验证通过**:E2E 探针回读 reserved=0x1(表面 pass 触发+闭环))

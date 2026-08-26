@@ -56,7 +56,8 @@ public final class ClientSpotlightUploader {
                 lights.add(toSpot(p, eye, look, gunMult()));
             }
         }
-        LightBuffer.upload(lights);
+        int extraFlags = ClientLightState.debugMode() ? SpotlightBufferLayout.FLAG_DEBUG : 0;
+        LightBuffer.upload(lights, extraFlags);
     }
 
     /** ABI:posRadius.xyz = 场景相对坐标(world - cameraPosition);vlParams 开启体积束。 */
