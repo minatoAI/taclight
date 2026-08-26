@@ -20,6 +20,20 @@ public record SpotlightData(
                 0f, 0f, 0f, 0f, -1f, 0f, 1f, 0f);
     }
 
+    /** 带体积束参数的聚光灯(第 5 个 vec4:anisotropy/density/beam/reserved)。 */
+    public static SpotlightData spotBeam(float px, float py, float pz, float radius,
+                                         float r, float g, float b, float intensity,
+                                         float dx, float dy, float dz,
+                                         float cosOuter, float cosInner,
+                                         float density, float beam) {
+        SpotlightData base = spot(px, py, pz, radius, r, g, b, intensity, dx, dy, dz, cosOuter, cosInner);
+        return new SpotlightData(base.posX(), base.posY(), base.posZ(), base.radius(),
+                base.red(), base.green(), base.blue(), base.intensity(),
+                base.dirX(), base.dirY(), base.dirZ(), base.type(),
+                base.cosOuter(), base.cosInner(), 0f, 0f,
+                0f, density, beam, 0f, -1f, 0f, 1f, 0f);
+    }
+
     /** 空数据:光强 0(等同于关闭)。 */
     public static SpotlightData off() {
         return new SpotlightData(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,

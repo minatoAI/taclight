@@ -45,14 +45,14 @@ public final class ClientSpotlightUploader {
         LightBuffer.upload(lights);
     }
 
-    /** ABI:posRadius.xyz = 场景相对坐标(world - cameraPosition)。 */
+    /** ABI:posRadius.xyz = 场景相对坐标(world - cameraPosition);vlParams 开启体积束。 */
     private static SpotlightData toSpot(Vec3 worldPos, Vec3 eye, Vec3 dir, float mult) {
         Vec3 rel = worldPos.subtract(eye);
-        return SpotlightData.spot(
+        return SpotlightData.spotBeam(
                 (float) rel.x, (float) rel.y, (float) rel.z, RADIUS,
                 R, G, B, INTENSITY * mult,
                 (float) dir.x, (float) dir.y, (float) dir.z,
-                COS_OUTER, COS_INNER);
+                COS_OUTER, COS_INNER, 0.05f, 1.0f);
     }
 
     private static Vec3 right(Vec3 look) {
