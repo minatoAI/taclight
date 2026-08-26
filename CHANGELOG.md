@@ -1,6 +1,10 @@
 # TacLight Changelog
 
-## v0.7.0-dev (current)
+## v0.7.0
+- /taclight kit 命令(一键发放验收套件:手电筒+HK416D+战术枪灯)
+- 正式发布构建(clean build 终验)
+
+## v0.7.0-dev
 - 新增 Forge 客户端配置 taclight-client.toml(半径/强度/内外锥角/光束密度/枪灯倍率)
 - 发布文档:本文件、RELEASE.md、docs/03-实机验收清单.md
 

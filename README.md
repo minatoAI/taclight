@@ -37,6 +37,7 @@
 7. 证据自动化(OFF-A/OFF-B 像素基线),每阶段 git tag。
 
 ## 路线图
+- [x] v0.7.0 发布构建(clean build + 契约 29/29 + jar 完整性审计)
 - [x] V0 环境与工程骨架(离线构建验证通过)
 - [x] V1 手电筒物品 + IrisItemLightProvider + 开关(代码完成,**待实机验收**:runClient 手持手电筒按 L 验证锥形光)
 - [x] V2 TaCZ 枪挂灯附件(taclight:gun_light gunpack + EXTRA_ENTRIES 官方注册 + 探针识别;契约测试 6/6;冒烟:2 个 gunpack 注册成功,**待实机验收**:枪匠台合成→改装界面装上 HK416D→日志出现 gun light ON)
