@@ -1,5 +1,11 @@
 # TacLight Changelog
 
+## v0.8.0
+- **B 计划**:GunItemLightProviderMixin 给 ModernKineticGunItem 注入 IrisItemLightProvider 接口(官方 API 判定战术枪灯 → 光强 15),枪灯经 G 通道点亮 iterationT 内置 FLASHLIGHT
+- 补丁工具修复:patchIterationT inputs 声明(消除 up-to-date 误判);PackPatcher 幂等改按内容判断
+- docs/04-SSBO绑定调查记录.md(完整证据链与重启路径)
+- 契约 29/29
+
 ## v0.7.0
 - /taclight kit 命令(一键发放验收套件:手电筒+HK416D+战术枪灯)
 - 正式发布构建(clean build 终验)
