@@ -17,6 +17,11 @@
 #ifndef TACLIGHT_COMMON_INCLUDED
 #define TACLIGHT_COMMON_INCLUDED
 
+// 八面体法线解码(composite 消费端;编码在 gbuffers 侧)。
+// 注意:Iris 的 #include 指令取整行作路径,行尾严禁跟注释(实机事故 2026-08-27)。
+#include "/lib/taclight_gbuffer.glsl"
+#include "/lib/taclight_style.glsl"
+
 // ---- 头部 flags 位(与 SpotlightBufferLayout.java 逐位一致)----
 #define TACLIGHT_FLAG_HAS_DATA     1u   // bit0
 #define TACLIGHT_FLAG_DEBUG        2u   // bit1 K 键绿锥调试(doc06 §2.10)
@@ -107,6 +112,114 @@ float taclight_attenuation(float dist, float radius) {
 float taclight_soft_knee(float x) {
     return x / (1.0 + TACLIGHT_KNEE_GAIN * x);
 }
+
+/** knee 的逐通道版本(表面照明 radiance 是 vec3)。 */
+vec3 taclight_soft_knee3(vec3 x) {
+    return x / (1.0 + TACLIGHT_KNEE_GAIN * x);
+}
+
+// ----------------------------------------------------------------------------
+// M1 · 表面照明数学(全部公开标准公式,自写实现)
+// ----------------------------------------------------------------------------
+
+/** GGX 镜面(Torrance-Sparrow:GGX 分布 × Smith 遮蔽 × Schlick 菲涅尔)。枪身反光来源。 */
+float taclight_ggx(vec3 n, vec3 v, vec3 l, float roughness, float f0) {
+    vec3 h = normalize(v + l);
+    float ndh = max(dot(n, h), 0.0);
+    float ndv = max(dot(n, v), 1e-3);
+    float ndl = max(dot(n, l), 0.0);
+    float a = roughness * roughness;
+    float a2 = a * a;
+    float d = a2 / (3.14159265 * pow(ndh * ndh * (a2 - 1.0) + 1.0, 2.0));
+    float k = a * 0.5;
+    float g = (ndv / (ndv * (1.0 - k) + k)) * (ndl / (ndl * (1.0 - k) + k));
+    float f = f0 + (1.0 - f0) * pow(1.0 - max(dot(h, v), 0.0), 5.0);
+    return d * g * f;
+}
+
+// ----------------------------------------------------------------------------
+// M1 · 屏幕空间遮挡(doc06 §2.7:普通 Iris 包的可行上限,写死接受)
+// 沿片元→灯的视图空间射线步进 24 步(F5,2026-08-30:16→24,台阶更细),
+// 投影回屏幕与 depthtex1(实心几何深度,不含半透明)比较;被挡则按遮挡者
+// 材质系数消光。已知局限:视锥外的遮挡者不投影(墙后物体不挡光)。
+// IGN 抖动把台阶软化成噪点(风格层颗粒进一步融合)。
+// 遮挡系数 = colortex3.a(gbuffers 写,分类表 pack/shaders/block.properties):
+//   1.0 实心 / 0.6 树叶 / 0.25 软植被(草/花/作物)——镂空植被按全挡处理会把
+//   满草场景的地面消成死黑、只剩草叶亮(实机实锤),半透折中。
+// ----------------------------------------------------------------------------
+uniform sampler2D depthtex1;
+uniform sampler2D colortex3;   // rgb=视图空间位置(gbuffers varying 直写) a=遮挡系数
+
+#define TACLIGHT_SSO_SELF_FREE 0.6   // 贴灯豁免半径:自身体/枪身贴着灯,其阴影半影
+                                     // 物理上全弥散,按"可见即照亮"豁免(消脚下暗环)
+
+// F2(2026-08-30):自体胶囊豁免。灯锚在玩家身体上(眼位+固定偏移),身体
+// 对"从身体内发出的光"不是硬遮挡物——半影覆盖全身,不存在锐利阴影边。
+// 只豁免贴灯球不够:第三人称下腿部距灯 >0.6m,身体仍把锥的下半切出硬边
+// (0830 截图"左右不对称"根因 R2)。Java 侧每灯在 cookie 槽写
+// (灯→胶囊中心偏移.xyz, 胶囊半径);胶囊竖直半高为常量。w<=0 = 未启用。
+#define TACLIGHT_SELF_CAP_HALF 1.05
+
+float taclight_sso(vec3 fragView, vec3 lightView, TacLightSpot L) {
+    const int STEPS = 24;   // F5:16→24
+    vec3 rayVec = lightView - fragView;
+    float dither = taclight_ign(gl_FragCoord.xy);
+    float blocked = 0.0;
+    // 自体胶囊(视图空间):中心 = 灯位 + mat3 旋转后的偏移;轴 = 世界竖直
+    // 经 mat3 旋转。每灯一次预计算,步进内只做点积/距离。
+    bool capOn = L.cookie.w > 0.0;
+    vec3 capC = lightView + mat3(gbufferModelView) * L.cookie.xyz;
+    vec3 capAxis = mat3(gbufferModelView) * vec3(0.0, 1.0, 0.0);
+    for (int i = 1; i <= STEPS; i++) {
+        float t = (float(i) - 0.5 + dither * 0.9) / float(STEPS);
+        vec3 sp = fragView + rayVec * t;
+        if (distance(sp, lightView) < TACLIGHT_SSO_SELF_FREE) continue;   // 贴灯豁免
+        if (capOn) {
+            vec3 rel = sp - capC;
+            float h = clamp(dot(rel, capAxis), -TACLIGHT_SELF_CAP_HALF, TACLIGHT_SELF_CAP_HALF);
+            if (distance(sp, capC + capAxis * h) < L.cookie.w) continue;  // 自体胶囊豁免
+        }
+        vec2 suv = taclight_view_to_uv(sp);
+        if (any(lessThan(suv, vec2(0.0))) || any(greaterThan(suv, vec2(1.0)))) continue;
+        // 热修 13:比较必须在视图空间线性距离上做。设备深度 ≈ near/距离,
+        // 同样世界距离差的设备深度值随距离二次缩小——设备深度域比较的 bias
+        // 在 5m 外比半格厚真遮挡的信号还大,必漏检,与热修 11 删除轮廓
+        // 检测是同款陷阱。
+        vec3 occView = taclight_depth_to_view(suv, texture(depthtex1, suv).r);
+        float sceneDist = -occView.z;
+        float rayDist = -sp.z;
+        float biasW = 0.06 + 0.04 * t;   // 世界尺度防自表面 acne;远小于任何真遮挡物
+        if (rayDist > sceneDist + biasW) {
+            // F2 扩展(2026-08-30):遮挡者本体落在自体胶囊内 → 不计。
+            // 场景:第三人称相机下,"灯照亮的远墙"与"玩家身体"在屏幕上重叠,
+            // 世界空间射线并未穿体,但深度测试拿身体的深度当遮挡者 → 整面
+            // 墙的光斑被自己的身体假消光。按遮挡者的世界位置(非采样点的
+            // 屏幕投影)做胶囊判定;occView 与 sceneDist 同源,零额外反投影。
+            bool selfOcc = false;
+            if (capOn) {
+                vec3 orel = occView - capC;
+                float oh = clamp(dot(orel, capAxis), -TACLIGHT_SELF_CAP_HALF, TACLIGHT_SELF_CAP_HALF);
+                selfOcc = distance(occView, capC + capAxis * oh) < L.cookie.w;
+            }
+            if (!selfOcc) blocked += texture(colortex3, suv).a;   // 遮挡者材质系数(植被半透)
+        }
+    }
+    // 陡消光(F5 软化 2026-08-30:2.4→1.2)——16→24 步后单步遮挡占比变小,
+    // 旧的 2.4 斜率让细遮挡物(树干)从"消到不可见"退化为"半消光闪烁带";
+    // 1.2 保持"全挡趋灭、边缘缓降",把 IGN 噪闪幅度压一半,代价是极细
+    // 遮挡物透光略增(与树叶半透折中同一方向)。
+    float occ = blocked / float(STEPS);
+    return pow(max(1.0 - occ * 1.2, 0.0), 2.0);
+}
+
+/** M1 表面照明总增益(与 knee 配合;实测反馈驱动调参)。2026-08-29 实测过曝,2.0→1.0。 */
+#define TACLIGHT_LIGHT_GAIN 1.0
+
+/** F3(2026-08-30):spec 项能量钳制。GGX 分布项(d)在低 roughness 下峰值可到
+ *  10+,× intensity 6 → 镜面尖峰独占 ~2.0 辐射,与 diffuse/bloom/体积多链叠加
+ *  推出饱和平台(R1 高频推手)。diffuse 有 albedo 纹理作视觉载体,spec 是无
+ *  载体的窄峰——压幅不压形:0.35 保留高光形状,削去能量尖峰。 */
+#define TACLIGHT_SPEC_DAMP 0.35
 
 // ----------------------------------------------------------------------------
 // M0 · K 键调试绿锥(doc06 §2.4 锥判定公式 × §2.10 诊断方式):

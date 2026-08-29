@@ -57,6 +57,8 @@ public class ClientEvents {
         public static void onRegisterKeys(RegisterKeyMappingsEvent event) {
             event.register(KeyBindings.FLASHLIGHT_TOGGLE);
             event.register(KeyBindings.DEBUG_TOGGLE);
+            event.register(KeyBindings.DIAG_DUMP);
+            event.register(KeyBindings.BENCH);
         }
     }
 
@@ -64,6 +66,8 @@ public class ClientEvents {
     public static void onKeyInput(InputEvent.Key event) {
         while (KeyBindings.FLASHLIGHT_TOGGLE.consumeClick()) {
             ClientLightState.toggle();
+            // M5:开关上报纸服务端(SynchedEntityData 真源),其他玩家客户端可见
+            dev.taclight.network.TacLightNetwork.sendSetLight(ClientLightState.isOn(), ClientLightState.gunLightOn());
             TacLightMod.LOGGER.info("[TacLight] handheld flashlight {}", ClientLightState.isOn() ? "ON" : "OFF");
         }
         while (KeyBindings.DEBUG_TOGGLE.consumeClick()) {
@@ -81,7 +85,81 @@ public class ClientEvents {
                         + (dbg ? "ON —— 应看到绿色锥形光(=我们的SSBO通道)" : "OFF") + (autoOn ? "(手电筒已自动开启)" : "")), false);
             }
         }
+        while (KeyBindings.DIAG_DUMP.consumeClick()) {
+            dumpDiag();
+        }
+        while (KeyBindings.BENCH.consumeClick()) {
+            startBench();
+        }
     }
+
+    /** N 键:一行结构化诊断(调试自动化 grep 用;字段顺序=契约,tools/session 依赖;新增字段只追加尾部)。 */
+    static void dumpDiag() {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null) { TacLightMod.LOGGER.info("[TacLight] DIAG no-world"); return; }
+        var cam = mc.gameRenderer.getMainCamera();
+        var p = cam.getPosition();
+        // 客户端命令树取证(计划文档坑位 9:P0 发现聊天框命令全被客户端预览拒绝,疑树为空)
+        String cmdtree = "no-conn";
+        if (mc.getConnection() != null) {
+            var root = mc.getConnection().getCommands().getRoot();
+            cmdtree = root.getChildren().size() + " taclight=" + (root.getChild("taclight") != null);
+        }
+        TacLightMod.LOGGER.info("[TacLight] DIAG {} | cam=({}) yRot={} xRot={} flash={} neon={} pack={}({}) | ssbo {} | cmdtree {}",
+                dev.taclight.TacLightMod.VERSION,
+                String.format("%.2f,%.2f,%.2f", p.x, p.y, p.z),
+                String.format("%.1f", mc.player.getYRot()), String.format("%.1f", mc.player.getXRot()),
+                ClientLightState.isOn(), ClientLightState.debugMode(),
+                ShaderPackDiag.activeStatus(), ShaderPackDiag.activePackName(),
+                dev.taclight.channel.LightBuffer.dumpLight0(),
+                cmdtree);
+    }
+
+    // ---- B 键:3 秒帧率基准(帧间 nanoTime 差;采样在渲染线程,开销为零) ----
+    private static boolean benchActive;
+    private static long benchStartNanos;
+    private static long benchLastFrameNanos;
+    private static final java.util.List<Long> BENCH_SAMPLES = new java.util.ArrayList<>();
+    private static final long BENCH_DURATION_NANOS = 3_000_000_000L;
+
+    static void startBench() {
+        BENCH_SAMPLES.clear();
+        benchStartNanos = System.nanoTime();
+        benchLastFrameNanos = 0;
+        benchActive = true;
+        TacLightMod.LOGGER.info("[TacLight] BENCH start (3s)");
+    }
+
+    private static void benchTickFrame() {
+        if (!benchActive) return;
+        long now = System.nanoTime();
+        if (benchLastFrameNanos > 0) BENCH_SAMPLES.add(now - benchLastFrameNanos);
+        benchLastFrameNanos = now;
+        if (now - benchStartNanos < BENCH_DURATION_NANOS) return;
+        benchActive = false;
+        if (BENCH_SAMPLES.isEmpty()) { TacLightMod.LOGGER.info("[TacLight] BENCH no-samples"); return; }
+        double[] sorted = new double[BENCH_SAMPLES.size()];
+        double total = 0;
+        for (int i = 0; i < sorted.length; i++) {
+            sorted[i] = BENCH_SAMPLES.get(i) / 1e9;
+            total += sorted[i];
+        }
+        java.util.Arrays.sort(sorted); // 升序:尾部=最慢帧
+        double avg = sorted.length / total;
+        double p1Low = percentileFps(sorted, 0.01);
+        double min = 1.0 / sorted[sorted.length - 1];
+        TacLightMod.LOGGER.info("[TacLight] BENCH frames={} avgFPS={} onePctLow={} minFPS={}",
+                sorted.length, String.format("%.1f", avg), String.format("%.1f", p1Low), String.format("%.1f", min));
+    }
+
+    /** worstFrac 比例的最慢帧的调和平均(1% low 惯例)。sorted 升序帧时长。 */
+    private static double percentileFps(double[] sortedAsc, double worstFrac) {
+        int n = Math.max(1, (int) Math.ceil(sortedAsc.length * worstFrac));
+        double sum = 0;
+        for (int i = 0; i < n; i++) sum += sortedAsc[sortedAsc.length - 1 - i];
+        return n / sum;
+    }
+
 
     /** 每 5 秒检查活动光影包;状态变化时聊天+日志提示(选错包是 90% 的问题)。 */
     private static void checkShaderPackDiag(Minecraft mc) {
@@ -93,7 +171,7 @@ public class ClientEvents {
         String msg;
         switch (st) {
             case TACLIGHT_PACK:
-                msg = "[TacLight] \u2714 派生包已激活: K=霓虹调试, L=手电筒开关";
+                msg = "[TacLight] \u2714 配套包已激活: L=手电筒开关, K=霓虹调试";
                 break;
             case ORIGINAL_PACK:
                 msg = "[TacLight] \u2718 当前包 '" + pack + "' 无 TacLight 注入。请到选项>视频设置>光影(shaders)选择 '"
@@ -118,6 +196,7 @@ public class ClientEvents {
         // 本帧终值,且先于 Iris composite 执行;社区同型案例共识 = 每帧更新数据。
         dev.taclight.channel.ClientSpotlightUploader.onFrame();
         dev.taclight.channel.LightBuffer.rebindBase();
+        benchTickFrame();
     }
 
     @SubscribeEvent
@@ -166,6 +245,8 @@ public class ClientEvents {
             TacLightMod.LOGGER.info("[TacLight] gun light {} ({})",
                     status == GunLaserReader.Status.OUR_LIGHT ? "ON" : "OFF", detail);
             lastGunStatus = status;
+            // M5:枪灯状态变化同步服务端真源
+            dev.taclight.network.TacLightNetwork.sendSetLight(ClientLightState.isOn(), ClientLightState.gunLightOn());
         }
     }
 }

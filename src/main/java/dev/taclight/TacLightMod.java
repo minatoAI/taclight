@@ -13,7 +13,7 @@ import org.slf4j.Logger;
 @Mod(TacLightMod.MODID)
 public class TacLightMod {
     public static final String MODID = "taclight";
-    public static final String VERSION = "0.9.0";
+    public static final String VERSION = "0.10.0";
     public static final Logger LOGGER = LogUtils.getLogger();
 
     public TacLightMod() {
@@ -40,7 +40,10 @@ public class TacLightMod {
         }
     }
 
-    private void commonSetup(final FMLCommonSetupEvent event) {}
+    private void commonSetup(final FMLCommonSetupEvent event) {
+        // M5 多人灯状态通道(SynchedEntityData 真源 + 开关上报/回发两个包)
+        event.enqueueWork(dev.taclight.network.TacLightNetwork::register);
+    }
 
     private void clientSetup(final FMLClientSetupEvent event) {}
 }

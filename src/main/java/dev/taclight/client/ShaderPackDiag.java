@@ -16,7 +16,10 @@ public final class ShaderPackDiag {
     public enum Status { NO_PACK, ORIGINAL_PACK, TACLIGHT_PACK, UNKNOWN }
 
     private static final String MARKER = "TACLIGHT_PATCH_BEGIN";
-    private static final String GLSL_ENTRY = "shaders/Lib/taclight_lights.glsl";
+    /** 自研配套包的标记所在文件(shaders.properties 第 2 行)。
+     *  历史注记:路线 P 时代检查派生包注入文件 shaders/Lib/taclight_lights.glsl,
+     *  对自研包(taclight-shaders-dev)必然误报"无注入",v0.10.0 起改查本文件。 */
+    private static final String MARKER_ENTRY = "shaders/shaders.properties";
 
     private ShaderPackDiag() {}
 
@@ -45,12 +48,12 @@ public final class ShaderPackDiag {
             if (name == null) return Status.UNKNOWN;
             Path p = Minecraft.getInstance().gameDirectory.toPath().resolve("shaderpacks").resolve(name);
             if (Files.isDirectory(p)) {
-                Path glsl = p.resolve(GLSL_ENTRY);
-                return Files.exists(glsl) && readContains(glsl) ? Status.TACLIGHT_PACK : Status.ORIGINAL_PACK;
+                Path markerFile = p.resolve(MARKER_ENTRY);
+                return Files.exists(markerFile) && readContains(markerFile) ? Status.TACLIGHT_PACK : Status.ORIGINAL_PACK;
             }
             if (Files.isRegularFile(p) && name.toLowerCase().endsWith(".zip")) {
                 try (ZipFile zf = new ZipFile(p.toFile())) {
-                    var entry = zf.getEntry(GLSL_ENTRY);
+                    var entry = zf.getEntry(MARKER_ENTRY);
                     if (entry == null) return Status.ORIGINAL_PACK;
                     byte[] data = zf.getInputStream(entry).readAllBytes();
                     return new String(data, StandardCharsets.UTF_8).contains(MARKER)

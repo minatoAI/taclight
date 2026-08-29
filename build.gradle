@@ -31,8 +31,30 @@ minecraft {
             property 'forge.enabledGameTestNamespaces', mod_id
             args '-mixin.config=taclight.mixins.json'
             jvmArgs '-Xmx4G'
+            // 调试自动化:gradlew runClient -PtaclightQuickPlay=test → 启动后自动进存档
+            // (1.20+ Quick Play;省去菜单点击,session.ps1 就绪判定依赖它)
+            if (project.hasProperty('taclightQuickPlay')) {
+                args '--quickPlaySingleplayer', "${project.property('taclightQuickPlay')}"
+            }
+        }
+        // M5 多人旁观:第二客户端实例(独立 run 目录防 logs/options 互踩)
+        // 用法:gradlew runClientObserver -PtaclightJoin=127.0.0.1:25565 -PtaclightUser=ObserverB
+        clientObserver {
+            workingDirectory project.file('run-observer')
+            property 'forge.enabledGameTestNamespaces', mod_id
+            args '-mixin.config=taclight.mixins.json'
+            jvmArgs '-Xmx3G'
+            if (project.hasProperty('taclightJoin')) {
+                args '--quickPlayMultiplayer', "${project.property('taclightJoin')}"
+            }
+            if (project.hasProperty('taclightUser')) {
+                args '--username', "${project.property('taclightUser')}"
+            }
         }
         server {
+            // 独立目录:server 与 client 同写 run/ 会互踩 logs/latest.log 与 options.txt
+            // 注意:oculus/embeddium 在 runtimeOnly → dev 专服必崩(dist);多人测试走 LAN。
+            workingDirectory project.file('run-server')
             args '--nogui'
             jvmArgs '-Xmx4G'
         }
@@ -50,6 +72,8 @@ dependencies {
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
 
     // 本地离线 jar(flatDir)。TaCZ:枪械联动 API;Oculus:iris.api.v0(compileOnly 取 API 不打包)
+    // 注:oculus/embeddium 是纯客户端 mod → dev 里 runServer 必崩(dist),
+    // 多人测试用 LAN 拓扑(tools/mp-session.ps1),不要起 dev 专用服。
     compileOnly fg.deobf("blank:tacz:1.1.8-hotfix")
     compileOnly fg.deobf("blank:oculus:1.8.0")
     runtimeOnly fg.deobf("blank:tacz:1.1.8-hotfix")
@@ -89,8 +113,15 @@ tasks.named('jar', Jar).configure {
 // 纯 JVM 契约测试(离线、无 JUnit 依赖,遵循项目【单一真源】纪律)
 tasks.register('taclightContracts', JavaExec) {
     dependsOn tasks.named('testClasses')
+    dependsOn 'taclightToolsSelftest'
     classpath = sourceSets.test.runtimeClasspath
     mainClass = 'dev.taclight.AllContracts'
+}
+
+// tools 自检(PS/Node 零依赖分析工具的已知答案测试;Windows 本机,需 node 在 PATH)
+tasks.register('taclightToolsSelftest', Exec) {
+    workingDir file('tools')
+    commandLine 'powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', 'selftest.ps1'
 }
 
 // 光影包补丁(开发/构建期):输入原包目录,输出派生包目录,原包不动
@@ -109,7 +140,81 @@ tasks.register('patchIterationT', JavaExec) {
 
 // 路线 S(M0):把自研包骨架同步进运行实例(doc06 §8·① 内包开发,M4 抽独立仓库)
 // 用法:gradlew syncShaderPack,然后游戏内选择光影包 taclight-shaders-dev
+// 契约守护:Iris 的 #include 取整行作路径,行尾任何附加内容(如注释)会炸整包
+// (InvalidPathException,doc06 §8.8)—— 同步前强制检查。
+tasks.register('checkShaderIncludes') {
+    group = 'taclight'
+    doLast {
+        def bad = []
+        fileTree('pack/shaders').matching {
+            include '**/*.glsl'; include '**/*.fsh'; include '**/*.vsh'
+        }.each { f ->
+            f.eachLine { line ->
+                def t = line.trim()
+                if (t.startsWith('#include') && t.replaceFirst(/^#include\s*"[^"]+"/, '').trim() != '') {
+                    bad << "${f.name}: $line"
+                }
+            }
+        }
+        if (bad) throw new GradleException("[TacLight] include 行尾有附加内容(会炸整包):\n" + bad.join('\n'))
+    }
+}
+
 tasks.register('syncShaderPack', Copy) {
+    dependsOn tasks.named('checkShaderIncludes')
     from file('pack/shaders')
     into file('run/shaderpacks/taclight-shaders-dev/shaders')
+}
+
+// M5 多人:dev 包同步进观察者实例(run-observer),双客户端看同一份光影
+tasks.register('syncShaderPackObserver', Copy) {
+    dependsOn tasks.named('checkShaderIncludes')
+    from file('pack/shaders')
+    into file('run-observer/shaderpacks/taclight-shaders-dev/shaders')
+}
+tasks.named('syncShaderPack') { dependsOn 'syncShaderPackObserver' }
+
+// M5 多人测试环境预置:eula/专服属性(离线+RCON)/观察者目录(低配 options + oculus 选包)
+tasks.register('taclightMpSetup') {
+    group = 'taclight'
+    doLast {
+        file('run-server').mkdirs()
+        def eula = file('run-server/eula.txt')
+        if (!eula.exists()) eula.text = 'eula=true\n'
+        def props = file('run-server/server.properties')
+        if (!props.exists()) props.text = [
+            'online-mode=false',
+            'enable-rcon=true',
+            'rcon.port=25575',
+            'rcon.password=taclight',
+            'spawn-protection=0',
+            'level-type=minecraft\\:flat',
+            'generate-structures=false',
+            'view-distance=6',
+            'max-players=4',
+            'white-list=false',
+            'motd=taclight-mp'
+        ].join(System.lineSeparator()) + System.lineSeparator()
+        file('run-observer').mkdirs()
+        def opt = file('run-observer/options.txt')
+        if (!opt.exists()) opt.text = [
+            'renderDistance:8',
+            'maxFps:60',
+            'enableVsync:false',
+            'pauseOnLostFocus:false'
+        ].join(System.lineSeparator()) + System.lineSeparator()
+        def oculus = file('run-observer/oculus.properties')
+        if (!oculus.exists()) oculus.text = 'shaderPack=taclight-shaders-dev\n'
+    }
+}
+
+// M4 发布(doc06 §4 M4):光影包 zip —— shaders/ 目录 + pack.png 图标(zip 根),
+// 版本号与模组一致(mod_version,单一来源 gradle.properties)。
+// 一键发布:gradlew build packShaderZip → jar 在 build/libs,zip 在 build/distributions。
+tasks.register('packShaderZip', Zip) {
+    dependsOn tasks.named('checkShaderIncludes')
+    archiveFileName = "taclight-shaders-${project.mod_version}.zip"
+    destinationDirectory = layout.buildDirectory.dir('distributions')
+    from('pack/shaders') { into 'shaders' }
+    from('pack/pack.png')
 }

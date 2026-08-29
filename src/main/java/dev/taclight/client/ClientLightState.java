@@ -13,6 +13,8 @@ public final class ClientLightState {
     /** 强制开启(调试模式自动开灯时用)。 */
     public static void forceHandheldOn() { handheldOn = true; }
     public static void toggle() { handheldOn = !handheldOn; }
+    /** 服务端真源回写(S2C SyncLightS2C;命令改灯时本人客户端跟随)。 */
+    public static void setHandheld(boolean on) { handheldOn = on; }
 
     /** 枪挂灯状态(TaCZ 附件探针写入) */
     public static void setGunLight(boolean on) { gunLightOn = on; }

@@ -20,3 +20,8 @@ hs_err_pid*
 net/
 err-lines.txt
 jar-list.txt
+
+# dev-instance runtime logs
+logs/
+*.log.gz
+build-log.txt
