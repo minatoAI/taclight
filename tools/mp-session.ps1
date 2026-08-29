@@ -1,0 +1,76 @@
+# mp-session.ps1 — M5 多人旁观测试会话(LAN 拓扑:玩家A 主机 + 观察者B)
+# 为什么不用 dev 专用服:oculus/embeddium 是纯客户端 mod 且在 runtimeOnly,
+# dev runServer 必崩(dist);改用 A 开 LAN(/publish),B 观察者直连 —— 双端都是客户端。
+# 用法:powershell -NoProfile -ExecutionPolicy Bypass -File tools\mp-session.ps1
+# 约定(项目纪律):进程输出重定向到文件,禁止管道;JDK 走 gradlew-java17.ps1。
+# 日志:tools/.session/{A,observer}.log;两个实例的日志/run 目录天然隔离。
+param(
+  [string]$World = 'test'      # A 进的调试存档(需 Cheats 开,publish 要权限)
+)
+$ErrorActionPreference = 'Stop'
+$Project = Split-Path -Parent (Split-Path -Parent $PSCommandPath)   # taclight/
+$Tools   = Join-Path $Project 'tools'
+$SessionDir = Join-Path $Tools '.session'
+$ALog   = Join-Path $SessionDir 'A.log'
+$ALogE  = Join-Path $SessionDir 'A.log.err'
+$OLog   = Join-Path $SessionDir 'observer.log'
+$OLogE  = Join-Path $SessionDir 'observer.log.err'
+$ALatest = Join-Path $Project 'run\logs\latest.log'
+$OLatest = Join-Path $Project 'run-observer\logs\latest.log'
+$RelayA  = Join-Path $Project 'run\taclight-cmds.txt'
+
+function Step([string]$m) { Write-Output ('[{0}] {1}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $m) }
+function Drv([string]$a, [string]$t = '', [string]$o = '') {
+  $argList = @('-NoProfile','-ExecutionPolicy','Bypass','-File', (Join-Path $Tools 'drive.ps1'), '-Action', $a)
+  if ($t -ne '') { $argList += @('-Text', $t) }
+  if ($o -ne '') { $argList += @('-OutFile', $o) }
+  $out = & powershell @argList 2>&1
+  return (($out -join ' | ').Trim())
+}
+
+# 1. 玩家 A:复用 session.ps1(preflight/options/QuickPlay/READY 全套)
+Step 'PLAYER-A launching via session.ps1 ...'
+& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Tools 'session.ps1') -World $World
+Step 'PLAYER-A READY'
+
+# 2. A 开 LAN(/publish;test 存档 Cheats 开)
+Set-Content -Path $RelayA -Value '/publish' -Encoding UTF8
+Step 'RELAY /publish sent'
+
+# 3. 解析端口(A 日志,最多 60s)
+$port = $null
+$deadline = (Get-Date).AddSeconds(60)
+while ((Get-Date) -lt $deadline -and -not $port) {
+  Start-Sleep -Seconds 3
+  if (Test-Path $ALatest) {
+    $hit = Select-String -Path $ALatest -Pattern '[Pp]ort (\d{4,5})' | Select-Object -Last 1
+    if ($hit) { $port = $hit.Matches[0].Groups[1].Value }
+  }
+}
+if (-not $port) { throw 'LAN port not found in A log(确认 /publish 成功、Cheats 开启)' }
+Step ('LAN port = ' + $port)
+
+# 4. 观察者 B(独立 run-observer 目录;低配 options 已由 taclightMpSetup 预置)
+New-Item -ItemType Directory -Force -Path $SessionDir | Out-Null
+$g = @('-NoProfile','-ExecutionPolicy','Bypass','-File', (Join-Path $Project 'gradlew-java17.ps1'),
+       ('-PtaclightJoin=127.0.0.1:' + $port), '-PtaclightUser=ObserverB', 'runClientObserver')
+$obs = Start-Process -FilePath 'powershell' -ArgumentList $g -WorkingDirectory $Project `
+        -RedirectStandardOutput $OLog -RedirectStandardError $OLogE -WindowStyle Hidden -PassThru
+Step ('OBSERVER launching (pid=' + $obs.Id + ')')
+
+# 5. 等 B 登录进服(最多 7 分钟)
+$deadline = (Get-Date).AddMinutes(7)
+$ok = $false
+while ((Get-Date) -lt $deadline) {
+  Start-Sleep -Seconds 6
+  if ((Test-Path $OLatest) -and (Select-String -Path $OLatest -Pattern 'logged in with entity id' -Quiet)) { $ok = $true; break }
+  if ($obs.HasExited) { throw 'OBSERVER exited early: 检查 tools/.session/observer.log' }
+}
+if (-not $ok) { throw 'OBSERVER READY timeout (7min): 检查 tools/.session/observer.log' }
+Step 'OBSERVER READY (已进服)'
+
+Step 'MP-SESSION(LAN) 就绪。下一步建议:'
+Step '  A: run\taclight-cmds.txt     写 /taclight kit 然后开灯(L 键)'
+Step '  B: run-observer\taclight-cmds.txt 写 /gamemode spectator 切旁观,飞到 A 侧面/背面'
+Step '  B 端应能看到 A 的手电锥体;开关灯用 /taclight light <on|off|toggle>'
+Step '  截图注意:两窗口标题相同,drive.ps1 shot 需先 pin 目标窗口或手动激活'

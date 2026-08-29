@@ -4,6 +4,9 @@
   "package": "dev.taclight.mixin",
   "plugin": "dev.taclight.mixin.TacLightMixinPlugin",
   "compatibilityLevel": "JAVA_17",
+  "mixins": [
+    "PlayerSynchedDataMixin"
+  ],
   "client": [
     "BeamRendererMixin",
     "GunItemLightProviderMixin"
