@@ -25,3 +25,4 @@ jar-list.txt
 logs/
 *.log.gz
 build-log.txt
+tools/.session/
