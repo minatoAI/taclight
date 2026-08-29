@@ -14,17 +14,25 @@ public final class TacLightConfig {
     public static final ForgeConfigSpec.ConfigValue<Double> CONE_INNER_DEG;
     public static final ForgeConfigSpec.ConfigValue<Double> BEAM_DENSITY;
     public static final ForgeConfigSpec.ConfigValue<Double> GUN_MULTIPLIER;
+    public static final ForgeConfigSpec.ConfigValue<Double> REMOTE_LIGHT_MAX_DIST;
+    public static final ForgeConfigSpec.ConfigValue<Integer> REMOTE_LIGHT_MAX_COUNT;
 
     static {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
         builder.comment("TacLight spotlight tuning (client-side visuals)").push("spotlight");
         // radius 语义 = 基准半径(参考亮度 6.0 下);实际半径由上传侧按 √亮度 缩放(doc06 §8.7)
-        RADIUS = builder.comment("reference radius (blocks) @ intensity 6.0; effective radius scales as sqrt(intensity/6.0)").defineInRange("radius", 56.0, 4.0, RADIUS_MAX);
+        // F3(2026-08-30)能量重标定:56 是为室外远照调的档,反平方在室内尺度
+        // 无衰减感(atten(8m)≈0.94 → 多链叠加推平顶,R1);18 档下 atten(8m)≈0.58、
+        // atten(3m)≈0.92,光斑恢复衰减层次。室外远照场景调大 radius 即可(√ 亮度耦合不变)。
+        RADIUS = builder.comment("reference radius (blocks) @ intensity 6.0; effective radius scales as sqrt(intensity/6.0)").defineInRange("radius", 18.0, 4.0, RADIUS_MAX);
         INTENSITY = builder.comment("light intensity").defineInRange("intensity", 6.0, 0.5, 30.0);
         CONE_OUTER_DEG = builder.comment("outer half-angle in degrees").defineInRange("coneOuterDeg", 32.0, 5.0, 60.0);
         CONE_INNER_DEG = builder.comment("inner half-angle in degrees").defineInRange("coneInnerDeg", 18.0, 2.0, 55.0);
         BEAM_DENSITY = builder.comment("volumetric beam density (0 = off)").defineInRange("beamDensity", 0.05, 0.0, 1.0);
         GUN_MULTIPLIER = builder.comment("gun-mounted light intensity multiplier").defineInRange("gunMultiplier", 1.1, 0.1, 3.0);
+        // M5 多人:远程玩家灯的收集护栏(旁观视角与多人调试方案.md §4.3)
+        REMOTE_LIGHT_MAX_DIST = builder.comment("max distance (blocks) to render other players' lights").defineInRange("remoteLightMaxDist", 48.0, 8.0, 128.0);
+        REMOTE_LIGHT_MAX_COUNT = builder.comment("max number of remote lights (nearest kept; SSBO hard cap 8)").defineInRange("remoteLightMaxCount", 8, 1, 8);
         builder.pop();
         SPEC = builder.build();
     }
