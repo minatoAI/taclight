@@ -72,34 +72,102 @@ public final class ClientSpotlightUploader {
         org.joml.Vector3f lookJoml = cam.getLookVector();
         Vec3 look = new Vec3(lookJoml.x(), lookJoml.y(), lookJoml.z());
 
+        // Freecam/旁观修正(旁观视角与多人调试方案.md §2):相机实体不是本地玩家时
+        // (Freecam 分离相机)一律锚玩家,防止灯跟着观察相机跑。
+        boolean fp = mc.options.getCameraType().isFirstPerson() && cam.getEntity() == mc.player;
+        // F2(2026-08-30):自体胶囊基准 —— 玩家眼位(SSO 豁免用,与灯锚解耦;
+        // FP 的 view-bob 微差可忽略,胶囊半径 0.45 覆盖)。
+        Vec3 playerEye = mc.player.getEyePosition(mc.getPartialTick());
         if (ClientLightState.isOn()) {
             // 世界空间锚定(第三人称/他人视角需求,Handheld Moon 型效果的行为前提):
             // 第一人称锚相机(原行为,含 view-bob 手感);第三人称锚玩家眼睛 + 玩家视线,
             // 避免"灯浮在相机上"。光锥本体(体积光束)由 M3 composite1 raymarch 呈现。
-            boolean fp = mc.options.getCameraType().isFirstPerson();
-            Vec3 anchor = fp ? eye : mc.player.getEyePosition(mc.getPartialTick());
+            Vec3 anchor = fp ? eye : playerEye;
             Vec3 lookDir = fp ? look : mc.player.getLookAngle();
-            Vec3 p = anchor.add(lookDir.scale(0.35)).add(right(lookDir).scale(0.22)).add(0, -0.14, 0);
-            lights.add(toSpot(p, lookDir, cfg, 0.9f));
+            SpotlightData hand = toSpot(anchor.add(handheldOffset(lookDir)), lookDir, cfg, 0.9f);
+            lights.add(selfCapped(hand, playerEye));
         }
         if (ClientLightState.gunLightOn()) {
             dev.taclight.pose.MuzzlePoseMath.Pose muzzle = dev.taclight.client.MuzzlePoseCapture.consumeFresh();
-            if (muzzle != null && mc.options.getCameraType().isFirstPerson()) {
+            if (muzzle != null && fp) {
                 // 视图空间 → 场景空间:相机旋转共轭
                 org.joml.Quaternionf rotConj = new org.joml.Quaternionf(cam.rotation()).conjugate();
                 org.joml.Vector3f off = new org.joml.Vector3f(muzzle.ox(), muzzle.oy(), muzzle.oz()).rotate(rotConj);
                 org.joml.Vector3f fwd = new org.joml.Vector3f(muzzle.fx(), muzzle.fy(), muzzle.fz()).rotate(rotConj);
                 Vec3 pos = eye.add(off.x(), off.y(), off.z());
                 Vec3 dir = new Vec3(fwd.x(), fwd.y(), fwd.z());
-                lights.add(toSpot(pos, dir, cfg, dev.taclight.config.TacLightConfig.GUN_MULTIPLIER.get().floatValue()));
+                SpotlightData gun = toSpot(pos, dir, cfg, dev.taclight.config.TacLightConfig.GUN_MULTIPLIER.get().floatValue());
+                lights.add(selfCapped(gun, playerEye));
             } else {
-                Vec3 p = eye.add(look.scale(0.55)).add(right(look).scale(0.18)).add(0, -0.10, 0);
-                lights.add(toSpot(p, look, cfg, dev.taclight.config.TacLightConfig.GUN_MULTIPLIER.get().floatValue()));
+                // F4(2026-08-30):非第一人称(或枪口姿态未捕获)禁止锚相机——
+                // TP 下灯浮在观察相机上(0830 R4.2"TP 枪灯 fallback 锚相机")。
+                // 与手持灯同一规则:FP 锚相机眼(=玩家眼),TP 锚玩家眼 + 玩家视线。
+                Vec3 gAnchor = fp ? eye : playerEye;
+                Vec3 gLook = fp ? look : mc.player.getLookAngle();
+                SpotlightData gun = toSpot(gAnchor.add(gunFallbackOffset(gLook)), gLook, cfg,
+                        dev.taclight.config.TacLightConfig.GUN_MULTIPLIER.get().floatValue());
+                lights.add(selfCapped(gun, playerEye));
             }
         }
+        collectRemoteLights(mc, eye, cfg, lights);
         int extraFlags = ClientLightState.debugMode() ? SpotlightBufferLayout.FLAG_DEBUG : 0;
         LightBuffer.upload(lights, extraFlags);
         dumpDiagOnce();
+    }
+
+    /** SSBO 硬上限(LightBuffer/GLSL 两侧同值 8;自身灯优先,远程补足余量)。 */
+    private static final int MAX_LIGHTS = 8;
+
+    /** M5 远程玩家灯收集:实体数据开关 → 距离剔除/就近上限 → 第三人称锚定数学复用。 */
+    private static void collectRemoteLights(Minecraft mc, Vec3 camEye, LightParams cfg, List<SpotlightData> out) {
+        if (out.size() >= MAX_LIGHTS) return;
+        var remotes = new ArrayList<net.minecraft.client.player.AbstractClientPlayer>();
+        var cands = new ArrayList<MultiLightCollector.Candidate>();
+        for (var p : mc.level.players()) {
+            if (p == mc.player) continue;
+            boolean h = dev.taclight.sync.PlayerLightAccess.flashlight(p);
+            boolean g = dev.taclight.sync.PlayerLightAccess.gunLight(p);
+            if (!h && !g) continue;
+            Vec3 eye = p.getEyePosition(mc.getPartialTick());
+            cands.add(new MultiLightCollector.Candidate(remotes.size(), eye.x, eye.y, eye.z, h, g));
+            remotes.add(p);
+        }
+        double maxDist = dev.taclight.config.TacLightConfig.REMOTE_LIGHT_MAX_DIST.get();
+        int cap = Math.min(dev.taclight.config.TacLightConfig.REMOTE_LIGHT_MAX_COUNT.get(), MAX_LIGHTS - out.size());
+        for (MultiLightCollector.Selected sel : MultiLightCollector.select(cands, camEye.x, camEye.y, camEye.z, maxDist, cap)) {
+            var p = remotes.get(sel.index());
+            Vec3 look = p.getLookAngle();
+            Vec3 eye = p.getEyePosition(mc.getPartialTick());
+            if (sel.handheld()) {
+                SpotlightData hand = toSpot(eye.add(handheldOffset(look)), look, cfg, 0.9f);
+                out.add(selfCapped(hand, eye));
+            }
+            if (sel.gun() && out.size() < MAX_LIGHTS) {
+                // 他人枪灯:无精确枪口矩阵(本地捕获仅第一人称),眼位近似(旁观方案 §4.5)
+                SpotlightData gun = toSpot(eye.add(look.scale(0.45)), look, cfg,
+                        dev.taclight.config.TacLightConfig.GUN_MULTIPLIER.get().floatValue());
+                out.add(selfCapped(gun, eye));
+            }
+        }
+    }
+
+    // ---- F2 自体胶囊常量(GLSL 侧消费,竖直半高 TACLIGHT_SELF_CAP_HALF=1.05)----
+    /** 胶囊中心在玩家眼位下方(身体近似竖直圆柱,眼上 0.5m 到脚下 1.6m)。 */
+    static final double SELF_CAP_CENTER_DROP = 0.55;
+    /** 胶囊半径:玩家碰撞半宽 0.3 + 灯锚偏移/视差余量。 */
+    static final float SELF_CAP_RADIUS = 0.45f;
+
+    /** F2 纯函数:为灯附加自体胶囊(cookie = 灯→胶囊中心偏移.xyz + 半径)。
+     *  胶囊中心 = 玩家眼位 −0.55y。偏移在 Java 侧以 double 计算后降 float ——
+     *  灯锚与眼位同源同帧,差值小,无 world 精度问题;GLSL 侧以灯位为基准
+     *  重建胶囊中心,与灯同用一路 world→view 变换,无二次误差。 */
+    static SpotlightData selfCapped(SpotlightData light, Vec3 playerEye) {
+        Vec3 cap = playerEye.add(0, -SELF_CAP_CENTER_DROP, 0);
+        return light.withSelfCapsule(
+                (float) (cap.x - light.posX()),
+                (float) (cap.y - light.posY()),
+                (float) (cap.z - light.posZ()),
+                SELF_CAP_RADIUS);
     }
 
     /** 参考亮度:radius 配置语义的锚点;亮度-距离按反平方等照度律耦合(d ∝ √I,doc06 §8.7)。 */
@@ -145,8 +213,19 @@ public final class ClientSpotlightUploader {
     private static float cosOuter() { return dev.taclight.config.TacLightConfig.cosDeg(dev.taclight.config.TacLightConfig.CONE_OUTER_DEG.get()); }
     private static float intensity() { return dev.taclight.config.TacLightConfig.INTENSITY.get().floatValue(); }
 
-    private static Vec3 right(Vec3 look) {
-        Vec3 r = new Vec3(look.z, 0.0, -look.x);
+    /** 手持灯锚点偏移(相对眼位,纯函数):前 0.35 / 右 0.22 / 下 0.14。右手性契约见 UploaderSemanticContract §5。 */
+    static Vec3 handheldOffset(Vec3 look) {
+        return look.scale(0.35).add(rightVector(look).scale(0.22)).add(0, -0.14, 0);
+    }
+
+    /** 枪灯回退锚点偏移(枪口姿态不可用时):前 0.55 / 右 0.18 / 下 0.10。 */
+    static Vec3 gunFallbackOffset(Vec3 look) {
+        return look.scale(0.55).add(rightVector(look).scale(0.18)).add(0, -0.10, 0);
+    }
+
+    /** 视线在水平面的右手方向 = look×up = (-z, 0, x) 归一化(朝北看时右手=东)。 */
+    static Vec3 rightVector(Vec3 look) {
+        Vec3 r = new Vec3(-look.z, 0.0, look.x);
         double len = r.length();
         return len > 1e-6 ? r.scale(1.0 / len) : new Vec3(1.0, 0.0, 0.0);
     }
