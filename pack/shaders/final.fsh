@@ -76,6 +76,13 @@ void main() {
     float view6 = length(vp6.xyz / max(abs(vp6.w), 1e-5));
     gl_FragData[0] = vec4(vec3(pow(clamp(view6 / far, 0.0, 1.0), 0.35)), 1.0);
     return;
+#elif TACLIGHT_DBG_STRIP == 8
+    // 表面光单独(colortex0 直读,M1 照明结果,不含光束/bloom)。与 DBG4 同款显示增益
+    // ——W3 同轴判定的"表面光斑"腿:两腿都在风格链之前的原始缓冲域,质心不随
+    // 色调映射/后处理旋钮摆动(坑26)。
+    vec3 s8 = texture2D(colortex0, texcoord).rgb;
+    gl_FragData[0] = vec4(pow(clamp(s8 * 6.0, 0.0, 1.0), vec3(0.45)), 1.0);
+    return;
 #endif
 #endif
 

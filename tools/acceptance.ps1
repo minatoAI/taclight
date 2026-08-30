@@ -9,18 +9,25 @@
 # 用法:
 #   powershell -File acceptance.ps1 centroid -A shot.png [-LumaTh 110]
 #   powershell -File acceptance.ps1 align   -A final.png -B dbg4.png [-TolX 0.05 -TolY 0.08]
+#                                             [-LumaThA x -LumaThB y](两腿各自阈值,默认回落 LumaTh;
+#                                              W3 新配方:A=DBG8 表面光饱和核心 253,B=DBG4 光束 110)
 #   powershell -File acceptance.ps1 side    -A final.png [-MinX -0.01 -MaxX 0.08]
 param([Parameter(Mandatory=$true)][string]$Mode,
       [string]$A, [string]$B,
       [double]$LumaTh = 110,
+      [double]$LumaThA = -1, [double]$LumaThB = -1,
       [double]$Top = 0.08, [double]$Bottom = 0.16,
       [double]$TolX = 0.05, [double]$TolY = 0.08,
       [double]$MinX = -0.01, [double]$MaxX = 0.08,
       [double]$MinFrac = 0.004)
+# LumaThA/B(2026-08-30):align 两腿可各用阈值(默认回落 LumaTh)。动机:坑26 后
+# W3 两腿分别量"表面光饱和核心"(DBG8 ×6 显示,LumaTh 253)与"光束整体"(DBG4,LumaTh 110),
+# 单一阈值无法同时适配两个缓冲的值域。
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
 
-function Get-Centroid([string]$path) {
+function Get-Centroid([string]$path, [double]$th = 0) {
+  if ($th -le 0) { $th = $LumaTh }
   if (-not (Test-Path $path)) { throw ("image not found: " + $path) }
   $bmp = New-Object System.Drawing.Bitmap($path)
   $w = $bmp.Width; $h = $bmp.Height
@@ -38,8 +45,8 @@ function Get-Centroid([string]$path) {
     for ($x = 0; $x -lt $w; $x++) {
       $i = $row + $x * 4
       $luma = 0.2126 * $bytes[$i + 2] + 0.7152 * $bytes[$i + 1] + 0.0722 * $bytes[$i]
-      if ($luma -gt $LumaTh) {
-        $wgt = $luma - $LumaTh
+      if ($luma -gt $th) {
+        $wgt = $luma - $th
         $sw += $wgt; $sx += $wgt * $x; $sy += $wgt * $y
       }
     }
@@ -51,7 +58,8 @@ function Get-Centroid([string]$path) {
             cx = ($sx / $sw) / $w; cy = ($sy / $sw) / $h; frac = -1.0 }
 }
 
-function Get-Frac([string]$path) {
+function Get-Frac([string]$path, [double]$th = 0) {
+  if ($th -le 0) { $th = $LumaTh }
   # 亮像素占比(与质心同阈值;单独扫一遍,避免为 frac 保留全图 second pass 于主路径)
   $bmp = New-Object System.Drawing.Bitmap($path)
   $w = $bmp.Width; $h = $bmp.Height
@@ -70,7 +78,7 @@ function Get-Frac([string]$path) {
       $i = $row + $x * 4
       $luma = 0.2126 * $bytes[$i + 2] + 0.7152 * $bytes[$i + 1] + 0.0722 * $bytes[$i]
       $total++
-      if ($luma -gt $LumaTh) { $lit++ }
+      if ($luma -gt $th) { $lit++ }
     }
   }
   if ($total -le 0) { return 0.0 }
@@ -98,8 +106,10 @@ if ($Mode -eq 'centroid') {
   if (-not $c.ok -or $c.frac -lt $MinFrac) { exit 1 } else { exit 0 }
 }
 elseif ($Mode -eq 'align') {
-  $ca = Get-Centroid $A; $fa = Get-Frac $A
-  $cb = Get-Centroid $B; $fb = Get-Frac $B
+  if ($LumaThA -le 0) { $LumaThA = $LumaTh }
+  if ($LumaThB -le 0) { $LumaThB = $LumaTh }
+  $ca = Get-Centroid $A $LumaThA; $fa = Get-Frac $A $LumaThA
+  $cb = Get-Centroid $B $LumaThB; $fb = Get-Frac $B $LumaThB
   $dx = $ca.cx - $cb.cx; $dy = $ca.cy - $cb.cy
   $pass = $ca.ok -and $cb.ok -and $fa -ge $MinFrac -and $fb -ge $MinFrac `
           -and ([math]::Abs($dx) -le $TolX) -and ([math]::Abs($dy) -le $TolY)
@@ -108,7 +118,7 @@ elseif ($Mode -eq 'align') {
   $out = @{ check = 'align'; a = $A; b = $B; ax = [double]$ca.cx; ay = [double]$ca.cy;
             bx = [double]$cb.cx; by = [double]$cb.cy; dx = [double]$dx; dy = [double]$dy;
             fracA = [double]$fa; fracB = [double]$fb; tolX = [double]$TolX; tolY = [double]$TolY;
-            verdict = $verdict }
+            thA = [double]$LumaThA; thB = [double]$LumaThB; verdict = $verdict }
   Write-Output (To-Json $out)
   if ($pass) { exit 0 } else { exit 1 }
 }
