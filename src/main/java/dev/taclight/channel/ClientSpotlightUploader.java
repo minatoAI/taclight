@@ -142,7 +142,14 @@ public final class ClientSpotlightUploader {
             float pt = mc.getPartialTick();
             float xRot = net.minecraft.util.Mth.lerp(pt, p.xRotO, p.getXRot());
             float yHead = net.minecraft.util.Mth.rotLerp(pt, p.yHeadRotO, p.yHeadRot);
-            Vec3 look = Vec3.directionFromRotation(xRot, yHead);
+            // 方案A(08-31,用户批准):同源角速度外推,对抗原版同步链 ~100-250ms 可感滞后
+            // (用户复测:闪烁消但转动滞后)。ω̂ 与渲染同源(O→current 差值);钳制+EMA
+            // 细节与调参(!extrap)见 RemoteLookPredictor。
+            float omegaYaw = net.minecraft.util.Mth.wrapDegrees(p.yHeadRot - p.yHeadRotO);
+            float omegaPitch = p.getXRot() - p.xRotO;
+            RemoteLookPredictor.Ext ext = RemoteLookPredictor.step(
+                    p.getId(), yHead, xRot, omegaYaw, omegaPitch, System.nanoTime());
+            Vec3 look = Vec3.directionFromRotation(xRot + ext.pitchDeg(), yHead + ext.yawDeg());
             Vec3 eye = p.getEyePosition(pt);
             if (sel.handheld()) {
                 SpotlightData hand = toSpot(eye.add(handheldOffset(look)), look, cfg, 0.9f);

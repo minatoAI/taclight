@@ -113,6 +113,20 @@ public class ClientEvents {
                 ShaderPackDiag.activeStatus(), ShaderPackDiag.activePackName(),
                 dev.taclight.channel.LightBuffer.dumpLight0(),
                 cmdtree);
+        // 08-31 远程同步探针:读侧(syncReady/accessor id/各玩家标志)一行一玩家
+        if (mc.level != null) {
+            TacLightMod.LOGGER.info("[TacLight] DIAG-REMOTE syncReady={} accIds=(flash={},gun={})",
+                    dev.taclight.sync.PlayerLightAccess.syncReady,
+                    dev.taclight.sync.PlayerLightAccess.FLASHLIGHT.getId(),
+                    dev.taclight.sync.PlayerLightAccess.GUNLIGHT.getId());
+            for (var pl : mc.level.players()) {
+                TacLightMod.LOGGER.info("[TacLight] DIAG-REMOTE player={} self={} flash={} gun={} pos=({})",
+                        pl.getGameProfile().getName(), pl == mc.player,
+                        dev.taclight.sync.PlayerLightAccess.flashlight(pl),
+                        dev.taclight.sync.PlayerLightAccess.gunLight(pl),
+                        String.format("%.1f,%.1f,%.1f", pl.getX(), pl.getY(), pl.getZ()));
+            }
+        }
     }
 
     // ---- B 键:3 秒帧率基准(帧间 nanoTime 差;采样在渲染线程,开销为零) ----

@@ -90,9 +90,12 @@ public final class DebugCommandRelay {
             ClientEvents.startBench();
             return;
         }
-        // 灯光控制(L/K 键的程序化等价 —— 键注入不可靠,灯光状态走文件通道)
+        // 灯光控制(L 键的程序化等价 —— 键注入不可靠,灯光状态走文件通道)
         if (line.startsWith("!light")) {
             ClientLightState.toggle();
+            // 08-31 实测坑:L 键路径(InjectionEvent) toggle 后会 sendSetLight 上报服务端,
+            // relay 必须对齐,否则服务端实体数据不变 → 其他玩家看不到开关(ssbo count 假 1)。
+            dev.taclight.network.TacLightNetwork.sendSetLight(ClientLightState.isOn(), ClientLightState.gunLightOn());
             TacLightMod.LOGGER.info("[TacLight] RELAY light -> {}", ClientLightState.isOn());
             return;
         }
@@ -104,6 +107,13 @@ public final class DebugCommandRelay {
         if (line.startsWith("!gun")) {
             ClientLightState.setGunLight(!ClientLightState.gunLightOn());
             TacLightMod.LOGGER.info("[TacLight] RELAY gunLight -> {}", ClientLightState.gunLightOn());
+            return;
+        }
+        if (line.startsWith("!extrap")) {
+            // 方案A 调参旋钮(客户端本地;/taclight 会发到服务端,管不到本客户端预测状态)
+            String arg = line.length() > 7 ? line.substring(7).trim() : "";
+            TacLightMod.LOGGER.info("[TacLight] RELAY extrap -> {}",
+                    dev.taclight.channel.RemoteLookPredictor.configure(arg));
             return;
         }
         if (line.startsWith("/")) {

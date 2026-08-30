@@ -1,5 +1,26 @@
 # TacLight Changelog
 
+## 未提交 · 2026-08-31(用户复测:闪烁已消;新发现转动滞后 → 方案A 预测外推)
+
+- **远程灯转动滞后诊断**:B 眼里光斑转动滞后 A 本地视角 ~100-250ms = 原版实体同步链固有
+  (A 20Hz 打包 + 集成服 20Hz tick 转发 + B 端 lerpSteps=3 渐近收敛 + 渲染 1-tick 插值窗);
+  修闪烁前同延迟被 20Hz 台阶抖动掩盖,平滑后暴露为滞后 —— 同一数据两种症状,非修复引入。
+- **方案A(用户批准)→ RemoteLookPredictor(新,纯 JVM 可测)**:同源角速度外推
+  extrapTicks×ω̂(ω̂=O→current/tick,与渲染同源零新包);双层钳制(ω̂≤20°/tick、|ext|≤12°)
+  + 外推量 EMA τ=80ms(稳态无损、起停平滑防回弹/防 20Hz 台阶);状态按实体 id,2s 未见即清。
+  默认 1.25 tick;**运行时调参 `!extrap <0-3|off>` + 校准日志 `!extrap log on|off`**
+  (bang 命令;/taclight 是服务端路由,管不到 B 的客户端状态 —— 坑40)。
+  接线:collectRemoteLights(远程手持+枪灯共用预测方向);静止 ext=0 行为不变。
+- **实机验证**(证据 docs/evidence/2026-08-31-extrap/):契约 15 项全绿;静止
+  extrap off/on 像素恒等(changed 41/409920=0.01%);/tp 阶跃扫掠 ext 峰值 10.17°<12°、
+  急停 ~250ms 平滑单调回落、符号正确;直走 2.5s 光斑稳定无噪声(走直线⇒ext=0,与
+  用户已验收行为逐位一致)。待用户体感验收:A 转视角 B 看光斑跟随。
+- **排障三坑入册(39/40/41)**:坑39 场景预置自带蜘蛛推玩家下平台 + **死亡玩家实体不被
+  跟踪 → 远程灯假消失**(预防:创造/清怪/关生成);坑40 relay `!light` 只切本地不上报
+  服务端(已修补 sendSetLight;服务端真源一律 /taclight light);坑41 后台 PostMessage
+  合成鼠标点击对 GLFW 屏界面(死亡界面)无效,键盘消息可以 → 自动化救援不可行靠预防。
+- `!diag` 增 DIAG-REMOTE 探针(syncReady/accessor id/各玩家 flash 标志)。
+
 ## 未提交 · 2026-08-30 深夜②(用户实机复核两反馈:双灯仍过亮 + 远程移动闪烁)
 
 - **P1 双灯过亮 → 多源感知肩部(composite.fsh + taclight_common.glsl)**:渲染方程保持

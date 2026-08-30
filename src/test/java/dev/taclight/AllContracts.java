@@ -1,6 +1,7 @@
 package dev.taclight;
 
 import dev.taclight.channel.MultiLightCollectorContract;
+import dev.taclight.channel.RemoteLookPredictorContract;
 import dev.taclight.channel.SpotlightBufferLayoutContract;
 import dev.taclight.channel.UploaderSemanticContract;
 import dev.taclight.pose.MuzzlePoseMathContract;
@@ -23,6 +24,8 @@ public class AllContracts {
         ScenePlanContract.main(args);
         System.out.println("== MultiLightCollectorContract ==");
         MultiLightCollectorContract.main(args);
+        System.out.println("== RemoteLookPredictorContract ==");
+        RemoteLookPredictorContract.main(args);
         System.out.println("== PlayerLightSyncContract ==");
         PlayerLightSyncContract.main(args);
         System.out.println("AllContracts: ALL PASS");
