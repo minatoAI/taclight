@@ -56,7 +56,12 @@ layout(location = 0) out vec4 taclightCompositeOut;
 // 固定阈值在中远距离必然漏检,混合四边形的垃圾法线就是黑边根因。
 
 void main() {
-    vec3 color = texture(colortex0, texcoord).rgb;
+    // 色调管线 v2(2026-08-30 消融实验结论):colortex0 自此为**线性**。
+    // 旧版在 gamma 域把 M1 辐射加进原版画面,final 再整体 pow(2.2) 线性化——
+    // 加法发生在错误的域:叠加项的感知贡献随底亮度非线性(暗底压扁/亮底放大),
+    // 且彩色光斑经往返 gamma 后色相偏移。现在入口一次线性化,M1 与原版基线
+    // 在同一线性域相加;final 不再做 pow(2.2)(契约:colortex0=线性,见 gbuffer 头)。
+    vec3 color = pow(max(texture(colortex0, texcoord).rgb, 0.0), vec3(2.2));
     // F1(2026-08-30):表面查找用 depthtex1(实心几何)而非 depthtex0。
     // 原版雨/玻璃/水等半透写 depthtex0 但不进 depthtex1;雨丝逐帧移动会
     // 让"被照表面"逐帧跳变(雨天亮纹闪烁的主源之一),且雨/玻璃自身不该
@@ -97,7 +102,7 @@ void main() {
             // ---- M1 真实表面照明 ----
             vec4 g1 = texture(colortex1, texcoord);
             vec4 g2 = texture(colortex2, texcoord);
-            vec3 albedo = g2.rgb;
+            vec3 albedo = pow(g2.rgb, vec3(2.2));   // 线性域照明:albedo 一并解码
             // 法线(M1 热修 9b,2026-08-27):视图空间位置经 gbuffers 以 varying 写入
             // colortex3(与 ftransform 同源、透视正确插值 → 面内线性,导数=精确面法线;
             // 前两版失败原因:①顶点属性法线在 Embeddium 地形路径方向错误;②深度反投影

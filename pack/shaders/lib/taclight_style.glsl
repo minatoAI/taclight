@@ -36,6 +36,40 @@ vec3 taclight_aces(vec3 x) {
     return clamp(aout * (a / b), 0.0, 1.0);
 }
 
+// M2 · AgX 色调映射(AgX minimals 公开数学;输入线性,输出线性显示值,调用方做 gamma 编码)。
+// 与 ACES 的实测差异(2026-08-30 消融):ACES 高光滚降偏暖且中间调反差硬
+// (夜景局部对比 0.298 vs 参考包 0.092);AgX 高光去饱和走向白、色相偏移小。
+// 前向矩阵列和 = 1(中性轴保持,数值验证过);逆矩阵由前向矩阵数值求逆
+// (GLSL120 无 inverse());对比多项式 = 公开发布的最简 S 型近似。
+// EV 窗口旋钮:发布默认 ±12.47 面向场景参照 HDR;我们的输入是显示参照的
+// 原版画面(线性域 ~0.001-2),窗口收窄到 ±6 才能把中间调放对(实机校准)。
+#define TACLIGHT_AGX_MIN_EV -6.0
+#define TACLIGHT_AGX_MAX_EV  6.0
+
+vec3 taclight_agx_contrast(vec3 x) {
+    vec3 x2 = x * x;
+    vec3 x4 = x2 * x2;
+    return 15.5 * x4 * x2 - 40.14 * x4 * x + 31.96 * x4
+         - 6.868 * x2 * x + 0.4298 * x2 + 0.1191 * x - 0.00232;
+}
+
+vec3 taclight_agx(vec3 v) {
+    mat3 m = mat3(0.842479062253094, 0.0423282422610123, 0.0423756549057051,
+                  0.0783847559184412, 0.878468636469772, 0.0784335999504165,
+                  0.0791323665908833, 0.0791661274605437, 0.879142971512145);
+    v = clamp(log2(max(v, vec3(1e-6))), vec3(TACLIGHT_AGX_MIN_EV), vec3(TACLIGHT_AGX_MAX_EV));
+    v = (m * v - TACLIGHT_AGX_MIN_EV) / (TACLIGHT_AGX_MAX_EV - TACLIGHT_AGX_MIN_EV);
+    return taclight_agx_contrast(v);
+}
+
+vec3 taclight_agx_eotf(vec3 v) {
+    mat3 mi = mat3( 1.19687011936545, -0.09796426368363, -0.09890963868184,
+                   -0.05289645903295,  1.15190062767580, -0.09896648525240,
+                   -0.05297124238905, -0.09804595609125,  1.15106836000501);
+    v = mi * (v * (TACLIGHT_AGX_MAX_EV - TACLIGHT_AGX_MIN_EV) + TACLIGHT_AGX_MIN_EV);
+    return exp2(v);
+}
+
 // M2 · split-tone(D7 夜景基调):阴影推冷、高光推暖(幅度温和,灯色本身
 // 已由 SSBO 暖白 3500-4000K 提供,这里只做环境氛围分离)。
 vec3 taclight_split_tone(vec3 c, float lum) {

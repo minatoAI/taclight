@@ -15,6 +15,10 @@
 //   b = smoothness 副本(供 final DBG7 审计用——final 读时 colortex2 已被 bloom 复用)
 //   a = 1.0(已写标志;无 _s 数据的像素回落默认值,见 taclight_decode_specular)
 // 两端实现必须逐字一致;改动 = 契约变更,需同步此处与所有 gbuffers。
+//
+// 色调管线 v2(2026-08-30):colortex0 契约改为**线性域**(composite 入口对原版
+// 基线做 pow(2.2) 一次线性化,M1 辐射在同域相加;final 不再整体 pow(2.2))。
+// colortex1/2 的 G-Buffer 侧写入仍是原始值(线性化只在 composite 消费点做)。
 // ============================================================================
 
 #ifndef TACLIGHT_GBUFFER_INCLUDED

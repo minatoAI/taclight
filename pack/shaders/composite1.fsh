@@ -19,7 +19,9 @@ in vec2 texcoord;
 layout(location = 0) out vec4 taclightVL;
 
 #define TACLIGHT_VL_STEPS 32   // F5(2026-08-30):24→32,条纹更细
-#define TACLIGHT_BEAM_GAIN 1.4
+// 色调管线 v2:colortex0/合成改线性域后,光束在 final 中直接线性相加(旧域等效
+// 贡献 ≈ b^2.2,新域 = b 本身);1.4→0.32 为同观感重校(核心亮度以 B0 截图对齐)。
+#define TACLIGHT_BEAM_GAIN 0.5
 #define TACLIGHT_VL_MAX_DIST 96.0   // 天空像素的 march 终点(= radiusMax)
 
 void main() {

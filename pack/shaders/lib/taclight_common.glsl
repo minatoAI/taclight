@@ -214,7 +214,7 @@ float taclight_sso(vec3 fragView, vec3 lightView, TacLightSpot L) {
 }
 
 /** M1 表面照明总增益(与 knee 配合;实测反馈驱动调参)。2026-08-29 实测过曝,2.0→1.0。 */
-#define TACLIGHT_LIGHT_GAIN 1.0
+#define TACLIGHT_LIGHT_GAIN 2.2
 
 /** F3(2026-08-30):spec 项能量钳制。GGX 分布项(d)在低 roughness 下峰值可到
  *  10+,× intensity 6 → 镜面尖峰独占 ~2.0 辐射,与 diffuse/bloom/体积多链叠加

@@ -24,7 +24,10 @@ in vec2 texcoord;
 layout(location = 0) out vec4 taclightBloom1;   // -> colortex1
 layout(location = 1) out vec4 taclightExposure; // -> colortex7
 
-#define TACLIGHT_BLOOM_TH      0.55   // 亮部提取阈值(软边 ±0.15)
+// 色调管线 v2(2026-08-30 消融):阈值进线性域。旧 0.55 是 gamma 域亮度——
+// 白天整个天空(0.7-0.9)都进 bloom → 画面泛白雾;玻璃/亮天被 bloom 打成死白块。
+// 线性域 1.0 软阈 ±0.4 只提取真正的高光(光斑核心/太阳直射),天空不再起雾。
+#define TACLIGHT_BLOOM_TH      1.0   // 亮部提取阈值(线性域,软边 ±0.4)
 #define TACLIGHT_EXPOSURE_LOCK 1     // 1=固定曝光(A/B 截图防亮度漂移,值见下) 0=自适应眼适应
 #define TACLIGHT_EXPOSURE_LOCK_VALUE 1.0  // 锁定时的曝光值
 #define TACLIGHT_EXPOSURE_TARGET 0.12 // 目标全屏平均亮度(夜景基调,偏暗)
@@ -51,7 +54,7 @@ void main() {
             + sceneAt(texcoord + vec2(-o.x,  o.y))
             + sceneAt(texcoord + vec2( o.x, -o.y))
             + sceneAt(texcoord + vec2(-o.x, -o.y))) * 0.25;
-    float w = smoothstep(TACLIGHT_BLOOM_TH - 0.15, TACLIGHT_BLOOM_TH + 0.15, dot(s, LUMA));
+    float w = smoothstep(TACLIGHT_BLOOM_TH - 0.4, TACLIGHT_BLOOM_TH + 0.4, dot(s, LUMA));
     taclightBloom1 = vec4(s * w, 1.0);
 
     // ---- 全屏平均亮度(锁定模式写入 .g 供诊断;自适应模式用其反比做曝光)----
