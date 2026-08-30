@@ -31,6 +31,9 @@ minecraft {
             property 'forge.enabledGameTestNamespaces', mod_id
             args '-mixin.config=taclight.mixins.json'
             jvmArgs '-Xmx4G'
+            // 坑32:原版集成服硬编码 LAN 会话验证,dev 第二客户端无会话必被踢;
+            // 本属性使 DevLanAuthHook 关闭集成服验证,仅 dev 生效(生产不带此属性)。
+            property 'taclight.dev.disableLanAuth', 'true'
             // 调试自动化:gradlew runClient -PtaclightQuickPlay=test → 启动后自动进存档
             // (1.20+ Quick Play;省去菜单点击,session.ps1 就绪判定依赖它)
             if (project.hasProperty('taclightQuickPlay')) {
@@ -45,9 +48,7 @@ minecraft {
             parents = [project.minecraft.runs.client]
             workingDirectory project.file('run-observer')
             property 'forge.enabledGameTestNamespaces', mod_id
-            // 08-30 M5 调试:B 登录 2s 即静默断线(netty 异常走 DEBUG 级)——console 提到
-            // debug 抓异常栈;定位后改回 info。
-            property 'forge.logging.console.level', 'debug'
+            property 'taclight.dev.disableLanAuth', 'true'
             args '-mixin.config=taclight.mixins.json'
             jvmArgs '-Xmx3G'
             if (project.hasProperty('taclightJoin')) {

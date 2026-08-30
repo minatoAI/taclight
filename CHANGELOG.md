@@ -1,5 +1,24 @@
 # TacLight Changelog
 
+## 未提交 · 2026-08-30 晚(M5 双客户端 LAN 联测通过)
+
+> 首次真实双端验证。结论:**通过** —— 观察者实时渲染主机手电(表面光斑+光束),
+> 开关灯实时跟随。证据 docs/evidence/2026-08-30-m5-lan/(视觉对照 + SSBO 计数 + imgdiff)。
+
+- **坑32 根因(字节码级确认)**:原版 1.20.1 `IntegratedServer.initServer()` 硬编码
+  `setUsesAuthentication(true)` —— 局域网加入者须过 Mojang 会话验证,dev 第二客户端
+  无会话必被 "Invalid session" 踢(约 2 秒,两侧日志无声)。修复 = `DevLanAuthHook`
+  (仅 `-Dtaclight.dev.disableLanAuth=true` 时关闭集成服验证;dev run 配置携带,
+  生产不带属性、行为与原版一致)。
+- **坑31 附带修复**:`--quickPlayMultiplayer` 直连无 status ping,客户端把 Forge 服
+  误判 vanilla → 通道谓词改 `NetworkRegistry.acceptMissingOr`(同时支持单侧装 mod 降级)。
+- **工具链六连修(坑29/30)**:mp-session 中继无 BOM 写入+端口正则对齐;
+  drive.ps1 `-ProcId` 按进程选窗 + present ALT 解锁前台锁;FG6 clientObserver
+  `parents` 继承 client(未知 run 名不配主类);observer oculus.properties 须在
+  `run-observer/config/`。
+- 量化:双端 /list=2;B 端 ssbo count 随 A 开关灯 1→0→1 实时跟随;
+  b_on/b_off 帧差 changed=10823px(光束区),maxDiff=220。
+
 ## 未提交 · 2026-08-30 傍晚(W2/W3 标尺换基准:几何判定改 DBG4/DBG8,终帧质心降级)
 
 > 用户批准坑26 提案:"把 W2/W3 的几何判定基准改成 DBG4 光束"。当日落地并实机取证。

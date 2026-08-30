@@ -29,7 +29,13 @@ public final class TacLightNetwork {
         registered = true;
         channel = NetworkRegistry.newSimpleChannel(
                 new ResourceLocation(TacLightMod.MODID, "main"),
-                () -> PROTOCOL, PROTOCOL::equals, PROTOCOL::equals);
+                () -> PROTOCOL,
+                // 坑31(08-30,M5 首测):quickPlayMultiplayer/直连不做 status ping,客户端拿不到
+                // FML 标志会把 Forge 服务器误判成 vanilla(HandshakeHandler "vanilla impl"),
+                // 我方通道以 "ABSENT" 参与协商 → 旧谓词 PROTOCOL::equals 拒绝 → 登录 2s 静默断线。
+                // 本 mod 的同步本就可降级(缺对端通道时灯仍是本地行为),标准做法 = acceptMissingOr。
+                NetworkRegistry.acceptMissingOr(PROTOCOL),
+                NetworkRegistry.acceptMissingOr(PROTOCOL));
         int id = 0;
         channel.registerMessage(id++, SetLightC2S.class, SetLightC2S::encode, SetLightC2S::decode, SetLightC2S::handle);
         channel.registerMessage(id++, SyncLightS2C.class, SyncLightS2C::encode, SyncLightS2C::decode, SyncLightS2C::handle);
