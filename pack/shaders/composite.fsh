@@ -2,7 +2,7 @@
 /*
  * composite · M1 锥光照明(doc06 §4 M1 / §2.7):
  *   radiance = Σ灯: albedo·NdL(diffuse) + GGX(spec) × spot(软边) × atten(D6) × vis(SSO)
- *   color    = 原版基线(colortex0,环境光/太阳光兜底) + knee(radiance) × GAIN
+ *   color    = 原版基线(colortex0,环境光/太阳光兜底) + shoulder(radiance × GAIN)
  * M1 为 additive 注入("技术正确"版);M2 转 ACES/自适应曝光后再评估全权渲染。
  *
  * G-Buffer 输入(布局契约见 lib/taclight_gbuffer.glsl 头注释):
@@ -176,7 +176,11 @@ void main() {
             if (radiance.x != radiance.x || radiance.y != radiance.y || radiance.z != radiance.z) {
                 color = vec3(1.0, 0.0, 1.0);
             } else {
-                color += taclight_soft_knee3(radiance) * TACLIGHT_LIGHT_GAIN;
+                // 多源感知肩部(taclight_shoulder3):radiance×GAIN 后,T 以下逐像素恒等
+                // (单灯外观不变),T 以上 tanh 收敛到 (1+q)·T —— 双灯同点不再线性翻倍。
+                // 旧 taclight_soft_knee3 全域压缩(远场也压),肩部版只压 T 以上。
+                color += taclight_shoulder3(radiance * TACLIGHT_LIGHT_GAIN,
+                        TACLIGHT_SHOULDER_T, TACLIGHT_SHOULDER_Q * TACLIGHT_SHOULDER_T);
             }
 
 #if TACLIGHT_DBG_STRIP == 1

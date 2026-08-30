@@ -136,8 +136,14 @@ public final class ClientSpotlightUploader {
         int cap = Math.min(dev.taclight.config.TacLightConfig.REMOTE_LIGHT_MAX_COUNT.get(), MAX_LIGHTS - out.size());
         for (MultiLightCollector.Selected sel : MultiLightCollector.select(cands, camEye.x, camEye.y, camEye.z, maxDist, cap)) {
             var p = remotes.get(sel.index());
-            Vec3 look = p.getLookAngle();
-            Vec3 eye = p.getEyePosition(mc.getPartialTick());
+            // 坑36(08-30 深夜,远程移动闪烁):getLookAngle() 是 tick 瞬时值(20Hz 台阶),
+            // 而实体模型渲染走 O→current 的 partialTick 角度插值 —— A 一转视角,B 眼里
+            // 光斑就以 20Hz 跳动(模型平滑、灯抖动)。灯的方向必须与渲染同源插值。
+            float pt = mc.getPartialTick();
+            float xRot = net.minecraft.util.Mth.lerp(pt, p.xRotO, p.getXRot());
+            float yHead = net.minecraft.util.Mth.rotLerp(pt, p.yHeadRotO, p.yHeadRot);
+            Vec3 look = Vec3.directionFromRotation(xRot, yHead);
+            Vec3 eye = p.getEyePosition(pt);
             if (sel.handheld()) {
                 SpotlightData hand = toSpot(eye.add(handheldOffset(look)), look, cfg, 0.9f);
                 out.add(selfCapped(hand, eye));

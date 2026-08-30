@@ -7,7 +7,8 @@ param(
   [Parameter(Mandatory=$true)][string]$OutDir,
   [int]$Count = 12,
   [int]$IntervalMs = 220,
-  [string]$Tag = "run"
+  [string]$Tag = "run",
+  [int]$ProcId = 0
 )
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Windows.Forms
@@ -36,12 +37,43 @@ public static class T0Burst {
     }, IntPtr.Zero);
     return found;
   }
+  // 坑34(08-30 深夜):双实例同标题 → 按 PID 选窗;返回 0=未找到
+  public static IntPtr FindPid(uint target) {
+    IntPtr found = IntPtr.Zero;
+    EnumWindows((h, lp) => {
+      if (!IsWindowVisible(h)) return true;
+      uint pid; GetWindowThreadProcessId(h, out pid);
+      if (pid == target) {
+        var sb = new StringBuilder(256);
+        GetWindowTextW(h, sb, 256);
+        if (sb.ToString().Length > 5) { found = h; return false; }
+      }
+      return true;
+    }, IntPtr.Zero);
+    return found;
+  }
+  // 坑34:CopyFromScreen 抓屏幕像素,重叠窗会污染 → 其他 MC 窗最小化(SW_MINIMIZE=6)
+  public static void MinimizeOthers(IntPtr keep) {
+    EnumWindows((h, lp) => {
+      if (h == keep || !IsWindowVisible(h)) return true;
+      uint pid; GetWindowThreadProcessId(h, out pid);
+      var sb = new StringBuilder(256);
+      GetWindowTextW(h, sb, 256);
+      string t = sb.ToString();
+      if ((t.Contains("Minecraft") || t.Contains("Forge")) && t.Length > 5) ShowWindow(h, 6);
+      return true;
+    }, IntPtr.Zero);
+  }
+  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int cmd);
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
 }
 "@
 [T0Burst]::SetProcessDPIAware() | Out-Null
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 $h = [T0Burst]::Find()
+if ($ProcId -ne 0) { $h = [T0Burst]::FindPid([uint32]$ProcId) }
 if ($h -eq [IntPtr]::Zero) { Write-Output 'WINDOW_NOT_FOUND'; exit 1 }
+if ($ProcId -ne 0) { [T0Burst]::MinimizeOthers($h) }
 $r = New-Object T0Burst+RECT
 [T0Burst]::GetWindowRect($h, [ref]$r) | Out-Null
 $w = $r.R - $r.L; $ht = $r.B - $r.T
