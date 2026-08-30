@@ -5,9 +5,10 @@
  *   color    = 原版基线(colortex0,环境光/太阳光兜底) + knee(radiance) × GAIN
  * M1 为 additive 注入("技术正确"版);M2 转 ACES/自适应曝光后再评估全权渲染。
  *
- * G-Buffer 输入(colortex1/2 布局见 lib/taclight_gbuffer.glsl 头注释):
+ * G-Buffer 输入(布局契约见 lib/taclight_gbuffer.glsl 头注释):
  *   colortex1: xy=八面体法线 zw=lmcoord(RGBA16)
- *   colortex2: rgb=原始 albedo(无光图) a=smoothness(RGBA16)
+ *   colortex2: rgb=原始 albedo(无光图) a=LabPBR smoothness(RGBA16)
+ *   colortex5: r=F0(介电) g=金属标志(阶段二新增,terrain/entities/hand 写)
  *
  * 语法注意(实机教训 2026-08-27):430 core 下禁用 varying/gl_FragData,
  * 必须 in/out + 显式 layout(location) 输出;顶点侧保持 330 compatibility。
@@ -20,14 +21,14 @@
  * colortex2 RGBA16  G-Buffer albedo+smooth;composite3 起复用为 bloom 二级(同上)
  * colortex3 RGBA32F G-Buffer viewpos + occlusion factor
  * colortex4 RGBA16  composite1 volumetric beam
+ * colortex5 RGBA8   G-Buffer 材质(阶段二:F0/金属;M2 旧 bloom 半分辨率 buffer 已退役)
  * colortex7 RGBA16  adaptive exposure history (cleared = never)
- * 注:不再使用新增 buffer colortex5/6——初版 bloom 的半分辨率技巧在
- * Oculus 1.8.0 上出现亮部图缩放错位叠加(实机 2026-08-29),已退役。
 const int colortex0Format = RGBA16;
 const int colortex1Format = RGBA16;
 const int colortex2Format = RGBA16;
 const int colortex3Format = RGBA32F;
 const int colortex4Format = RGBA16;
+const int colortex5Format = RGBA8;
 const int colortex7Format = RGBA16;
 const bool colortex7Clear = false;
 */
@@ -37,6 +38,7 @@ const bool colortex7Clear = false;
 uniform sampler2D colortex0;
 uniform sampler2D colortex1;
 uniform sampler2D colortex2;
+uniform sampler2D colortex5;   // G-Buffer 材质(阶段二)
 // depthtex1 声明来自 lib/taclight_common.glsl(F1 起表面查找用它,不再采样 depthtex0)
 
 in vec2 texcoord;
@@ -115,7 +117,18 @@ void main() {
                 n = -n;                            // 构造性朝向:可见面必朝相机
             }
             vec3 v = -normalize(fragView);
-            float roughness = clamp(1.0 - g2.a, 0.15, 1.0);
+            // 阶段二材质解码:LabPBR smoothness(旧占位 0.3 由 gbuffers 回落值兼容)
+            // 粗糙度映射换为 LabPBR 标准的 (1-s)²(此前 1-s 线性);下限 0.20 是
+            // 能量护栏——(1-s)² 下近镜面 GGX 分布项 D 峰值 ∝ 1/a⁴ 量级发散,
+            // 0.20 + SPEC_DAMP 0.35 把同轴镜心压在 knee 平台以内;真镜面 glint
+            // 的形状(非能量)留给 ACES 滚降呈现。
+            float smoothness = g2.a;
+            float roughness = clamp((1.0 - smoothness) * (1.0 - smoothness), 0.20, 1.0);
+            vec4 g5 = texture(colortex5, texcoord);
+            float metal = g5.g;
+            // 金属:标准允许的简化(230-255 全按 255)→ F0 = albedo(彩色菲涅尔),
+            // diffuse 清零(金属无体散射)。
+            vec3 f0 = mix(vec3(g5.r), albedo, metal);
 
             vec3 radiance = vec3(0.0);
             for (uint i = 0u; i < lightCount && i < 8u; i++) {
@@ -149,9 +162,9 @@ void main() {
 
                 vec3 lc = L.colorIntensity.rgb * L.colorIntensity.a;
                 float atten = taclight_attenuation(dist, radius);
-                vec3 diffuse = albedo * ndl;
-                float spec = taclight_ggx(n, v, l, roughness, 0.04) * ndl * TACLIGHT_SPEC_DAMP;
-                radiance += (diffuse + vec3(spec)) * lc * (spot * atten * vis);
+                vec3 diffuse = albedo * (ndl * (1.0 - metal));
+                vec3 spec = taclight_ggx(n, v, l, roughness, f0) * (ndl * TACLIGHT_SPEC_DAMP);
+                radiance += (diffuse + spec) * lc * (spot * atten * vis);
             }
 
             // NaN 品红警报:任何一盏灯的路径产生 NaN 会毒化整个辐射和

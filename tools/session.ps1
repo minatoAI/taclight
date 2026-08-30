@@ -42,15 +42,21 @@ if (Test-Path $Log) {
 
 # 1. options.txt 强制测量口径:maxFps=260 + 关 VSync(1.20.1 中 maxFps:0=VSync 锁刷新率)
 #    + 关失焦自动暂停(2026-08-29 实测坑:自动化终端抢焦点 → Game Menu 挡镜头)
+#    + version 标记必须存在且**行首无 BOM**(坑24,2026-08-30):PS5.1 `Set-Content
+#      -Encoding UTF8` 写 BOM → 首行 version:3465 被吃 → MC 当史前格式跑全量
+#      datafix → OptionsKeyLwjgl3Fix 抛 NumberFormatException → 整个 options 丢弃
+#      全默认,maxFps/vsync/pauseOnLostFocus/resourcePacks 全部从未生效。
+#      写入必须用 .NET UTF8Encoding($false) 无 BOM。1.20.1 数据版本 = 3465。
 if (Test-Path $OptTxt) {
   $optc = Get-Content $OptTxt -Raw
+  if ($optc -notmatch 'version:3465') { $optc = "version:3465`n" + $optc }
   $optc = $optc -replace 'maxFps:[0-9]+', 'maxFps:260'
   if ($optc -match 'enableVsync:[a-z]+') { $optc = $optc -replace 'enableVsync:[a-z]+', 'enableVsync:false' }
   else { $optc = $optc + "`nenableVsync:false" }
   if ($optc -match 'pauseOnLostFocus:[a-z]+') { $optc = $optc -replace 'pauseOnLostFocus:[a-z]+', 'pauseOnLostFocus:false' }
   else { $optc = $optc + "`npauseOnLostFocus:false" }
-  Set-Content -Path $OptTxt -Value $optc -Encoding UTF8
-  Step 'OPTIONS maxFps=260 vsync=false pauseOnLostFocus=false'
+  [IO.File]::WriteAllText($OptTxt, $optc, [Text.UTF8Encoding]::new($false))
+  Step 'OPTIONS version=3465(noBOM) maxFps=260 vsync=false pauseOnLostFocus=false'
 }
 
 if ($NoLaunch) { Step 'NOLAUNCH: 只做 preflight/pref,跳过启动'; exit 0 }

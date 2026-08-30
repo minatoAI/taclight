@@ -17,6 +17,7 @@ uniform sampler2D colortex1;
 uniform sampler2D colortex2;
 uniform sampler2D colortex3;   // DBG 2:rgb=视图空间位置 a=遮挡系数(实心1/树叶0.6/软植被0.25)
 uniform sampler2D colortex4;
+uniform sampler2D colortex5;   // DBG 7:G-Buffer 材质(r=F0 g=金属 b=smoothness 副本)
 uniform sampler2D colortex7;
 uniform sampler2D depthtex0;   // DBG 6:线性深度
 #if TACLIGHT_DBG_STRIP == 6
@@ -49,6 +50,17 @@ void main() {
     vec3 bloom5 = TACLIGHT_BLOOM1_GAIN * texture2D(colortex1, texcoord).rgb
                 + TACLIGHT_BLOOM2_GAIN * texture2D(colortex2, texcoord).rgb;
     gl_FragData[0] = vec4(clamp(bloom5, 0.0, 1.0), 1.0);
+    return;
+#elif TACLIGHT_DBG_STRIP == 7
+    // ---- 材质解码审计(阶段二;必须在 final 早退——composite 侧写会被 beam/bloom
+    //      二次叠加污染,07:50 实机教训)。数据源只用 colortex5(gbuffers 之后无人写):
+    //      R=smoothness(γ0.45) G=F0×2.5(介电值域小,×2.5 可判读) B=金属(蓝) ----
+    vec4 mt7 = texture2D(colortex5, texcoord);
+    if (mt7.a > 0.001) {
+        gl_FragData[0] = vec4(pow(mt7.b, 0.45), pow(min(mt7.r * 2.5, 1.0), 0.45), mt7.g, 1.0);
+    } else {
+        gl_FragData[0] = vec4(0.0, 0.0, 0.0, 1.0);   // 天空/未写
+    }
     return;
 #elif TACLIGHT_DBG_STRIP == 6
     // 视图空间线性深度(γ0.35 压近场;黑=天空)

@@ -1,5 +1,62 @@
 # TacLight Changelog
 
+## 未提交 · 2026-08-30 晨(阶段二:M1 GGX specular + LabPBR 解析;git 历史重建)
+
+> 用户实机验收 F1-F6 通过后批准:①按里程碑重建 git 历史(8 笔,快照重建——共享
+> 文件按主体里程碑归档);②开工阶段二(TACZ PBR 前置)。
+
+### 阶段二实施(全部实机验证,证据 docs/evidence/2026-08-30-stage2-specular/)
+
+- **查证先行**:LabPBR 1.3 标准(shaderlabs wiki)= R perceptual smoothness
+  (roughness=(1-s)²)/ G:0-229 线性 F0(≤0.898)、230-255 金属、255=albedo 作 F0,
+  标准明文允许"230-255 全按 255 简化";"只读 R+G 即 LabPBR-ready"。
+  Oculus 1.8.0 jar 内确认 CustomTextureSamplerInterceptor(`specular` 采样器)。
+  **TACZ 默认枪包自带 LabPBR _s/_n 贴图**(gun/uv/*.png 319 张)。
+- **G-Buffer 契约升级(lib/taclight_gbuffer.glsl)**:colortex2.a = 0.3 占位 →
+  LabPBR smoothness;新增 colortex5(RGBA8,r=F0 介电值 g=金属标志 b=smoothness
+  副本供 final DBG7——final 读时 colortex2 已被 bloom 复用)。无 _s 数据回落旧默认
+  (roughness 0.7 经 1-sqrt(0.7) 逆变换 / F0 0.04),原版材质观感与阶段一一致。
+- **gbuffers_terrain/entities/hand**:DRAWBUFFERS 0123→01235 + `specular` 采样器
+  解码(taclight_decode_specular);textured/water 等不写材质(粒子半透不参与,
+  water 不写 5 → 水下地形材质保留,属正确行为)。
+- **composite(M1)**:roughness = clamp((1-s)², 0.20, 1.0)——0.20 下限是能量护栏
+  ((1-s)² 下 D 峰 ∝ 1/a⁴ 发散,0.20×SPEC_DAMP 0.35 把同轴镜心压在 knee 平台内);
+  taclight_ggx f0 参数 float→vec3(金属彩色菲涅尔);金属 diffuse 清零(albedo 转 F0);
+  调用点 vec3 化(首测 C7623 隐式收窄炸整包,坑14 同款)。
+- **DBG7 材质审计视图**:首版写在 composite 被 final 的 beam/bloom 二次叠加污染
+  (中心径向亮斑),移到 final 早退(colortex5 在 gbuffers 后无人写,干净)。
+- **测试台 pack-dev/labpbr-rig/**:只含 _s 贴图不改原版 albedo(gen.ps1 确定性生成);
+  stone_bricks 砖面 R200/G30 + 砖缝 R40/G12、smooth_stone R170/G20、iron_block
+  R205/**G230(金属)**;A 通道写 255(ignored,防预乘)。
+
+### 实机验证(雨天+停雨两轮)
+
+- DBG7:砖面/砖缝逐 texel 对比清晰;iron 补丁白色(金属位);TACZ HK416D 整枪白色
+  = 金属+高 smoothness(自带 _s 经 hand 路径正确解码),手臂正确回退
+- final:iron 补丁 diffuse 抑制 + 镜面光泽,与砖墙形成物理正确材质对比;acceptance
+  side PASS cx=0.5044;闪烁指数 0.22%(雨中静止);雨本底帧差 4.9 vs 开灯 6.6(雨主导)
+- !bench avgFPS=375.1(见坑24,数值体系已变)
+
+### 坑24(重大):options.txt 从未生效过
+
+- 症状:labpbr-rig 资源包进不了 Reload 列表;日志 "Failed to load options"
+  (NumberFormatException on key 值,OptionsKeyLwjgl3Fix)
+- **根因链**:session.ps1 用 PS5.1 `Set-Content -Encoding UTF8` 重写 options.txt =
+  写入 BOM → 首行 `version:3465` 版本标记被吃 → MC 把 options 当史前格式跑全量
+  datafix → OptionsKeyLwjgl3Fix 对现代键名抛异常 → **整个 options 丢弃全默认**
+- 影响面:**08-29 起所有 session 会话的 maxFps/vsync/pauseOnLostFocus/resourcePacks
+  从未生效**;旧 bench 118.9 ≈ 默认 maxFps 120 上限(非真实性能上限);坑17 的
+  pauseOnLostFocus 修复属无效药方(症状消失另有原因)
+- 修复:session.ps1 改 `[IO.File]::WriteAllText(..., UTF8Encoding($false))` 无 BOM
+  + version 标记守护;drive.ps1 postkey 键位表补数字键 1-9(热栏切换通道)
+
+### git 历史重建(用户批准)
+
+- 8 笔里程碑提交:v0.10.0(M1-M4)→ 调试环境 P0-P2 → 边界规格 §7 两大 bug 关断 →
+  M5+缺陷分析 → 第一性原理 → F1-F5 → F6 → docs 收尾。工作树快照重建,共享文件按
+  主体里程碑归档(各提交信息内有归属说明);gitignore 增补 logs/*.gz、build-log.txt、
+  tools/.session/
+
 ## 未提交 · 2026-08-30 深夜(F6 移动闪烁:定位+修复,用户报告驱动)
 
 > 用户指出移动闪烁是"光源移动引起的光晕忽亮忽暗",与雨丝无关。建移动光源调试

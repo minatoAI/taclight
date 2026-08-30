@@ -122,8 +122,9 @@ vec3 taclight_soft_knee3(vec3 x) {
 // M1 · 表面照明数学(全部公开标准公式,自写实现)
 // ----------------------------------------------------------------------------
 
-/** GGX 镜面(Torrance-Sparrow:GGX 分布 × Smith 遮蔽 × Schlick 菲涅尔)。枪身反光来源。 */
-float taclight_ggx(vec3 n, vec3 v, vec3 l, float roughness, float f0) {
+/** GGX 镜面(Torrance-Sparrow:GGX 分布 × Smith 遮蔽 × Schlick 菲涅尔)。枪身反光来源。
+ *  阶段二:f0 升为 vec3 —— 金属的 F0 = albedo(彩色),介电为常量灰。 */
+vec3 taclight_ggx(vec3 n, vec3 v, vec3 l, float roughness, vec3 f0) {
     vec3 h = normalize(v + l);
     float ndh = max(dot(n, h), 0.0);
     float ndv = max(dot(n, v), 1e-3);
@@ -133,7 +134,7 @@ float taclight_ggx(vec3 n, vec3 v, vec3 l, float roughness, float f0) {
     float d = a2 / (3.14159265 * pow(ndh * ndh * (a2 - 1.0) + 1.0, 2.0));
     float k = a * 0.5;
     float g = (ndv / (ndv * (1.0 - k) + k)) * (ndl / (ndl * (1.0 - k) + k));
-    float f = f0 + (1.0 - f0) * pow(1.0 - max(dot(h, v), 0.0), 5.0);
+    vec3 f = f0 + (1.0 - f0) * pow(1.0 - max(dot(h, v), 0.0), 5.0);
     return d * g * f;
 }
 
