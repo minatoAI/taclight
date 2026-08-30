@@ -40,8 +40,14 @@ minecraft {
         // M5 多人旁观:第二客户端实例(独立 run 目录防 logs/options 互踩)
         // 用法:gradlew runClientObserver -PtaclightJoin=127.0.0.1:25565 -PtaclightUser=ObserverB
         clientObserver {
+            // FG6 对未知 run 名不配主类("No main class" 实机踩坑 17:42)——显式继承 client
+            // 的启动装配(setParents);自身只覆盖 run 目录/内存/联机参数。
+            parents = [project.minecraft.runs.client]
             workingDirectory project.file('run-observer')
             property 'forge.enabledGameTestNamespaces', mod_id
+            // 08-30 M5 调试:B 登录 2s 即静默断线(netty 异常走 DEBUG 级)——console 提到
+            // debug 抓异常栈;定位后改回 info。
+            property 'forge.logging.console.level', 'debug'
             args '-mixin.config=taclight.mixins.json'
             jvmArgs '-Xmx3G'
             if (project.hasProperty('taclightJoin')) {

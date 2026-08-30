@@ -3,8 +3,11 @@ param(
   [Parameter(Mandatory=$true)][string]$Action,
   [string]$Text = "",
   [string]$OutFile = "",
-  [int]$Dur = 1000
+  [int]$Dur = 1000,
+  [int]$ProcId = 0
 )
+# -ProcId(2026-08-30,M5 双客户端):按进程 PID 选窗(双实例窗口标题同为 ^Minecraft,
+# 标题匹配不确定选中谁)。PID 取法:java 命令行含 --quickPlaySingleplayer=A / ObserverB=B。
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type @"
 using System;
@@ -25,6 +28,7 @@ public static class T0Win {
   [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc cb, IntPtr lp);
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowTextW(IntPtr h, StringBuilder sb, int max);
   [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
   [DllImport("user32.dll")] public extern static void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
   [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
   [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extra);
@@ -69,12 +73,18 @@ function Find-McWindow() {
   $script:gameMats = @('^Minecraft')
   $cb = [T0Win+EnumProc]{ param($h,$lp)
     if ([T0Win]::IsWindowVisible($h)) {
-      $sb = New-Object System.Text.StringBuilder 256
-      [T0Win]::GetWindowTextW($h, $sb, 256) | Out-Null
-      $t = $sb.ToString()
-      $ok = $false
-      foreach ($m in $script:gameMats) { if ($t -match $m) { $ok = $true; break } }
-      if ($ok) { $script:mc = $h }
+      if ($ProcId -gt 0) {
+        $wpid = [uint32]0
+        [T0Win]::GetWindowThreadProcessId($h, [ref]$wpid) | Out-Null
+        if ($wpid -eq [uint32]$ProcId) { $script:mc = $h }
+      } else {
+        $sb = New-Object System.Text.StringBuilder 256
+        [T0Win]::GetWindowTextW($h, $sb, 256) | Out-Null
+        $t = $sb.ToString()
+        $ok = $false
+        foreach ($m in $script:gameMats) { if ($t -match $m) { $ok = $true; break } }
+        if ($ok) { $script:mc = $h }
+      }
     }
     return $true
   }
@@ -86,6 +96,12 @@ function Present-Mc() {
   $h = Find-McWindow
   if ($h -eq [IntPtr]::Zero) { Write-Output 'WINDOW_NOT_FOUND'; return $null }
   [T0Win]::ShowWindow($h, 9) | Out-Null
+  # 坑30(08-30,M5 双客户端):前台锁下 SetForegroundWindow 对非前台进程会被静默拒绝
+  # (B 窗口提不上来,截图/按键全落空)—— 先发一次 ALT down/up 解锁前台限制(经典手法),
+  # 再 SetForegroundWindow;调用后用返回的 fg 与目标句柄比对验证,勿默认成功。
+  [T0Win]::keybd_event(0x12, 0, 0, [UIntPtr]::Zero)
+  Start-Sleep -Milliseconds 60
+  [T0Win]::keybd_event(0x12, 0, 2, [UIntPtr]::Zero)
   [T0Win]::SetForegroundWindow($h) | Out-Null
   Start-Sleep -Milliseconds 500
   return $h

@@ -1,4 +1,4 @@
-# mp-session.ps1 — M5 多人旁观测试会话(LAN 拓扑:玩家A 主机 + 观察者B)
+﻿# mp-session.ps1 — M5 多人旁观测试会话(LAN 拓扑:玩家A 主机 + 观察者B)
 # 为什么不用 dev 专用服:oculus/embeddium 是纯客户端 mod 且在 runtimeOnly,
 # dev runServer 必崩(dist);改用 A 开 LAN(/publish),B 观察者直连 —— 双端都是客户端。
 # 用法:powershell -NoProfile -ExecutionPolicy Bypass -File tools\mp-session.ps1
@@ -34,7 +34,9 @@ Step 'PLAYER-A launching via session.ps1 ...'
 Step 'PLAYER-A READY'
 
 # 2. A 开 LAN(/publish;test 存档 Cheats 开)
-Set-Content -Path $RelayA -Value '/publish' -Encoding UTF8
+# 坑29:PS5.1 `Set-Content -Encoding UTF8` 带 BOM,中继首行会变成 "?/publish" 被拒
+# (17:36 实机踩坑)—— 中继文件必须无 BOM 写入,与 options.txt 无 BOM 纪律同族。
+[System.IO.File]::WriteAllText($RelayA, "/publish`r`n")
 Step 'RELAY /publish sent'
 
 # 3. 解析端口(A 日志,最多 60s)
@@ -43,8 +45,8 @@ $deadline = (Get-Date).AddSeconds(60)
 while ((Get-Date) -lt $deadline -and -not $port) {
   Start-Sleep -Seconds 3
   if (Test-Path $ALatest) {
-    $hit = Select-String -Path $ALatest -Pattern '[Pp]ort (\d{4,5})' | Select-Object -Last 1
-    if ($hit) { $port = $hit.Matches[0].Groups[1].Value }
+    $hit = Select-String -Path $ALatest -Pattern 'Started serving on (\d{4,5})|[Pp]ort (\d{4,5})' | Select-Object -Last 1
+    if ($hit) { $port = @($hit.Matches[0].Groups | Select-Object -Skip 1 | ForEach-Object { $_.Value } | Where-Object { $_ })[0] }
   }
 }
 if (-not $port) { throw 'LAN port not found in A log(确认 /publish 成功、Cheats 开启)' }

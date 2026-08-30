@@ -1,4 +1,4 @@
-# rcon.ps1 — Source RCON 最小客户端(PS 5.1 原生 TCP,零依赖)
+﻿# rcon.ps1 — Source RCON 最小客户端(PS 5.1 原生 TCP,零依赖)
 # 用途:M5 多人测试里向 dev 专用服(run-server,RCON 口 25575)发命令,
 #       替代"往服务器控制台敲字"——自动化场景/灯开关不占键鼠。
 # 用法:powershell -NoProfile -File tools\rcon.ps1 -Command "/taclight light on PlayerA"
