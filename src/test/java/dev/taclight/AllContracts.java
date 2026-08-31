@@ -1,5 +1,6 @@
 package dev.taclight;
 
+import dev.taclight.channel.LookTraceContract;
 import dev.taclight.channel.MultiLightCollectorContract;
 import dev.taclight.channel.RemoteLookPredictorContract;
 import dev.taclight.channel.SpotlightBufferLayoutContract;
@@ -26,6 +27,8 @@ public class AllContracts {
         MultiLightCollectorContract.main(args);
         System.out.println("== RemoteLookPredictorContract ==");
         RemoteLookPredictorContract.main(args);
+        System.out.println("== LookTraceContract ==");
+        LookTraceContract.main(args);
         System.out.println("== PlayerLightSyncContract ==");
         PlayerLightSyncContract.main(args);
         System.out.println("AllContracts: ALL PASS");

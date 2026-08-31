@@ -109,9 +109,14 @@ public final class RemoteLookPredictor {
         return new Ext(st.yawExt, st.pitchExt);
     }
 
+    /** 探针用:该实体当前外推量(未跟踪返回 0;只读不改状态)。 */
+    public static float peekExtYaw(int id) {
+        State st = STATES.get(id);
+        return st == null ? 0f : st.yawExt;
+    }
+
     /** !extrap 入口:空 = 状态;"off" = 关;"log on/off" = 校准日志;数字 = ticks(0-3)。返回人读结果。 */
-    public static String configure(String arg) {
-        String a = arg == null ? "" : arg.trim();
+    public static String configure(String arg) {        String a = arg == null ? "" : arg.trim();
         if (a.isEmpty()) {
             return "ticks=" + extrapTicks + " diagLog=" + diagLog
                     + " (用法: !extrap <0-3|off|log on|log off>)";

@@ -1,0 +1,9 @@
+PASS: 自测1 良好O/C → O-滞后全零(实测 max 0.0e+0)
+PASS: 自测2 lerp 边界跳变≈0(实测 0.200°)
+PASS: 自测3 raw 跳变=2°(实测 2.000°)
+PASS: 自测4 snap 纹波 < raw×20%(snap 0.000° vs raw 1.81°)
+PASS: 自测4b snap 帧间跳变 <0.5°(实测 0.200°)
+PASS: 自测4c snap+pred 稳态超前 ≈0.5°(实测 0.24°)
+PASS: 自测5 Goertzel 1°@20Hz → 1.000°
+PASS: 自测6 ext 回放与直接 EMA 恒等(最大差 1.4e-14°)
+TOOLS-LOOKREPLAY SELFTEST PASS (8 checks)

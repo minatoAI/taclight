@@ -112,7 +112,31 @@ public final class ClientSpotlightUploader {
         collectRemoteLights(mc, eye, cfg, lights);
         int extraFlags = ClientLightState.debugMode() ? SpotlightBufferLayout.FLAG_DEBUG : 0;
         LightBuffer.upload(lights, extraFlags);
+        lookTraceTick(mc);
         dumpDiagOnce();
+    }
+
+    /** 消融探针胶水(09-01):!looktrace 激活时逐帧记录最近非自身 LivingEntity 的角度链路。 */
+    private static void lookTraceTick(Minecraft mc) {
+        if (!dev.taclight.channel.LookTrace.active()) return;
+        net.minecraft.world.entity.LivingEntity best = null;
+        double bestD = 48.0 * 48.0;
+        for (var ent : mc.level.entitiesForRendering()) {
+            if (ent == mc.player || !(ent instanceof net.minecraft.world.entity.LivingEntity le)) continue;
+            double d = le.distanceToSqr(mc.player);
+            if (d < bestD) { bestD = d; best = le; }
+        }
+        if (best == null) return;
+        float pt = mc.getPartialTick();
+        float hO = best.yHeadRotO, hC = best.yHeadRot;
+        float bO = best.yBodyRotO, bC = best.yBodyRot;
+        float pO = best.xRotO, pC = best.getXRot();
+        float baseYaw = net.minecraft.util.Mth.rotLerp(pt, hO, hC);
+        float basePitch = net.minecraft.util.Mth.lerp(pt, pO, pC);
+        float omYaw = net.minecraft.util.Mth.wrapDegrees(hC - hO);
+        dev.taclight.channel.LookTrace.row(best.getId(), best.getType().toString().intern(), System.nanoTime(),
+                pt, hO, hC, bO, bC, pO, pC, baseYaw, basePitch, omYaw,
+                dev.taclight.channel.RemoteLookPredictor.peekExtYaw(best.getId()));
     }
 
     /** SSBO 硬上限(LightBuffer/GLSL 两侧同值 8;自身灯优先,远程补足余量)。 */

@@ -116,6 +116,13 @@ public final class DebugCommandRelay {
                     dev.taclight.channel.RemoteLookPredictor.configure(arg));
             return;
         }
+        if (line.startsWith("!looktrace")) {
+            // 消融探针(09-01):逐帧角度链路记录,见 LookTrace
+            String arg = line.length() > 10 ? line.substring(10).trim() : "";
+            TacLightMod.LOGGER.info("[TacLight] RELAY looktrace -> {}",
+                    dev.taclight.channel.LookTrace.configure(arg));
+            return;
+        }
         if (line.startsWith("/")) {
             if (mc.getConnection() != null) {
                 mc.getConnection().sendCommand(line.substring(1));

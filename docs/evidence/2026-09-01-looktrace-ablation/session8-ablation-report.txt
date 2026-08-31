@@ -1,0 +1,12 @@
+== lookreplay 消融分析: docs/evidence/2026-09-01-looktrace-ablation/session8-zombie-chase-7200.log (墙面距离 6.5m) ==
+共 1 个采集会话: #1 id=24(entity.minecraft.zombie) 7200行 
+== 分析会话 #1 (id=24 entity.minecraft.zombie) ==
+  LOOKTRACE: 7200 帧, 总转角 -109.2°, 时长 4.2s
+    [机制] 边界事件 61 个; O-滞后: 中位 0.000°, 最大 0.000°, 非零比例 0%
+    raw          纹波=0.00° 墙面≈0.0cm 20Hz幅度=0.00° jumpMax=16.51° 稳态超前=0.00°
+    lerp         纹波=0.00° 墙面≈0.0cm 20Hz幅度=0.00° jumpMax=16.51° 稳态超前=0.00°
+    lerp+pred    纹波=0.00° 墙面≈0.0cm 20Hz幅度=0.00° jumpMax=16.51° 稳态超前=0.00°
+    snap         纹波=0.00° 墙面≈0.0cm 20Hz幅度=0.00° jumpMax=0.43° 稳态超前=0.00°
+    snap+pred    纹波=0.00° 墙面≈0.0cm 20Hz幅度=0.00° jumpMax=0.43° 稳态超前=0.00°
+    chaser       纹波=0.00° 墙面≈0.0cm 20Hz幅度=0.00° jumpMax=0.41° 稳态超前=0.00°
+    chaser0      纹波=0.00° 墙面≈0.0cm 20Hz幅度=0.00° jumpMax=0.36° 稳态超前=0.00°
