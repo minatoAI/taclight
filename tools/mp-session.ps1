@@ -30,13 +30,12 @@ function Drv([string]$a, [string]$t = '', [string]$o = '') {
 
 # 0. 观察者目录预置(低配 options + config/oculus.properties 选包;幂等)
 # 坑位:Oculus 读 config/oculus.properties;全新 run-observer 无该文件 = B 端静默无光影包。
-# 输出重定向到文件(坑12:禁止管道),WaitForExit 限时 180s。
+# 输出重定向到文件(坑12:禁止管道);同步调用 + LASTEXITCODE 判定(PS5.1 Start-Process.ExitCode 为 null 会误判失败,08-31 踩坑)。
 New-Item -ItemType Directory -Force -Path $SessionDir | Out-Null
 $PrepLog = Join-Path $SessionDir 'mp-setup.log'
 Step 'PREP taclightMpSetup (observer options/oculus config) ...'
-$prep = Start-Process -FilePath 'powershell' -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $Project 'gradlew-java17.ps1'),'taclightMpSetup') -WorkingDirectory $Project -RedirectStandardOutput $PrepLog -RedirectStandardError ($PrepLog + '.err') -WindowStyle Hidden -PassThru
-if (-not $prep.WaitForExit(180000)) { $prep.Kill(); throw 'taclightMpSetup timeout (180s)' }
-if ($prep.ExitCode -ne 0) { throw ('taclightMpSetup failed: see ' + $PrepLog) }
+& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Project 'gradlew-java17.ps1') 'taclightMpSetup' *> $PrepLog
+if ($LASTEXITCODE -ne 0) { throw ('taclightMpSetup failed: see ' + $PrepLog) }
 Step 'PREP done'
 
 # 1. 玩家 A:复用 session.ps1(preflight/options/QuickPlay/READY 全套)
