@@ -1,0 +1,77 @@
+共 11 个采集会话: #1 id=1(entity.minecraft.player) 72行 TacLight | #2 id=1(entity.minecraft.player) 72行 TacLight | #3 id=1(entity.minecraft.player) 176行 TacLight | #4 id=1(entity.minecraft.player) 473行 TacLight | #5 id=1(entity.minecraft.player) 2368行 TacLight | #6 id=1(entity.minecraft.player) 569行 TacLight | #7 id=1(entity.minecraft.player) 882行 TacLight | #8 id=1(entity.minecraft.player) 1530行 TacLight | #9 id=1(entity.minecraft.player) 202行 TacLight | #10 id=1(entity.minecraft.player) 563行 TacLight | #11 id=1(entity.minecraft.player) 177行 TacLight
+== 分析会话 #5 (id=1 entity.minecraft.player) ==
+  LOOKTRACE: 2368 帧, 总转角 -19.2°, 时长 29.7s
+    [机制] 边界事件 215 个; O-滞后: 中位 0.000°, 最大 0.000°, 非零比例 0%
+    raw          纹波=4.19° 墙面≈47.6cm 20Hz幅度=1.87° jumpMax=7.55° 稳态超前=-0.95°
+    lerp         纹波=4.39° 墙面≈49.8cm 20Hz幅度=2.14° jumpMax=7.55° 稳态超前=0.00°
+    lerp+pred    纹波=4.69° 墙面≈53.2cm 20Hz幅度=2.14° jumpMax=8.33° 稳态超前=-4.07°
+    snap         纹波=1.97° 墙面≈22.4cm 20Hz幅度=2.51° jumpMax=3.62° 稳态超前=1.06°
+    snap+pred    纹波=2.16° 墙面≈24.5cm 20Hz幅度=2.52° jumpMax=4.04° 稳态超前=-2.37°
+    chaser       纹波=0.68° 墙面≈7.7cm 20Hz幅度=2.52° jumpMax=2.06° 稳态超前=5.78°
+    chaser0      纹波=0.51° 墙面≈5.8cm 20Hz幅度=2.52° jumpMax=1.71° 稳态超前=8.62°
+共 11 个采集会话: #1 id=1(entity.minecraft.player) 72行 TacLight | #2 id=1(entity.minecraft.player) 72行 TacLight | #3 id=1(entity.minecraft.player) 176行 TacLight | #4 id=1(entity.minecraft.player) 473行 TacLight | #5 id=1(entity.minecraft.player) 2368行 TacLight | #6 id=1(entity.minecraft.player) 569行 TacLight | #7 id=1(entity.minecraft.player) 882行 TacLight | #8 id=1(entity.minecraft.player) 1530行 TacLight | #9 id=1(entity.minecraft.player) 202行 TacLight | #10 id=1(entity.minecraft.player) 563行 TacLight | #11 id=1(entity.minecraft.player) 177行 TacLight
+== 分析会话 #6 (id=1 entity.minecraft.player) ==
+  LOOKTRACE: 569 帧, 总转角 -9.4°, 时长 7.1s
+    [机制] 边界事件 127 个; O-滞后: 中位 0.000°, 最大 0.000°, 非零比例 0%
+    raw          纹波=6.61° 墙面≈74.9cm 20Hz幅度=9.07° jumpMax=9.38° 稳态超前=2.62°
+    lerp         纹波=6.29° 墙面≈71.4cm 20Hz幅度=10.00° jumpMax=9.38° 稳态超前=0.00°
+    lerp+pred    纹波=6.62° 墙面≈75.1cm 20Hz幅度=10.12° jumpMax=10.71° 稳态超前=7.85°
+    snap         纹波=2.53° 墙面≈28.7cm 20Hz幅度=8.88° jumpMax=5.11° 稳态超前=-1.75°
+    snap+pred    纹波=2.91° 墙面≈33.0cm 20Hz幅度=8.98° jumpMax=5.88° 稳态超前=2.35°
+    chaser       纹波=1.35° 墙面≈15.4cm 20Hz幅度=8.71° jumpMax=2.84° 稳态超前=-12.04°
+    chaser0      纹波=1.07° 墙面≈12.1cm 20Hz幅度=8.63° jumpMax=2.44° 稳态超前=-15.88°
+共 11 个采集会话: #1 id=1(entity.minecraft.player) 72行 TacLight | #2 id=1(entity.minecraft.player) 72行 TacLight | #3 id=1(entity.minecraft.player) 176行 TacLight | #4 id=1(entity.minecraft.player) 473行 TacLight | #5 id=1(entity.minecraft.player) 2368行 TacLight | #6 id=1(entity.minecraft.player) 569行 TacLight | #7 id=1(entity.minecraft.player) 882行 TacLight | #8 id=1(entity.minecraft.player) 1530行 TacLight | #9 id=1(entity.minecraft.player) 202行 TacLight | #10 id=1(entity.minecraft.player) 563行 TacLight | #11 id=1(entity.minecraft.player) 177行 TacLight
+== 分析会话 #7 (id=1 entity.minecraft.player) ==
+  LOOKTRACE: 882 帧, 总转角 13.6°, 时长 11.0s
+    [机制] 边界事件 190 个; O-滞后: 中位 0.000°, 最大 0.000°, 非零比例 0%
+    raw          纹波=3.20° 墙面≈36.3cm 20Hz幅度=6.12° jumpMax=11.20° 稳态超前=0.95°
+    lerp         纹波=3.40° 墙面≈38.5cm 20Hz幅度=6.77° jumpMax=11.20° 稳态超前=0.00°
+    lerp+pred    纹波=3.58° 墙面≈40.6cm 20Hz幅度=6.81° jumpMax=12.08° 稳态超前=4.25°
+    snap         纹波=1.30° 墙面≈14.7cm 20Hz幅度=6.29° jumpMax=5.15° 稳态超前=-1.20°
+    snap+pred    纹波=1.45° 墙面≈16.4cm 20Hz幅度=6.31° jumpMax=5.53° 稳态超前=1.96°
+    chaser       纹波=0.64° 墙面≈7.3cm 20Hz幅度=6.22° jumpMax=3.01° 稳态超前=-6.34°
+    chaser0      纹波=0.53° 墙面≈6.0cm 20Hz幅度=6.21° jumpMax=2.77° 稳态超前=-9.03°
+共 11 个采集会话: #1 id=1(entity.minecraft.player) 72行 TacLight | #2 id=1(entity.minecraft.player) 72行 TacLight | #3 id=1(entity.minecraft.player) 176行 TacLight | #4 id=1(entity.minecraft.player) 473行 TacLight | #5 id=1(entity.minecraft.player) 2368行 TacLight | #6 id=1(entity.minecraft.player) 569行 TacLight | #7 id=1(entity.minecraft.player) 882行 TacLight | #8 id=1(entity.minecraft.player) 1530行 TacLight | #9 id=1(entity.minecraft.player) 202行 TacLight | #10 id=1(entity.minecraft.player) 563行 TacLight | #11 id=1(entity.minecraft.player) 177行 TacLight
+== 分析会话 #8 (id=1 entity.minecraft.player) ==
+  LOOKTRACE: 1530 帧, 总转角 -11.3°, 时长 24.2s
+    [机制] 边界事件 364 个; O-滞后: 中位 0.000°, 最大 0.000°, 非零比例 0%
+    raw          纹波=10.56° 墙面≈119.8cm 20Hz幅度=2.16° jumpMax=14.44° 稳态超前=2.92°
+    lerp         纹波=10.87° 墙面≈123.3cm 20Hz幅度=2.75° jumpMax=14.44° 稳态超前=0.00°
+    lerp+pred    纹波=11.21° 墙面≈127.2cm 20Hz幅度=2.81° jumpMax=15.78° 稳态超前=6.95°
+    snap         纹波=5.00° 墙面≈56.7cm 20Hz幅度=1.82° jumpMax=6.09° 稳态超前=-0.88°
+    snap+pred    纹波=5.35° 墙面≈60.7cm 20Hz幅度=1.96° jumpMax=10.42° 稳态超前=4.51°
+    chaser       纹波=1.54° 墙面≈17.5cm 20Hz幅度=1.77° jumpMax=15.15° 稳态超前=-9.87°
+    chaser0      纹波=1.07° 墙面≈12.2cm 20Hz幅度=1.67° jumpMax=13.10° 稳态超前=-14.81°
+共 11 个采集会话: #1 id=1(entity.minecraft.player) 72行 TacLight | #2 id=1(entity.minecraft.player) 72行 TacLight | #3 id=1(entity.minecraft.player) 176行 TacLight | #4 id=1(entity.minecraft.player) 473行 TacLight | #5 id=1(entity.minecraft.player) 2368行 TacLight | #6 id=1(entity.minecraft.player) 569行 TacLight | #7 id=1(entity.minecraft.player) 882行 TacLight | #8 id=1(entity.minecraft.player) 1530行 TacLight | #9 id=1(entity.minecraft.player) 202行 TacLight | #10 id=1(entity.minecraft.player) 563行 TacLight | #11 id=1(entity.minecraft.player) 177行 TacLight
+== 分析会话 #9 (id=1 entity.minecraft.player) ==
+  LOOKTRACE: 202 帧, 总转角 6.1°, 时长 2.5s
+    [机制] 边界事件 34 个; O-滞后: 中位 0.000°, 最大 0.000°, 非零比例 0%
+    raw          纹波=5.01° 墙面≈56.9cm 20Hz幅度=7.97° jumpMax=7.78° 稳态超前=-1.25°
+    lerp         纹波=5.08° 墙面≈57.6cm 20Hz幅度=7.77° jumpMax=7.78° 稳态超前=0.00°
+    lerp+pred    纹波=5.33° 墙面≈60.5cm 20Hz幅度=7.74° jumpMax=8.66° 稳态超前=-5.80°
+    snap         纹波=1.78° 墙面≈20.2cm 20Hz幅度=7.23° jumpMax=2.63° 稳态超前=1.81°
+    snap+pred    纹波=2.04° 墙面≈23.1cm 20Hz幅度=7.20° jumpMax=3.29° 稳态超前=-2.05°
+    chaser       纹波=1.05° 墙面≈11.9cm 20Hz幅度=7.24° jumpMax=2.04° 稳态超前=9.04°
+    chaser0      纹波=0.84° 墙面≈9.6cm 20Hz幅度=7.27° jumpMax=1.71° 稳态超前=12.44°
+共 11 个采集会话: #1 id=1(entity.minecraft.player) 72行 TacLight | #2 id=1(entity.minecraft.player) 72行 TacLight | #3 id=1(entity.minecraft.player) 176行 TacLight | #4 id=1(entity.minecraft.player) 473行 TacLight | #5 id=1(entity.minecraft.player) 2368行 TacLight | #6 id=1(entity.minecraft.player) 569行 TacLight | #7 id=1(entity.minecraft.player) 882行 TacLight | #8 id=1(entity.minecraft.player) 1530行 TacLight | #9 id=1(entity.minecraft.player) 202行 TacLight | #10 id=1(entity.minecraft.player) 563行 TacLight | #11 id=1(entity.minecraft.player) 177行 TacLight
+== 分析会话 #10 (id=1 entity.minecraft.player) ==
+  LOOKTRACE: 563 帧, 总转角 -3.8°, 时长 7.0s
+    [机制] 边界事件 108 个; O-滞后: 中位 0.000°, 最大 0.000°, 非零比例 0%
+    raw          纹波=2.64° 墙面≈29.9cm 20Hz幅度=3.11° jumpMax=7.34° 稳态超前=1.66°
+    lerp         纹波=3.11° 墙面≈35.3cm 20Hz幅度=3.30° jumpMax=7.34° 稳态超前=0.00°
+    lerp+pred    纹波=3.20° 墙面≈36.3cm 20Hz幅度=3.34° jumpMax=8.24° 稳态超前=4.05°
+    snap         纹波=0.84° 墙面≈9.5cm 20Hz幅度=2.61° jumpMax=2.45° 稳态超前=-0.51°
+    snap+pred    纹波=0.99° 墙面≈11.2cm 20Hz幅度=2.68° jumpMax=3.09° 稳态超前=1.80°
+    chaser       纹波=0.65° 墙面≈7.4cm 20Hz幅度=2.57° jumpMax=2.04° 稳态超前=-5.70°
+    chaser0      纹波=0.56° 墙面≈6.3cm 20Hz幅度=2.53° jumpMax=1.68° 稳态超前=-7.81°
+共 11 个采集会话: #1 id=1(entity.minecraft.player) 72行 TacLight | #2 id=1(entity.minecraft.player) 72行 TacLight | #3 id=1(entity.minecraft.player) 176行 TacLight | #4 id=1(entity.minecraft.player) 473行 TacLight | #5 id=1(entity.minecraft.player) 2368行 TacLight | #6 id=1(entity.minecraft.player) 569行 TacLight | #7 id=1(entity.minecraft.player) 882行 TacLight | #8 id=1(entity.minecraft.player) 1530行 TacLight | #9 id=1(entity.minecraft.player) 202行 TacLight | #10 id=1(entity.minecraft.player) 563行 TacLight | #11 id=1(entity.minecraft.player) 177行 TacLight
+== 分析会话 #11 (id=1 entity.minecraft.player) ==
+  LOOKTRACE: 177 帧, 总转角 2.8°, 时长 2.2s
+    [机制] 边界事件 28 个; O-滞后: 中位 0.000°, 最大 0.000°, 非零比例 0%
+    raw          纹波=0.00° 墙面≈0.0cm 20Hz幅度=0.00° jumpMax=6.01° 稳态超前=0.00°
+    lerp         纹波=0.00° 墙面≈0.0cm 20Hz幅度=0.00° jumpMax=6.01° 稳态超前=0.00°
+    lerp+pred    纹波=0.00° 墙面≈0.0cm 20Hz幅度=0.00° jumpMax=6.01° 稳态超前=0.00°
+    snap         纹波=0.00° 墙面≈0.0cm 20Hz幅度=0.00° jumpMax=3.85° 稳态超前=0.00°
+    snap+pred    纹波=0.00° 墙面≈0.0cm 20Hz幅度=0.00° jumpMax=3.85° 稳态超前=0.00°
+    chaser       纹波=0.00° 墙面≈0.0cm 20Hz幅度=0.00° jumpMax=1.80° 稳态超前=0.00°
+    chaser0      纹波=0.00° 墙面≈0.0cm 20Hz幅度=0.00° jumpMax=1.53° 稳态超前=0.00°
