@@ -210,8 +210,21 @@ tasks.register('taclightMpSetup') {
             'enableVsync:false',
             'pauseOnLostFocus:false'
         ].join(System.lineSeparator()) + System.lineSeparator()
-        def oculus = file('run-observer/oculus.properties')
-        if (!oculus.exists()) oculus.text = 'shaderPack=taclight-shaders-dev\n'
+        // 坑位:Oculus 1.8.0 读 Forge 配置目录 config/oculus.properties(不是 run 根);
+        // 旧版写 run-observer/oculus.properties 是死文件 → 全新环境观察者 B 静默无光影包。
+        def cfgDir = file('run-observer/config')
+        cfgDir.mkdirs()
+        def oculus = file('run-observer/config/oculus.properties')
+        if (!oculus.exists()) oculus.text = [
+            'colorSpace=SRGB',
+            'disableUpdateMessage=false',
+            'enableDebugOptions=false',
+            'maxShadowRenderDistance=32',
+            'shaderPack=taclight-shaders-dev',
+            'enableShaders=true'
+        ].join(System.lineSeparator()) + System.lineSeparator()
+        def staleOculus = file('run-observer/oculus.properties')
+        if (staleOculus.exists()) staleOculus.delete()
     }
 }
 
