@@ -69,3 +69,13 @@ printf '!looktrace 7200\n' > run/taclight-cmds.txt
 node tools/lookreplay.js --log run/logs/latest.log
 node tools/lookreplay.js --selftest
 ```
+
+## 追加(同日晚):远程玩家采集·源1实锤
+
+```
+== 会话9:远程玩家(ObserverB)/tp阶跃跨±180 ==
+raw 纹波14.23 jumpMax23.37 | lerp 纹波9.41 20Hz带2.46 | snap 纹波9.39 jumpMax0.61 | chaser0 纹波2.33
+判定:样本序列C本身20Hz折返(双通道目标差2-3°),O/C静态偏3.29°;坑36与snap均重放折返,唯低通可压;
+源1在远程玩家实锤,量级与用户日志锯齿一致。
+```
+数据: session9-remote-player-tpsteps.log(7200帧/5.7s/总转角30°,含回卷带与远离带)
