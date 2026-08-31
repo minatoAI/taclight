@@ -45,6 +45,9 @@ public final class RemoteLookPredictor {
     private static volatile float extrapTicks = DEFAULT_EXTRAP_TICKS;
     private static volatile boolean diagLog;
 
+    /** snap 臂(RemoteBaseSnap)共享超前 tick 数旋钮(!extrap 仍为其真源)。 */
+    static float currentTicks() { return extrapTicks; }
+
     /** 每实体外推状态(仅渲染线程访问,无需并发容器)。 */
     static final class State {
         float yawExt, pitchExt;

@@ -132,6 +132,13 @@ public final class DebugCommandRelay {
                     dev.taclight.channel.MotionCapture.configure(arg));
             return;
         }
+        if (line.startsWith("!bsnap")) {
+            // snap+pred 基角总开关(09-01 深夜,用户批准):off 退回 rotLerp+方案A 旧管线(A/B 对照)
+            String arg = line.length() > 6 ? line.substring(6).trim() : "";
+            TacLightMod.LOGGER.info("[TacLight] RELAY bsnap -> {}",
+                    dev.taclight.channel.RemoteBaseSnap.configure(arg));
+            return;
+        }
         if (line.startsWith("/")) {
             if (mc.getConnection() != null) {
                 mc.getConnection().sendCommand(line.substring(1));

@@ -3,6 +3,7 @@ package dev.taclight;
 import dev.taclight.channel.LookTraceContract;
 import dev.taclight.channel.MotionCaptureContract;
 import dev.taclight.channel.MultiLightCollectorContract;
+import dev.taclight.channel.RemoteBaseSnapContract;
 import dev.taclight.channel.RemoteLookPredictorContract;
 import dev.taclight.channel.SpotlightBufferLayoutContract;
 import dev.taclight.channel.UploaderSemanticContract;
@@ -29,6 +30,8 @@ public class AllContracts {
         MultiLightCollectorContract.main(args);
         System.out.println("== RemoteLookPredictorContract ==");
         RemoteLookPredictorContract.main(args);
+        System.out.println("== RemoteBaseSnapContract ==");
+        RemoteBaseSnapContract.main(args);
         System.out.println("== LookTraceContract ==");
         LookTraceContract.main(args);
         System.out.println("== MotionCaptureContract ==");

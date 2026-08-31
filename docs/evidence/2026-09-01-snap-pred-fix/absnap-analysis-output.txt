@@ -1,0 +1,35 @@
+bsnap 切换: 16042.0s=off  16058.0s=on
+
+== 旧管线(!bsnap off = rotLerp+方案A) == 11 会话
+  帧间最大跳变 jumpMax: 平均 5.58°  最差 5.80°
+  光斑-真值误差峰峰 errP2P: 平均 6.15°  最差 8.95°
+  静止尾段最大误差 tailMax: 平均 0.68°  最差 4.44°
+
+== 新管线(!bsnap on = snap+pred) == 11 会话
+  帧间最大跳变 jumpMax: 平均 3.53°  最差 20.67°
+  光斑-真值误差峰峰 errP2P: 平均 10.73°  最差 64.05°
+  静止尾段最大误差 tailMax: 平均 0.28°  最差 0.75°
+
+逐会话:
+  old  t=16043s rows= 72 jump=5.50° errP2P=4.41° tail=0.04°
+  old  t=16044s rows= 72 jump=5.50° errP2P=4.63° tail=0.04°
+  old  t=16045s rows= 72 jump=5.00° errP2P=4.50° tail=0.03°
+  old  t=16046s rows=144 jump=5.80° errP2P=8.95° tail=4.44°
+  old  t=16048s rows=112 jump=5.80° errP2P=7.90° tail=2.38°
+  old  t=16050s rows= 72 jump=5.80° errP2P=7.81° tail=0.10°
+  old  t=16051s rows= 72 jump=5.27° errP2P=7.11° tail=0.09°
+  old  t=16052s rows= 73 jump=5.80° errP2P=6.51° tail=0.10°
+  old  t=16053s rows= 72 jump=5.80° errP2P=5.72° tail=0.08°
+  old  t=16054s rows= 72 jump=5.26° errP2P=4.83° tail=0.08°
+  old  t=16055s rows= 72 jump=5.80° errP2P=5.27° tail=0.08°
+  new  t=16060s rows=112 jump=20.67° errP2P=64.05° tail=0.65°
+  new  t=16061s rows= 72 jump=1.70° errP2P=5.17° tail=0.20°
+  new  t=16062s rows= 72 jump=1.88° errP2P=5.68° tail=0.22°
+  new  t=16063s rows= 72 jump=1.87° errP2P=5.69° tail=0.20°
+  new  t=16064s rows= 72 jump=1.66° errP2P=5.17° tail=0.18°
+  new  t=16065s rows= 72 jump=1.88° errP2P=5.69° tail=0.20°
+  new  t=16066s rows=113 jump=1.87° errP2P=5.70° tail=0.75°
+  new  t=16068s rows= 72 jump=1.88° errP2P=5.34° tail=0.17°
+  new  t=16069s rows= 72 jump=1.87° errP2P=5.34° tail=0.18°
+  new  t=16070s rows= 72 jump=1.70° errP2P=4.86° tail=0.14°
+  new  t=16071s rows= 72 jump=1.88° errP2P=5.34° tail=0.16°

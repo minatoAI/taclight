@@ -155,12 +155,22 @@ public final class ClientSpotlightUploader {
         float hO = best.yHeadRotO, hC = best.yHeadRot;
         float bO = best.yBodyRotO, bC = best.yBodyRot;
         float pO = best.xRotO, pC = best.getXRot();
-        float baseYaw = net.minecraft.util.Mth.rotLerp(pt, hO, hC);
-        float basePitch = net.minecraft.util.Mth.lerp(pt, pO, pC);
+        // base/ext 列 = 管线实际使用的值(snap on 时读快照插值只读视图;未跟踪退回 lerp)
+        float baseYaw, basePitch, rowExt;
+        dev.taclight.channel.RemoteBaseSnap.Out pk = dev.taclight.channel.RemoteBaseSnap.enabled()
+                ? dev.taclight.channel.RemoteBaseSnap.peek(best.getId(), hC, pC, nano) : null;
+        if (pk != null) {
+            baseYaw = pk.yaw();
+            basePitch = pk.pitch();
+            rowExt = pk.extYaw();
+        } else {
+            baseYaw = net.minecraft.util.Mth.rotLerp(pt, hO, hC);
+            basePitch = net.minecraft.util.Mth.lerp(pt, pO, pC);
+            rowExt = dev.taclight.channel.RemoteLookPredictor.peekExtYaw(best.getId());
+        }
         float omYaw = net.minecraft.util.Mth.wrapDegrees(hC - hO);
         dev.taclight.channel.LookTrace.row(best.getId(), best.getType().toString().intern(), nano,
-                pt, hO, hC, bO, bC, pO, pC, baseYaw, basePitch, omYaw,
-                dev.taclight.channel.RemoteLookPredictor.peekExtYaw(best.getId()),
+                pt, hO, hC, bO, bC, pO, pC, baseYaw, basePitch, omYaw, rowExt,
                 best.xo, best.yo, best.zo, best.getX(), best.getY(), best.getZ());
     }
 
@@ -189,16 +199,31 @@ public final class ClientSpotlightUploader {
             // 而实体模型渲染走 O→current 的 partialTick 角度插值 —— A 一转视角,B 眼里
             // 光斑就以 20Hz 跳动(模型平滑、灯抖动)。灯的方向必须与渲染同源插值。
             float pt = mc.getPartialTick();
-            float xRot = net.minecraft.util.Mth.lerp(pt, p.xRotO, p.getXRot());
-            float yHead = net.minecraft.util.Mth.rotLerp(pt, p.yHeadRotO, p.yHeadRot);
-            // 方案A(08-31,用户批准):同源角速度外推,对抗原版同步链 ~100-250ms 可感滞后
-            // (用户复测:闪烁消但转动滞后)。ω̂ 与渲染同源(O→current 差值);钳制+EMA
-            // 细节与调参(!extrap)见 RemoteLookPredictor。
-            float omegaYaw = net.minecraft.util.Mth.wrapDegrees(p.yHeadRot - p.yHeadRotO);
-            float omegaPitch = p.getXRot() - p.xRotO;
-            RemoteLookPredictor.Ext ext = RemoteLookPredictor.step(
-                    p.getId(), yHead, xRot, omegaYaw, omegaPitch, System.nanoTime());
-            Vec3 look = Vec3.directionFromRotation(xRot + ext.pitchDeg(), yHead + ext.yawDeg());
+            float xRot, yHead, extYaw, extPitch;
+            if (dev.taclight.channel.RemoteBaseSnap.enabled()) {
+                // snap+pred(09-01 深夜,用户批准):基角 = 延迟一段快照插值(自用 C 历史,
+                // 不碰 O/C 对,构造上位置连续,消源1 锯齿)+ 两级 EMA 预测保留超前。
+                // 非对称确认与消融数字见 evidence/2026-09-01-asymmetry-confirm/;!bsnap off 退回旧管线。
+                var o = dev.taclight.channel.RemoteBaseSnap.step(
+                        p.getId(), p.yHeadRot, p.getXRot(), System.nanoTime());
+                yHead = o.yaw();
+                xRot = o.pitch();
+                extYaw = o.extYaw();
+                extPitch = o.extPitch();
+            } else {
+                xRot = net.minecraft.util.Mth.lerp(pt, p.xRotO, p.getXRot());
+                yHead = net.minecraft.util.Mth.rotLerp(pt, p.yHeadRotO, p.yHeadRot);
+                // 方案A(08-31,用户批准):同源角速度外推,对抗原版同步链 ~100-250ms 可感滞后
+                // (用户复测:闪烁消但转动滞后)。ω̂ 与渲染同源(O→current 差值);钳制+EMA
+                // 细节与调参(!extrap)见 RemoteLookPredictor。
+                float omegaYaw = net.minecraft.util.Mth.wrapDegrees(p.yHeadRot - p.yHeadRotO);
+                float omegaPitch = p.getXRot() - p.xRotO;
+                RemoteLookPredictor.Ext ext = RemoteLookPredictor.step(
+                        p.getId(), yHead, xRot, omegaYaw, omegaPitch, System.nanoTime());
+                extYaw = ext.yawDeg();
+                extPitch = ext.pitchDeg();
+            }
+            Vec3 look = Vec3.directionFromRotation(xRot + extPitch, yHead + extYaw);
             Vec3 eye = p.getEyePosition(pt);
             if (sel.handheld()) {
                 SpotlightData hand = toSpot(eye.add(handheldOffset(look)), look, cfg, 0.9f);

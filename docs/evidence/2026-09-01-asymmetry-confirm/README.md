@@ -59,6 +59,8 @@
 
 ## 文件
 
+- `looktrace-raw-sessions.txt` — **原始信号存档**(LOOKTRACE 逐帧行 7130 行 + 会话/采集标记,
+  自 latest.log 提取;日志轮转后此文件为唯一原始数据源)
 - `lookreplay-user-sessions.txt` — 会话 #5-#11 全配置消融原始输出
 - `sample-s0009-first.png` / `sample-s0009-last.png` / `sample-s0012-first.png` — B 端真机截图样本
-- 原始数据:run-observer/logs/latest.log(LOOKTRACE 行)+ run-observer/mcap/s0005..s0012/
+- 临时采集数据(4683 张 PNG)已按用户指示清理,直接证据以上述文件为准
