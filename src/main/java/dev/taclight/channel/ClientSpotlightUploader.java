@@ -116,9 +116,14 @@ public final class ClientSpotlightUploader {
         dumpDiagOnce();
     }
 
-    /** 消融探针胶水(09-01):!looktrace 激活时逐帧记录最近非自身 LivingEntity 的角度链路。 */
+    /** 消融探针胶水(09-01):!looktrace 激活时逐帧记录最近非自身 LivingEntity 的角度链路;
+     *  09-01 晚兼作 MotionCapture 门控输入(布防时每帧喂位姿,会话开/关联动 LookTrace 门控模式)。 */
+    private static boolean mcapAutoTrace;
+    private static int mcapSeenSession;
+
     private static void lookTraceTick(Minecraft mc) {
-        if (!dev.taclight.channel.LookTrace.active()) return;
+        boolean mcapArmed = dev.taclight.channel.MotionCapture.armed();
+        if (!dev.taclight.channel.LookTrace.active() && !mcapArmed) return;
         net.minecraft.world.entity.LivingEntity best = null;
         double bestD = 48.0 * 48.0;
         for (var ent : mc.level.entitiesForRendering()) {
@@ -127,6 +132,25 @@ public final class ClientSpotlightUploader {
             if (d < bestD) { bestD = d; best = le; }
         }
         if (best == null) return;
+        long nano = System.nanoTime();
+        if (mcapArmed) {
+            dev.taclight.channel.MotionCapture.observe(best.getId(), best.yHeadRot, best.getXRot(),
+                    best.getX(), best.getY(), best.getZ(), nano);
+            int ses = dev.taclight.channel.MotionCapture.sessionId();
+            if (ses != mcapSeenSession) {
+                if (ses != 0) {
+                    if (!dev.taclight.channel.LookTrace.active()) {
+                        dev.taclight.channel.LookTrace.configure("on");
+                        mcapAutoTrace = true;
+                    }
+                } else if (mcapAutoTrace) {
+                    dev.taclight.channel.LookTrace.configure("off");
+                    mcapAutoTrace = false;
+                }
+                mcapSeenSession = ses;
+            }
+        }
+        if (!dev.taclight.channel.LookTrace.active()) return;
         float pt = mc.getPartialTick();
         float hO = best.yHeadRotO, hC = best.yHeadRot;
         float bO = best.yBodyRotO, bC = best.yBodyRot;
@@ -134,9 +158,10 @@ public final class ClientSpotlightUploader {
         float baseYaw = net.minecraft.util.Mth.rotLerp(pt, hO, hC);
         float basePitch = net.minecraft.util.Mth.lerp(pt, pO, pC);
         float omYaw = net.minecraft.util.Mth.wrapDegrees(hC - hO);
-        dev.taclight.channel.LookTrace.row(best.getId(), best.getType().toString().intern(), System.nanoTime(),
+        dev.taclight.channel.LookTrace.row(best.getId(), best.getType().toString().intern(), nano,
                 pt, hO, hC, bO, bC, pO, pC, baseYaw, basePitch, omYaw,
-                dev.taclight.channel.RemoteLookPredictor.peekExtYaw(best.getId()));
+                dev.taclight.channel.RemoteLookPredictor.peekExtYaw(best.getId()),
+                best.xo, best.yo, best.zo, best.getX(), best.getY(), best.getZ());
     }
 
     /** SSBO 硬上限(LightBuffer/GLSL 两侧同值 8;自身灯优先,远程补足余量)。 */

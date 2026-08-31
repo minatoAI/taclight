@@ -51,10 +51,13 @@ public final class TacLightNetwork {
         } catch (Throwable ignored) {}
     }
 
-    /** 服务端:改实体数据 + 回发 S2C 给受影响玩家(其本地状态跟随真源)。 */
+    /** 服务端:改实体数据 + 回发 S2C 给受影响玩家(其本地状态跟随真源)。
+     *  09-01:同时落玩家持久化 NBT(LightStatePersistence)——重进游戏由登录事件重放,
+     *  否则实体实例重建后开关回落默认关(用户实测 bug:重进后灯没了)。 */
     public static void serverApply(ServerPlayer target, boolean handheld, boolean gun, String via) {
         PlayerLightAccess.setHandheld(target, handheld);
         PlayerLightAccess.setGun(target, gun);
+        dev.taclight.sync.LightStatePersistence.saveTo(target.getPersistentData(), handheld, gun);
         if (channel != null) {
             // Forge 1.20.1 SimpleChannel.send 的签名是 (PacketTarget, MSG)——目标在前
             channel.send(net.minecraftforge.network.PacketDistributor.PLAYER.with(() -> target),

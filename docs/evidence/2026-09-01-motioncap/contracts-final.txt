@@ -1,0 +1,14 @@
+  ok  node imgdiff.test.js ????? 0: imgdiff.test.js: ALL PASS (15 checks)
+GunLaserReaderContract: ALL PASS (6 checks)
+SpotlightBufferLayoutContract: ALL PASS (16 checks)
+UploaderSemanticContract: ALL PASS (29 checks)
+MuzzlePoseMathContract: ALL PASS (11 checks)
+ScenePlanContract: ALL PASS (204 checks)
+MultiLightCollectorContract: ALL PASS (11 checks)
+RemoteLookPredictorContract: ALL PASS (15 checks)
+LookTraceContract: ALL PASS (22 checks)
+MotionCaptureContract: ALL PASS (35 checks)
+PlayerLightSyncContract: ALL PASS (10 checks)
+LightStatePersistenceContract: ALL PASS (11 checks)
+AllContracts: ALL PASS
+BUILD SUCCESSFUL in 13s

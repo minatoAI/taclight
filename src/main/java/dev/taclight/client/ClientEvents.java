@@ -202,6 +202,37 @@ public class ClientEvents {
         mc.player.displayClientMessage(Component.literal(msg), false);
     }
 
+    /** MCAP 连拍编码积压计数(PNG 在 ioPool 线程落盘;>3 张未消化时跳帧防堆积)。 */
+    private static final java.util.concurrent.atomic.AtomicInteger MCAP_PENDING =
+            new java.util.concurrent.atomic.AtomicInteger();
+
+    /** 09-01 运动门控连拍执行端:RenderTick END 时主帧缓冲已含本帧最终画面(F2 同源);
+     *  进程内直读渲染目标,无需前台窗口 —— 坑34 的根治(F2 postkey 链路整个旁路)。
+     *  落盘路径 = <gameDir>/mcap/s%04d/screenshots/<时间戳>.png(vanilla grab 语义)。 */
+    @SubscribeEvent
+    public static void onRenderTick(TickEvent.RenderTickEvent event) {
+        if (event.phase != TickEvent.Phase.END) return;
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null || !dev.taclight.channel.MotionCapture.armed()) return;
+        long nano = System.nanoTime();
+        if (!dev.taclight.channel.MotionCapture.shotDue(nano)) return;
+        if (MCAP_PENDING.get() > 3) return;
+        java.io.File dir = new java.io.File(net.minecraftforge.fml.loading.FMLPaths.GAMEDIR.get().toFile(),
+                "mcap/s" + String.format("%04d", dev.taclight.channel.MotionCapture.sessionId()));
+        if (!dir.exists() && !dir.mkdirs()) return;
+        dev.taclight.channel.MotionCapture.onShot(nano);
+        MCAP_PENDING.incrementAndGet();
+        try {
+            net.minecraft.client.Screenshot.grab(dir, mc.getMainRenderTarget(), p -> {
+                MCAP_PENDING.decrementAndGet();
+                TacLightMod.LOGGER.info("[TacLight] MCAP shot {}", p.getString());
+            });
+        } catch (Throwable t) {
+            MCAP_PENDING.decrementAndGet();
+            TacLightMod.LOGGER.warn("[TacLight] MCAP grab failed: {}", t.toString());
+        }
+    }
+
     @SubscribeEvent
     public static void onRenderLevel(net.minecraftforge.client.event.RenderLevelStageEvent event) {
         if (event.getStage() != net.minecraftforge.client.event.RenderLevelStageEvent.Stage.AFTER_LEVEL) return;

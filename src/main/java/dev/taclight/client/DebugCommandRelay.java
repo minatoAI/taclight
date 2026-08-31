@@ -29,6 +29,8 @@ import java.nio.file.StandardCopyOption;
  *   <li>{@code !bench} —— 与 B 键等价:3 秒帧率基准。</li>
  *   <li>{@code !light} / {@code !neon} / {@code !gun} —— 手电 / 霓虹调试锥 / 枪灯开关
  *       (L/K 键的程序化等价;场景照明状态的唯一可靠控制通道)。</li>
+ *   <li>{@code !looktrace} / {@code !mcap} —— 消融探针 / 运动门控采集开关(09-01,
+ *       布防后被观察角色朝向/位置变化自动连拍+逐帧信号,静止自停)。</li>
  *  </ul></p>
  *
  * <p>消费后立即原子清空文件(读→写空);写入方请整文件重写,勿追加并发写。</p>
@@ -121,6 +123,13 @@ public final class DebugCommandRelay {
             String arg = line.length() > 10 ? line.substring(10).trim() : "";
             TacLightMod.LOGGER.info("[TacLight] RELAY looktrace -> {}",
                     dev.taclight.channel.LookTrace.configure(arg));
+            return;
+        }
+        if (line.startsWith("!mcap")) {
+            // 运动门控采集开关(09-01 晚):布防后被观察角色朝向/位置变化自动连拍+信号
+            String arg = line.length() > 5 ? line.substring(5).trim() : "";
+            TacLightMod.LOGGER.info("[TacLight] RELAY mcap -> {}",
+                    dev.taclight.channel.MotionCapture.configure(arg));
             return;
         }
         if (line.startsWith("/")) {

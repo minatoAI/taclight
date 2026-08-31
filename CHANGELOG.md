@@ -1,5 +1,24 @@
 # TacLight Changelog
 
+## 未提交 · 09-01 晚(运动门控采集开关 !mcap + 灯态跨 relog 持久化)
+
+- **!mcap(用户指令:开关布防→动则采集、静则自停)**:MotionCapture 纯 JVM 状态机
+  (35 项契约)——被观察角色朝向/位置超阈(yaw/pitch/pos=0.3°/0.3°/0.02m,参考采样
+  100ms)开会话,静止 800ms 自动收窗,单会话 1200 张上限翻转,目标切换重参考,
+  ±180° 环绕安全;`!mcap [on|off|yaw=|pitch=|pos=|ref=|still=|fps=|max=]`。
+  LookTrace 增 on 门控模式 + posO/posC 字段(尾置,lookreplay 向后兼容)。
+  截图 = RenderTick END 进程内 Screenshot.grab(帧末主缓冲,免前台窗口,坑34 旁路),
+  60fps 节流 + ioPool 积压跳帧;落盘 <gameDir>/mcap/s%04d/screenshots/。
+  实机:8 次 /tp 步进 → 4 会话/473 行信号/346+103 张 PNG/静止自停 100%,
+  imgdiff 光斑摆动 bbox 可见;证据 evidence/2026-09-01-motioncap/。
+  用途:用户真实鼠标轮次(方案A on/off 三档对照)自动采集,不再盯秒表。
+- **灯态持久化(用户 bug:退出灯开、重进灯灭)**:根因 = 灯开关真源在 SynchedEntityData
+  (实体实例字段),重进服务端重建玩家实体回落默认关,无持久化层。修复 = serverApply
+  (唯一服务端写口)落玩家 Forge persisted NBT 子树(PERSISTED_NBT_TAG,跨 relog 且跨
+  死亡克隆)+ PlayerLoggedInEvent 重放(实体数据 + SyncLightS2C 回包一并恢复,
+  本地状态零新增包跟随)。LightStatePersistenceContract 11 项;实机:B 重登
+  零命令 → login-restore handheld=true + 本地 ACK(03:27:10/11)。
+
 ## 未提交 · 09-01(闪烁消融工具链 + 受控实验:探针/分析器/机制判定/方案分析)
 
 - **工具链(用户指令:消融实验定位根源)**:①`!looktrace` 逐帧全量角度链路探针

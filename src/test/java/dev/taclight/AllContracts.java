@@ -1,12 +1,14 @@
 package dev.taclight;
 
 import dev.taclight.channel.LookTraceContract;
+import dev.taclight.channel.MotionCaptureContract;
 import dev.taclight.channel.MultiLightCollectorContract;
 import dev.taclight.channel.RemoteLookPredictorContract;
 import dev.taclight.channel.SpotlightBufferLayoutContract;
 import dev.taclight.channel.UploaderSemanticContract;
 import dev.taclight.pose.MuzzlePoseMathContract;
 import dev.taclight.scene.ScenePlanContract;
+import dev.taclight.sync.LightStatePersistenceContract;
 import dev.taclight.sync.PlayerLightSyncContract;
 import dev.taclight.tacz.GunLaserReaderContract;
 
@@ -29,8 +31,12 @@ public class AllContracts {
         RemoteLookPredictorContract.main(args);
         System.out.println("== LookTraceContract ==");
         LookTraceContract.main(args);
+        System.out.println("== MotionCaptureContract ==");
+        MotionCaptureContract.main(args);
         System.out.println("== PlayerLightSyncContract ==");
         PlayerLightSyncContract.main(args);
+        System.out.println("== LightStatePersistenceContract ==");
+        LightStatePersistenceContract.main(args);
         System.out.println("AllContracts: ALL PASS");
     }
 }
