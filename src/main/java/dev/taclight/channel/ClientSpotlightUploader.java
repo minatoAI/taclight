@@ -169,9 +169,26 @@ public final class ClientSpotlightUploader {
             rowExt = dev.taclight.channel.RemoteLookPredictor.peekExtYaw(best.getId());
         }
         float omYaw = net.minecraft.util.Mth.wrapDegrees(hC - hO);
+        // 位置链列(09-01 深夜③):tgt=同步目标真值(mixin accessor);disp=管线实际用的
+        // 灯锚点(psnap on=快照插值+超前+眼高,off=getEyePosition)——A/B 与离线分解的真源
+        dev.taclight.mixin.LivingEntityLerpAccess la = (dev.taclight.mixin.LivingEntityLerpAccess) best;
+        double tX = la.taclight$lerpX(), tY = la.taclight$lerpY(), tZ = la.taclight$lerpZ();
+        double dX, dY, dZ;
+        dev.taclight.channel.RemotePosSnap.Out pp = dev.taclight.channel.RemotePosSnap.enabled()
+                ? dev.taclight.channel.RemotePosSnap.peek(best.getId(), best.getX(), best.getY(), best.getZ(), nano) : null;
+        if (pp != null) {
+            dX = pp.x();
+            dY = pp.y() + best.getEyeHeight();
+            dZ = pp.z();
+        } else {
+            dX = net.minecraft.util.Mth.lerp(pt, best.xo, best.getX());
+            dY = net.minecraft.util.Mth.lerp(pt, best.yo, best.getY()) + best.getEyeHeight();
+            dZ = net.minecraft.util.Mth.lerp(pt, best.zo, best.getZ());
+        }
         dev.taclight.channel.LookTrace.row(best.getId(), best.getType().toString().intern(), nano,
                 pt, hO, hC, bO, bC, pO, pC, baseYaw, basePitch, omYaw, rowExt,
-                best.xo, best.yo, best.zo, best.getX(), best.getY(), best.getZ());
+                best.xo, best.yo, best.zo, best.getX(), best.getY(), best.getZ(),
+                tX, tY, tZ, dX, dY, dZ);
     }
 
     /** SSBO 硬上限(LightBuffer/GLSL 两侧同值 8;自身灯优先,远程补足余量)。 */
@@ -224,7 +241,17 @@ public final class ClientSpotlightUploader {
                 extPitch = ext.pitchDeg();
             }
             Vec3 look = Vec3.directionFromRotation(xRot + extPitch, yHead + extYaw);
-            Vec3 eye = p.getEyePosition(pt);
+            // 位置链(09-01 深夜③):getEyePosition(pt)=lerp(o→C) 的逐 tick 增量有 ±20% 速度
+            // 调制,墙光斑 1:1 放大(真实步行平移残差 ≈100px)。死推+速度导引匀速重构消调制;
+            // v1 延迟段插值因目标序列突发式台阶实机更糟已否决。!psnap off 退回旧管线。
+            Vec3 eye;
+            if (dev.taclight.channel.RemotePosSnap.enabled()) {
+                var po = dev.taclight.channel.RemotePosSnap.step(
+                        p.getId(), p.getX(), p.getY(), p.getZ(), System.nanoTime());
+                eye = new Vec3(po.x(), po.y() + p.getEyeHeight(), po.z());
+            } else {
+                eye = p.getEyePosition(pt);
+            }
             if (sel.handheld()) {
                 SpotlightData hand = toSpot(eye.add(handheldOffset(look)), look, cfg, 0.9f);
                 out.add(selfCapped(hand, eye));

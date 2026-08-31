@@ -93,7 +93,8 @@ public final class LookTrace {
                                         float pt, float hO, float hC, float bO, float bC,
                                         float pO, float pC, float baseYaw, float basePitch,
                                         float omYaw, float extYaw,
-                                        double xO, double yO, double zO, double xC, double yC, double zC) {
+                                        double xO, double yO, double zO, double xC, double yC, double zC,
+                                        double tX, double tY, double tZ, double dX, double dY, double dZ) {
         if (!active) return;
         if (t0Nano == 0L) t0Nano = frameNano;
         if (entityId != targetId) {
@@ -104,9 +105,10 @@ public final class LookTrace {
         }
         float tMs = (frameNano - t0Nano) / 1e6f;
         emit(String.format("LOOKTRACE t=%.1f pt=%.4f hO=%.3f hC=%.3f bO=%.3f bC=%.3f pO=%.3f pC=%.3f base=(%.3f,%.3f) om=%.3f ext=%.3f"
-                        + " posO=(%.2f,%.2f,%.2f) posC=(%.2f,%.2f,%.2f)",
+                        + " posO=(%.2f,%.2f,%.2f) posC=(%.2f,%.2f,%.2f)"
+                        + " tgt=(%.3f,%.3f,%.3f) disp=(%.3f,%.3f,%.3f)",
                 tMs, pt, hO, hC, bO, bC, pO, pC, baseYaw, basePitch, omYaw, extYaw,
-                xO, yO, zO, xC, yC, zC));
+                xO, yO, zO, xC, yC, zC, tX, tY, tZ, dX, dY, dZ));
         if (!unbounded && --remaining <= 0) stop("窗口");
     }
 

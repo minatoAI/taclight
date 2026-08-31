@@ -22,7 +22,9 @@ public class TacLightMixinPlugin implements IMixinConfigPlugin {
 
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
+        // 旁路 = 核心功能(不依赖 TaCZ):Player 前缀公共 mixin + 位置链快照目标 accessor
         if (mixinClassName.startsWith("dev.taclight.mixin.Player")) return true;
+        if (mixinClassName.startsWith("dev.taclight.mixin.LivingEntityLerpAccess")) return true;
         return TaczCompat.present();
     }
 

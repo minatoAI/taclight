@@ -139,6 +139,13 @@ public final class DebugCommandRelay {
                     dev.taclight.channel.RemoteBaseSnap.configure(arg));
             return;
         }
+        if (line.startsWith("!psnap")) {
+            // snap+pred 位置链总开关(09-01 深夜③):off 退回 getEyePosition 旧管线(A/B 对照)
+            String arg = line.length() > 6 ? line.substring(6).trim() : "";
+            TacLightMod.LOGGER.info("[TacLight] RELAY psnap -> {}",
+                    dev.taclight.channel.RemotePosSnap.configure(arg));
+            return;
+        }
         if (line.startsWith("/")) {
             if (mc.getConnection() != null) {
                 mc.getConnection().sendCommand(line.substring(1));

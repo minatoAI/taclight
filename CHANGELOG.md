@@ -1,5 +1,28 @@
 # TacLight Changelog
 
+## 未提交 · 09-01 深夜③(位置链移动闪烁:定位 + 死推滤波修复,用户批准"定位后修")
+
+- **定位(用户报:平移/缩放时光晕边缘仍有闪烁;要求移动循环+消融+定位后修)**:
+  ①tp 步进循环三轮消融(基线/`!extrap off`/`!bsnap off`)数字完全一致(0.347 格)
+  → 旋转链零贡献,且 0.347=步进粒度伪影 → 换刺激;②**真实 WASD 步行**(PostMessage
+  键盘按住驱动 Dev,同步链输入=用户走路)12 会话:平移光斑残差 0.22-0.55 格(≈53-130px,
+  去趋势窗标定修正),位置链贡献 100%、方向链 0 → **病灶=位置链 o→C lerp 的逐 tick
+  速度调制(±20%)**。证据 evidence/2026-09-01-position-flicker/。
+- **v1(lerpX/Y/Z 延迟段快照插值)实机否决**:psnap on 残差反升 27-41% —— 实测 lerpX
+  为突发台阶(单步最大 0.428≈2 tick 位移),非匀速序列;忠实回放=更噪。
+- **v2 RemotePosSnap(死推+速度导引)**:显示按平滑 v̂ 积分,每 tick 误差小比例
+  校正(位置拉回 0.35 + 速度导引,25ms 校正节拍,急停时也强制校正),传送(|err|>0.6)
+  直落 + 单向超前钳制 0.08 格。**同输入 A/B:步行中段稳态光斑晃动 disp 4px(纵深)/
+  30px(平移)vs 旧管线 6-7px/45-50px,且无 20Hz 前后跳变**;起停瞬态有界(≤0.35 格)
+  平滑收敛。`!psnap <on|off>`(默认 on)。LivingEntityLerpAccess mixin(lerpX/Y/Z 只读,
+  探针 tgt 列)+LOOKTRACE 增 tgt/disp 列。RemotePosSnapContract 21 项,AllContracts 全绿。
+- **坑45**:强杀客户端后 Forge 早显窗口 glfwGetPrimaryMonitor 失败("Failed to locate
+  a primary monitor"),启动必崩 → `run*/config/fml.toml` `earlyWindowControl=false` 绕行。
+- **坑46**:GLFW 按键识别依赖 scancode(keybd_event scan=0 → KEY_UNKNOWN,白烧一轮);
+  后台驱动走 PostMessage WM_KEYDOWN/UP(postkey 路线)不依赖前台焦点。
+- **待用户体感验收**:平移稳态 30px 接近可感下限,起步追赶 ≤0.35 格是否可感;
+  `!psnap off` 一键回退。
+
 ## 未提交 · 09-01 深夜②(snap+pred 实施 + 同输入 A/B 实机对比,用户批准)
 
 - **RemoteBaseSnap(snap+pred,用户批准"尝试一下")**:基角 = 延迟一段快照插值

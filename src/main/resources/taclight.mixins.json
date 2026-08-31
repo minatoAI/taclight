@@ -9,7 +9,8 @@
   ],
   "client": [
     "BeamRendererMixin",
-    "GunItemLightProviderMixin"
+    "GunItemLightProviderMixin",
+    "LivingEntityLerpAccess"
   ],
   "injectors": {
     "defaultRequire": 1

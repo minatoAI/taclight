@@ -37,16 +37,17 @@ public final class LookTraceContract {
             LookTrace.row(42, "minecraft:armor_stand", nano,
                     0.5f, -179.0f + i * 0.2f, -178.0f + i * 0.2f, 0f, 0.2f, 10f, 11f,
                     -179.1f + i * 0.2f, 10.5f, 1.0f, 1.25f,
-                    10.5, 64.0, -3.25, 10.75, 64.0, -3.00);
+                    10.5, 64.0, -3.25, 10.75, 64.0, -3.00, 10.8, 64.1, -3.1, 10.9, 64.15, -3.05);
         }
         check(out.stream().anyMatch(s -> s.contains("LOOKTRACE-START id=42 type=minecraft:armor_stand")),
                 "首帧发 START 标记(含 id/type)");
         check(out.stream().anyMatch(s -> s.contains("LOOKTRACE-START id=42") && s.contains("剩余=120")),
                 "START 标记带窗口剩余帧数");
         Pattern row = Pattern.compile("\\[TacLight\\] LOOKTRACE t=\\d+\\.\\d+ pt=\\d+\\.\\d+{4} hO=-?\\d+\\.\\d+{3} hC=-?\\d+\\.\\d+{3} bO=-?\\d+\\.\\d+{3} bC=-?\\d+\\.\\d+{3} pO=-?\\d+\\.\\d+{3} pC=-?\\d+\\.\\d+{3} base=\\(-?\\d+\\.\\d+{3},-?\\d+\\.\\d+{3}\\) om=-?\\d+\\.\\d+{3} ext=-?\\d+\\.\\d+{3}"
-                + " posO=\\(-?\\d+\\.\\d{2},-?\\d+\\.\\d{2},-?\\d+\\.\\d{2}\\) posC=\\(-?\\d+\\.\\d{2},-?\\d+\\.\\d{2},-?\\d+\\.\\d{2}\\)");
+                + " posO=\\(-?\\d+\\.\\d{2},-?\\d+\\.\\d{2},-?\\d+\\.\\d{2}\\) posC=\\(-?\\d+\\.\\d{2},-?\\d+\\.\\d{2},-?\\d+\\.\\d{2}\\)"
+                + " tgt=\\(-?\\d+\\.\\d{3},-?\\d+\\.\\d{3},-?\\d+\\.\\d{3}\\) disp=\\(-?\\d+\\.\\d{3},-?\\d+\\.\\d{3},-?\\d+\\.\\d{3}\\)");
         check(out.stream().filter(s -> s.contains("LOOKTRACE t=")).allMatch(s -> row.matcher(s).matches()),
-                "全部数据行匹配固定格式正则(" + out.stream().filter(s -> s.contains("LOOKTRACE t=")).count() + " 行,含 pos 字段)");
+                "全部数据行匹配固定格式正则(" + out.stream().filter(s -> s.contains("LOOKTRACE t=")).count() + " 行,含 pos/tgt/disp 字段)");
 
         // ---- 3) 相对时间从 0 单调递增 ----
         String first = out.stream().filter(s -> s.contains("LOOKTRACE t=")).findFirst().orElse("");
@@ -63,7 +64,7 @@ public final class LookTraceContract {
 
         // ---- 4) 目标切换发新 START(采样对象漂移可追溯) ----
         LookTrace.row(77, "minecraft:zombie", nano + 8_333_333L, 0.5f, 1f, 2f, 0f, 0f, 0f, 0f, 1.5f, 0f, 1f, 0f,
-                0, 0, 0, 0, 0, 0);
+                0, 0, 0, 0, 0, 0, 1, 2, 3, 1.1, 2.1, 3.1);
         check(out.stream().anyMatch(s -> s.contains("LOOKTRACE-START id=77 type=minecraft:zombie")),
                 "目标变更时发新 START 标记");
 
@@ -71,7 +72,7 @@ public final class LookTraceContract {
         for (int i = 0; i < 200; i++) {
             nano += 8_333_333L;
             LookTrace.row(77, "minecraft:zombie", nano, 0.5f, 1f, 2f, 0f, 0f, 0f, 0f, 1.5f, 0f, 0f, 0f,
-                    0, 0, 0, 0, 0, 0);
+                    0, 0, 0, 0, 0, 0, 1, 2, 3, 1.1, 2.1, 3.1);
         }
         check(!LookTrace.active(), "剩余帧耗尽自动停");
         check(out.stream().anyMatch(s -> s.contains("LOOKTRACE-END") && s.contains("why=窗口")),
@@ -81,7 +82,7 @@ public final class LookTraceContract {
         // ---- 6) 停止后 row 静默;手动 off 幂等 ----
         int n = out.size();
         LookTrace.row(77, "minecraft:zombie", nano, 0.5f, 1f, 2f, 0f, 0f, 0f, 0f, 1.5f, 0f, 0f, 0f,
-                0, 0, 0, 0, 0, 0);
+                0, 0, 0, 0, 0, 0, 1, 2, 3, 1.1, 2.1, 3.1);
         check(out.size() == n, "停止后 row 不产生输出");
         LookTrace.configure("off");
         LookTrace.configure("off");
@@ -102,7 +103,7 @@ public final class LookTraceContract {
         for (int i = 0; i < 7500; i++) {
             nano += 8_333_333L;
             LookTrace.row(9, "minecraft:player", nano, 0.5f, 1f, 2f, 0f, 0f, 0f, 0f, 1.5f, 0f, 0f, 0f,
-                    10.5, 64.0, -3.25, 10.75, 64.0, -3.00);
+                    10.5, 64.0, -3.25, 10.75, 64.0, -3.00, 10.8, 64.1, -3.1, 10.9, 64.15, -3.05);
         }
         check(out.stream().anyMatch(s -> s.contains("LOOKTRACE-START") && s.contains("剩余=gated")),
                 "门控模式 START 标记剩余=gated");
@@ -112,7 +113,7 @@ public final class LookTraceContract {
         check(out.size() > before && out.get(out.size() - 1).contains("LOOKTRACE-END") && out.get(out.size() - 1).contains("why=手动"),
                 "门控模式手动 off 发 END(why=手动)");
         LookTrace.row(9, "minecraft:player", nano, 0.5f, 1f, 2f, 0f, 0f, 0f, 0f, 1.5f, 0f, 0f, 0f,
-                10.5, 64.0, -3.25, 10.75, 64.0, -3.00);
+                10.5, 64.0, -3.25, 10.75, 64.0, -3.00, 10.8, 64.1, -3.1, 10.9, 64.15, -3.05);
         check(out.size() == before + 1, "门控 off 后 row 静默");
         check(LookTrace.configure("").contains("off"), "门控收窗后状态回 off");
 
