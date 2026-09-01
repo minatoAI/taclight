@@ -39,12 +39,17 @@ struct TacLightSpot {
 
 // 注意(铁律 2):不要在 shaders.properties 里声明 bufferObject.7 ——
 // 那会让 Iris 自建同名缓冲覆盖模组绑定。此缓冲由模组创建并每帧更新,包只读。
+// v0.12(09-01 深夜④):lights 改定长 [8],尾段并入体素遮挡栅格
+// (VoxelField/VoxelGrid 每 tick 填充;taclight_vox_transmit DDA 消费)。
 layout(std430, binding = 7) buffer TacLightSSBO {
     uint  lightCount;     // 头偏移 0
     float vlIntensity;    // 头偏移 4
     uint  flags;          // 头偏移 8
     uint  reserved;       // 头偏移 12(时序探针回写字)
-    TacLightSpot lights[];
+    TacLightSpot lights[8];   // 16..783(定长;Java 侧 clamp 8 同源)
+    vec4  voxOrigin;      // 784: xyz=栅格角点 world(方块格对齐) w>0=有效/w<=0=无效
+    ivec4 voxMeta;        // 800: xyz=各轴格数;w 保留
+    uint  voxData[];      // 816..: 2bit/体素,idx=x+y*dx+z*dx*dy,word=idx>>4,bit=(idx&15)*2
 };
 
 // ---- 各阶段矩阵约定(doc06 §2.2 表)----
@@ -79,6 +84,12 @@ vec3 taclight_depth_to_view(vec2 uv, float depth) {
     vec4 ndc  = vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
     vec4 view = gbufferProjectionInverse * ndc;
     return view.xyz / view.w;
+}
+
+/** 视图空间 → world(composite 的 gbufferModelView 是 R-only,转置即逆旋转)。
+ *  体素栅格/SSBO 均为 world 域,消费端经本函数出入,不内联换算(铁律 3)。 */
+vec3 taclight_view_to_world(vec3 viewPos) {
+    return cameraPosition + transpose(mat3(gbufferModelView)) * viewPos;
 }
 
 // ----------------------------------------------------------------------------
@@ -235,6 +246,61 @@ float taclight_sso(vec3 fragView, vec3 lightView, TacLightSpot L) {
 
 /** M1 表面照明总增益(与 knee 配合;实测反馈驱动调参)。2026-08-29 实测过曝,2.0→1.0。 */
 #define TACLIGHT_LIGHT_GAIN 2.2
+
+// ----------------------------------------------------------------------------
+// M1 · 体素 DDA 遮挡(v0.12,2026-09-01 深夜④;立项 = 用户实测墙后地面漏光,
+// 满足 AGENTS §4 条件项"实机真见漏光才立项")
+// 根治 SSO 已知局限(上方注释:视锥外的遮挡者不投影 → 墙后地面漏光):
+// 世界空间 Amanatides-Woo 体素步进,1 格 = 1 体素(对齐方块网格,零重采样误差)。
+// 分类码与 colortex3.a 同源(0 空/1 软植被 0.25/2 树叶 0.60/3 实心 1.0),
+// 数据由模组每 tick 采样填充上传(SSBO 尾段 voxOrigin/voxMeta/voxData)。
+// 返回透射率 T ∈ [0,1]:实心体素一票否决(T=0,硬阴影——DDA 是精确几何,无需
+// SSO 的 1.2 斜率软化);树叶/植被按穿越格数透射衰减。栅格无效或光线任一端点
+// 在栅格外 → 返回 -1(调用方回退 SSO;覆盖半径不足的远灯退化为旧行为,不假遮挡)。
+// 端点格双向豁免:起点格(灯所在空气格)先步进后判定,天然跳过;终点格(被照
+// 表面所属方块,沿射线回退 1e-3 定位)步进至即停,不自遮——端点各让一格后,
+// 中间任何实心格都是真遮挡。
+// ----------------------------------------------------------------------------
+float taclight_vox_transmit(vec3 worldA, vec3 worldB) {
+    if (voxOrigin.w <= 0.0) return -1.0;
+    vec3 a = worldA - voxOrigin.xyz;      // 方块格空间
+    vec3 b = worldB - voxOrigin.xyz;
+    vec3 dim = vec3(voxMeta.xyz);
+    if (any(lessThan(a, vec3(0.0))) || any(greaterThanEqual(a, dim)) ||
+        any(lessThan(b, vec3(0.0))) || any(greaterThanEqual(b, dim))) return -1.0;
+    vec3 dv = b - a;
+    float len = length(dv);
+    if (len < 1e-4) return 1.0;
+    vec3 dir = dv / len;
+    ivec3 cell = ivec3(floor(a));
+    ivec3 last = ivec3(floor(b - dir * 1e-3));
+    ivec3 istep = ivec3(dir.x > 0.0 ? 1 : (dir.x < 0.0 ? -1 : 0),
+                        dir.y > 0.0 ? 1 : (dir.y < 0.0 ? -1 : 0),
+                        dir.z > 0.0 ? 1 : (dir.z < 0.0 ? -1 : 0));
+    vec3 tDelta = vec3(abs(dir.x) > 1e-9 ? 1.0 / abs(dir.x) : 1e9,
+                       abs(dir.y) > 1e-9 ? 1.0 / abs(dir.y) : 1e9,
+                       abs(dir.z) > 1e-9 ? 1.0 / abs(dir.z) : 1e9);
+    vec3 tMax = vec3(abs(dir.x) > 1e-9 ? (dir.x > 0.0 ? (float(cell.x) + 1.0 - a.x) : (a.x - float(cell.x))) * tDelta.x : 1e9,
+                     abs(dir.y) > 1e-9 ? (dir.y > 0.0 ? (float(cell.y) + 1.0 - a.y) : (a.y - float(cell.y))) * tDelta.y : 1e9,
+                     abs(dir.z) > 1e-9 ? (dir.z > 0.0 ? (float(cell.z) + 1.0 - a.z) : (a.z - float(cell.z))) * tDelta.z : 1e9);
+    float T = 1.0;
+    for (int guard = 0; guard < 384; guard++) {   // 128^3 对角线步数上限
+        int axis;
+        if (tMax.x <= tMax.y && tMax.x <= tMax.z) axis = 0;
+        else if (tMax.y <= tMax.z) axis = 1;
+        else axis = 2;
+        cell[axis] += istep[axis];
+        tMax[axis] += tDelta[axis];
+        if (any(lessThan(cell, ivec3(0))) || any(greaterThanEqual(cell, ivec3(dim)))) return T;
+        if (all(equal(cell, last))) return T;
+        int idx = cell.x + cell.y * int(dim.x) + cell.z * int(dim.x) * int(dim.y);
+        uint code = (voxData[idx >> 4] >> uint((idx & 15) * 2)) & 3u;
+        if (code == 3u) return 0.0;
+        if (code == 2u) T *= 0.40;      // 树叶:0.6 遮挡/格 → 透射 0.4/格
+        else if (code == 1u) T *= 0.75; // 软植被:0.25 遮挡/格
+    }
+    return T;
+}
 
 /** F3(2026-08-30):spec 项能量钳制。GGX 分布项(d)在低 roughness 下峰值可到
  *  10+,× intensity 6 → 镜面尖峰独占 ~2.0 辐射,与 diffuse/bloom/体积多链叠加

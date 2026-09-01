@@ -19,21 +19,34 @@ public final class LightBuffer {
     private static int ssboId = -1;
     private static int lastCapacity = -1;
     private static boolean uploadLogged;
+    private static long lastGridVersion = -1;
+    private static java.nio.IntBuffer gridStage;
 
     private LightBuffer() {}
 
     public static synchronized void upload(List<SpotlightData> lights) {
-        upload(lights, 0);
+        upload(lights, 0, null);
     }
 
     /** @param extraFlags 附加头部标志位(如 FLAG_DEBUG),与灯光数据一起写入。 */
     public static synchronized void upload(List<SpotlightData> lights, int extraFlags) {
+        upload(lights, extraFlags, null);
+    }
+
+    /**
+     * @param grid 体素遮挡栅格快照(v0.12 DDA 遮挡;null = 无效位,GLSL 回退 SSO)。
+     *             数据区仅在其 version 变化时重传(0.5MB/tick 上限,20Hz 节流在 VoxelGrid)。
+     */
+    public static synchronized void upload(List<SpotlightData> lights, int extraFlags,
+                                           VoxelField.Snapshot grid) {
         try {
             if (!isGpuUsable()) return;
-            int count = Math.min(lights.size(), 8);
+            int count = Math.min(lights.size(), SpotlightBufferLayout.MAX_LIGHTS);
+            int bytes = SpotlightBufferLayout.bufferSize();
+            boolean realloc = ssboId == -1 || bytes != lastCapacity;
             if (ssboId == -1) {
                 ssboId = GL15.glGenBuffers();
-                LOGGER.info("[TacLight] SSBO created (id={})", ssboId);
+                LOGGER.info("[TacLight] SSBO created (id={}, bytes={} incl voxel tail)", ssboId, bytes);
             }
             int flags = (count > 0 ? SpotlightBufferLayout.FLAG_HAS_DATA : 0)
                     | SpotlightBufferLayout.FLAG_TIMING_PROBE | extraFlags;
@@ -42,13 +55,33 @@ public final class LightBuffer {
             for (int i = 0; i < count; i++) {
                 SpotlightBufferLayout.writeLight(buf, i, lights.get(i));
             }
-            int bytes = SpotlightBufferLayout.bufferSize(count);
+            if (grid != null) {
+                SpotlightBufferLayout.writeVoxHeader(buf,
+                        grid.ox(), grid.oy(), grid.oz(), grid.dx(), grid.dy(), grid.dz());
+            } else {
+                SpotlightBufferLayout.writeVoxInvalid(buf);
+            }
             GL15.glBindBuffer(GL43.GL_SHADER_STORAGE_BUFFER, ssboId);
-            if (bytes != lastCapacity) {
+            if (realloc) {
                 GL15.glBufferData(GL43.GL_SHADER_STORAGE_BUFFER, (long) bytes, GL15.GL_STREAM_DRAW);
                 lastCapacity = bytes;
+                lastGridVersion = -1;   // 重分配后内容未定义,栅格数据必须重传
             }
             GL15.glBufferSubData(GL43.GL_SHADER_STORAGE_BUFFER, 0L, buf);
+            if (grid != null && grid.version() != lastGridVersion) {
+                int used = Math.min(grid.usedUints(), SpotlightBufferLayout.VOX_MAX_UINTS);
+                if (gridStage == null || gridStage.capacity() < used) {
+                    gridStage = java.nio.ByteBuffer
+                            .allocateDirect(SpotlightBufferLayout.VOX_MAX_UINTS * 4)
+                            .order(java.nio.ByteOrder.nativeOrder()).asIntBuffer();
+                }
+                gridStage.clear();
+                gridStage.put(grid.data(), 0, used);
+                gridStage.flip();
+                GL15.glBufferSubData(GL43.GL_SHADER_STORAGE_BUFFER,
+                        (long) SpotlightBufferLayout.OFF_VOX_DATA, gridStage);
+                lastGridVersion = grid.version();
+            }
             if (!uploadLogged) { uploadLogged = true; LOGGER.info("[TacLight] upload {} light(s), flags={}", count, flags); }
             GL30.glBindBufferBase(GL43.GL_SHADER_STORAGE_BUFFER, SpotlightBufferLayout.BINDING, ssboId);
             // v0.9.0:路线 P 时代的 SLOT PROBE(binding 0/1/8 冗余绑定)已删除,

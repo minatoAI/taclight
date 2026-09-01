@@ -5,10 +5,27 @@ import java.nio.ByteBuffer;
 /** SSBO std430 布局契约测试:16B 头 + 每灯 96B,写入/读回逐字节一致。 */
 public class SpotlightBufferLayoutContract {
     public static void main(String[] args) {
-        check(SpotlightBufferLayout.bufferSize(0) == 16, "0灯缓冲=16B");
-        check(SpotlightBufferLayout.bufferSize(1) == 112, "1灯缓冲=112B");
-        check(SpotlightBufferLayout.bufferSize(3) == 304, "3灯缓冲=304B");
+        // v0.12:lights 改定长 [8],尾段并入体素遮挡栅格(SSBO 总长固定)
         check(SpotlightBufferLayout.lightOffset(1) == 112, "第2灯偏移=112");
+        check(SpotlightBufferLayout.lightOffset(7) == 16 + 7 * 96, "第8灯偏移(定长数组内)");
+        check(SpotlightBufferLayout.OFF_VOX_ORIGIN == 16 + 8 * 96, "voxOrigin 紧跟 8 灯");
+        check(SpotlightBufferLayout.OFF_VOX_ORIGIN % 16 == 0, "voxOrigin 16B 对齐(std430 vec4)");
+        check(SpotlightBufferLayout.OFF_VOX_META == SpotlightBufferLayout.OFF_VOX_ORIGIN + 16, "voxMeta 偏移");
+        check(SpotlightBufferLayout.OFF_VOX_DATA == SpotlightBufferLayout.OFF_VOX_META + 16, "voxData 偏移");
+        check(SpotlightBufferLayout.VOX_MAX_UINTS == 128 * 128 * 128 / 16, "VOX_MAX_UINTS=2bit 打包 128^3");
+        check(SpotlightBufferLayout.bufferSize()
+                == SpotlightBufferLayout.OFF_VOX_DATA + SpotlightBufferLayout.VOX_MAX_UINTS * 4, "缓冲=定长布局");
+
+        // 体素头/无效位写入语义
+        ByteBuffer vox = SpotlightBufferLayout.newBuffer(1);
+        SpotlightBufferLayout.writeVoxInvalid(vox);
+        check(vox.getFloat(SpotlightBufferLayout.OFF_VOX_ORIGIN + 12) < 0.0f, "无效位=w<0(GLSL 回退 SSO)");
+        SpotlightBufferLayout.writeVoxHeader(vox, 1.0f, 2.0f, 3.0f, 4, 5, 6);
+        check(vox.getFloat(SpotlightBufferLayout.OFF_VOX_ORIGIN) == 1.0f
+                && vox.getFloat(SpotlightBufferLayout.OFF_VOX_ORIGIN + 8) == 3.0f
+                && vox.getFloat(SpotlightBufferLayout.OFF_VOX_ORIGIN + 12) > 0.0f, "voxOrigin 写入+有效位");
+        check(vox.getInt(SpotlightBufferLayout.OFF_VOX_META) == 4
+                && vox.getInt(SpotlightBufferLayout.OFF_VOX_META + 8) == 6, "voxMeta 写入");
 
         SpotlightData light = SpotlightData.spot(1.5f, -2.5f, 3.0f, 24f,
                 1f, 0.96f, 0.88f, 6f,
@@ -33,7 +50,7 @@ public class SpotlightBufferLayoutContract {
         check(Float.compare(read.cosOuter(), 0.848f) == 0, "cosOuter roundtrip");
         check(Float.compare(read.intensity(), 6f) == 0, "intensity roundtrip");
         check(read.type() == 1.0f, "type=1 spot");
-        System.out.println("SpotlightBufferLayoutContract: ALL PASS (16 checks)");
+        System.out.println("SpotlightBufferLayoutContract: ALL PASS (23 checks)");
     }
 
     private static void check(boolean cond, String what) {

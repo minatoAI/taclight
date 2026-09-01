@@ -146,6 +146,12 @@ public final class DebugCommandRelay {
                     dev.taclight.channel.RemotePosSnap.configure(arg));
             return;
         }
+        if (line.startsWith("!voxel")) {
+            // 体素 DDA 遮挡总开关(09-01 深夜④,墙后漏光立项):off = SSBO 无效位,GLSL 回退 SSO
+            String arg = line.length() > 6 ? line.substring(6).trim() : "";
+            TacLightMod.LOGGER.info("[TacLight] RELAY voxel -> {}", VoxelGrid.configure(arg));
+            return;
+        }
         if (line.startsWith("/")) {
             if (mc.getConnection() != null) {
                 mc.getConnection().sendCommand(line.substring(1));

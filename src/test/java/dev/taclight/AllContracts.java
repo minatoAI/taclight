@@ -8,6 +8,7 @@ import dev.taclight.channel.RemotePosSnapContract;
 import dev.taclight.channel.RemoteLookPredictorContract;
 import dev.taclight.channel.SpotlightBufferLayoutContract;
 import dev.taclight.channel.UploaderSemanticContract;
+import dev.taclight.channel.VoxelFieldContract;
 import dev.taclight.pose.MuzzlePoseMathContract;
 import dev.taclight.scene.ScenePlanContract;
 import dev.taclight.sync.LightStatePersistenceContract;
@@ -21,6 +22,8 @@ public class AllContracts {
         GunLaserReaderContract.main(args);
         System.out.println("== SpotlightBufferLayoutContract ==");
         SpotlightBufferLayoutContract.main(args);
+        System.out.println("== VoxelFieldContract ==");
+        VoxelFieldContract.main(args);
         System.out.println("== UploaderSemanticContract ==");
         UploaderSemanticContract.main(args);
         System.out.println("== MuzzlePoseMathContract ==");

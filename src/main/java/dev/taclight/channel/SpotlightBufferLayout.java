@@ -4,9 +4,11 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
 /**
- * TacLight SSBO std430 契约唯一真源(与 shader_patches/taclight_lights.glsl 对齐)。
+ * TacLight SSBO std430 契约唯一真源(与 pack/shaders/lib/taclight_common.glsl 对齐)。
  * 头:16 字节(uint lightCount, float vlIntensity, uint flags, uint reserved)
- * 灯:6 x vec4 = 96 字节。N 灯总长 16 + 96N。
+ * 灯:8 x vec4 = 96 字节,v0.12 起定长 [8](原不定长数组;为尾段体素栅格让位)。
+ * 体素栅格尾段(2026-09-01 深夜④ DDA 遮挡):voxOrigin(784) voxMeta(800)
+ * voxData(816 起,2bit/体素)。总长固定 = 816 + 131072×4 = 525,104 B。
  *
  * <p>坐标语义(v0.9.0 起,doc06 §2.5 铁律 3):<b>posRadius.xyz = world 坐标</b>,
  * dirType.xyz = world 方向;scene-relative 转换一律由光影包消费侧执行
@@ -16,6 +18,7 @@ import java.nio.ByteOrder;
 public final class SpotlightBufferLayout {
     public static final int HEADER_BYTES = 16;
     public static final int LIGHT_STRIDE_BYTES = 96;
+    public static final int MAX_LIGHTS = 8;
     public static final int BINDING = 7;
 
     public static final int OFF_LIGHT_COUNT = 0;
@@ -30,6 +33,20 @@ public final class SpotlightBufferLayout {
     public static final int OFF_VL_PARAMS = 64;
     public static final int OFF_COOKIE = 80;
 
+    // ---- 体素遮挡栅格尾段(v0.12;GLSL 侧 voxData 为不定长末成员,读界内即可)----
+    /** voxOrigin:xyz=栅格角点 world 坐标(方块格对齐),w&gt;0=有效/w≤0=无效(GLSL 回退 SSO)。 */
+    public static final int OFF_VOX_ORIGIN = HEADER_BYTES + MAX_LIGHTS * LIGHT_STRIDE_BYTES; // 784
+    /** voxMeta:xyz=各轴格数,w 保留。 */
+    public static final int OFF_VOX_META = OFF_VOX_ORIGIN + 16;   // 800
+    /** 2bit 打包数据起点。 */
+    public static final int OFF_VOX_DATA = OFF_VOX_META + 16;     // 816
+    /** 单轴最大格数(与 VoxelField.MAX_DIM 同值;不引用以防包间循环无谓耦合,契约钉等值)。 */
+    public static final int VOX_MAX_DIM = 128;
+    /** 128³ × 2bit / 32bit。 */
+    public static final int VOX_MAX_UINTS = VOX_MAX_DIM * VOX_MAX_DIM * VOX_MAX_DIM / 16; // 131072
+    /** SSBO 总长(定长)。 */
+    private static final int FIXED_BYTES = OFF_VOX_DATA + VOX_MAX_UINTS * 4;
+
     public static final int FLAG_HAS_DATA = 1;
     /** bit1: 霓虹调试模式(K 键)——GLSL 用纯绿锥形光渲染,肉眼分辨通道。 */
     public static final int FLAG_DEBUG = 1 << 1;
@@ -38,18 +55,19 @@ public final class SpotlightBufferLayout {
 
     private SpotlightBufferLayout() {}
 
-    public static int bufferSize(int lightCount) {
-        if (lightCount < 0) throw new IllegalArgumentException("count<0");
-        return HEADER_BYTES + lightCount * LIGHT_STRIDE_BYTES;
+    /** SSBO 总字节数(v0.12 起定长,与灯数无关——尾段体素栅格恒占位)。 */
+    public static int bufferSize() {
+        return FIXED_BYTES;
     }
 
     public static int lightOffset(int index) {
-        if (index < 0) throw new IllegalArgumentException("index<0");
+        if (index < 0 || index >= MAX_LIGHTS) throw new IllegalArgumentException("index out of [0,8): " + index);
         return HEADER_BYTES + index * LIGHT_STRIDE_BYTES;
     }
 
+    /** 头 + 8 灯区(体素尾段由 {@link #writeVoxHeader}/数据区单独写)。 */
     public static ByteBuffer newBuffer(int lightCount) {
-        return ByteBuffer.allocateDirect(bufferSize(lightCount)).order(ByteOrder.nativeOrder());
+        return ByteBuffer.allocateDirect(OFF_VOX_DATA).order(ByteOrder.nativeOrder());
     }
 
     public static void writeHeader(ByteBuffer buf, int lightCount, float vlIntensity, int flags) {
@@ -57,6 +75,23 @@ public final class SpotlightBufferLayout {
         buf.putFloat(OFF_VL_INTENSITY, vlIntensity);
         buf.putInt(OFF_FLAGS, flags);
         buf.putInt(OFF_RESERVED, 0);
+    }
+
+    /** 体素栅格头:角点 world 坐标 + 各轴格数 + 有效位(w=1)。 */
+    public static void writeVoxHeader(ByteBuffer buf, float ox, float oy, float oz, int dx, int dy, int dz) {
+        buf.putFloat(OFF_VOX_ORIGIN, ox);
+        buf.putFloat(OFF_VOX_ORIGIN + 4, oy);
+        buf.putFloat(OFF_VOX_ORIGIN + 8, oz);
+        buf.putFloat(OFF_VOX_ORIGIN + 12, 1.0f);   // w>0 = 有效
+        buf.putInt(OFF_VOX_META, dx);
+        buf.putInt(OFF_VOX_META + 4, dy);
+        buf.putInt(OFF_VOX_META + 8, dz);
+        buf.putInt(OFF_VOX_META + 12, 0);
+    }
+
+    /** 体素栅格无效位(GLSL 检查 voxOrigin.w≤0 回退 SSO)。 */
+    public static void writeVoxInvalid(ByteBuffer buf) {
+        buf.putFloat(OFF_VOX_ORIGIN + 12, -1.0f);
     }
 
     public static void writeLight(ByteBuffer buf, int index, SpotlightData l) {

@@ -161,7 +161,10 @@ void main() {
                 if (dot(lightView, lightView) < 0.25) {
                     vis = 1.0;
                 } else {
-                    vis = taclight_sso(fragView, lightView, L);
+                    // v0.12 体素 DDA 优先(世界空间,根治视锥外遮挡者漏光);
+                    // 栅格无效/光线端点出栅格 → -1,回退屏幕空间 SSO(保守一致)。
+                    float vt = taclight_vox_transmit(L.posRadius.xyz, taclight_view_to_world(fragView));
+                    vis = vt >= 0.0 ? vt : taclight_sso(fragView, lightView, L);
                     if (vis <= 0.003) continue;
                 }
 

@@ -1,5 +1,29 @@
 # TacLight Changelog
 
+## 未提交 · 09-01 深夜④(体素 DDA 遮挡:墙后漏光根治,条件项触发+用户要求尝试新算法)
+
+- **立项**:用户实测"光照穿透墙壁,墙后地面有淡淡光晕"= AGENTS §4 条件项
+  ("DDA 体素遮挡:实机真见漏光才立项")触发,并明确要求尝试新算法、关注性能开销。
+- **实现**:`VoxelField`(纯逻辑:盒计算/2bit 打包,VoxelFieldContract 14 项)+
+  `VoxelGrid`(世界侧:每 tick 方块采样,section hasOnlyAir 整段跳过 + BlockState
+  分类身份缓存,实测 0.08ms/tick)+ SSBO 尾段(lights[8] 定长 + voxOrigin/voxMeta/
+  voxData,总长 525,104B,数据区按 usedUints 增量上传)+ GLSL `taclight_vox_transmit`
+  (Amanatides-Woo DDA:实心 T=0 一票否决,树叶 0.4/格、软植被 0.75/格;栅格无效/
+  端点出界回退 SSO;起终点格双向豁免不自遮)。分类与 block.properties 同源
+  (空气/流体透光)。旋钮 `!voxel <on|off|status>`(默认 on,off 回退 SSO)。
+- **实机 A/B(wall 场景,B 站墙顶俯视)**:北面地台漏光 ROI mean **82.3 → 44.3**
+  (−46%,= 无灯基线 43.7,漏光消除);南直射池 **64.5 → 64.5 全分位恒等(零回归)**;
+  `!bench` 60 锁帧 59.9 vs 59.8 fps、1% low 56.2 vs 55.0(噪声内)。证据
+  evidence/2026-09-01-voxel-dda-occlusion/(真机 F2 截图 ×4 + 判定数字)。
+- **坑47**:String.format `%d` 接 float 字段在事件监听器抛
+  IllegalFormatConversionException → 客户端 FATAL 崩溃(非仅日志)。
+- **坑48**:原版远程玩家 HEAD 角同步缺口——RotateHead 包仅在量化字节变化时发送,
+  relog 后被观察者静止 → 观察端 yHeadRot 卡旧值(实测 +4.63° vs 真值 −180°)
+  → 远程灯方向错 180°。规避:验收前让被观察者动一下头。
+- **边界**:体积束(composite1)灯侧遮挡未动(束段穿墙待实机可见再立项);
+  树叶/植被透射常数未单独标定;双灯跨度/照距超栅格覆盖时逐光线回退 SSO。
+- AllContracts 437 项全绿(新增 VoxelField 14 + 布局契约重写 23)。
+
 ## 未提交 · 09-01 深夜③(位置链移动闪烁:定位 + 死推滤波修复,用户批准"定位后修")
 
 - **定位(用户报:平移/缩放时光晕边缘仍有闪烁;要求移动循环+消融+定位后修)**:
