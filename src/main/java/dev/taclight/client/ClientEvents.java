@@ -202,34 +202,50 @@ public class ClientEvents {
         mc.player.displayClientMessage(Component.literal(msg), false);
     }
 
-    /** MCAP 连拍编码积压计数(PNG 在 ioPool 线程落盘;>3 张未消化时跳帧防堆积)。 */
+    /** Number of screenshot encodes still pending; scheduling pressure is recorded as D rows. */
     private static final java.util.concurrent.atomic.AtomicInteger MCAP_PENDING =
             new java.util.concurrent.atomic.AtomicInteger();
 
-    /** 09-01 运动门控连拍执行端:RenderTick END 时主帧缓冲已含本帧最终画面(F2 同源);
-     *  进程内直读渲染目标,无需前台窗口 —— 坑34 的根治(F2 postkey 链路整个旁路)。
-     *  落盘路径 = <gameDir>/mcap/s%04d/screenshots/<时间戳>.png(vanilla grab 语义)。 */
+    /** Recorder run root is initialized once per client process. */
+    static {
+        dev.taclight.channel.FrameRecorder.setBaseDir(
+                net.minecraftforge.fml.loading.FMLPaths.GAMEDIR.get().toFile());
+    }
+
+    /** Frame-end screenshot execution. Reservation writes P synchronously; callback writes S/F by token. */
     @SubscribeEvent
     public static void onRenderTick(TickEvent.RenderTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;
         Minecraft mc = Minecraft.getInstance();
-        if (mc.level == null || !dev.taclight.channel.MotionCapture.armed()) return;
+        if (mc.level == null || mc.player == null) {
+            dev.taclight.channel.MotionCapture.shutdown("world-unload");
+            return;
+        }
+        if (!dev.taclight.channel.MotionCapture.armed()) return;
         long nano = System.nanoTime();
-        if (!dev.taclight.channel.MotionCapture.shotDue(nano)) return;
-        if (MCAP_PENDING.get() > 3) return;
-        java.io.File dir = new java.io.File(net.minecraftforge.fml.loading.FMLPaths.GAMEDIR.get().toFile(),
-                "mcap/s" + String.format("%04d", dev.taclight.channel.MotionCapture.sessionId()));
-        if (!dir.exists() && !dir.mkdirs()) return;
-        dev.taclight.channel.MotionCapture.onShot(nano);
+        long renderFrame = dev.taclight.channel.ClientSpotlightUploader.currentRenderFrame();
+        dev.taclight.channel.FrameRecorder.ShotToken token =
+                dev.taclight.channel.MotionCapture.reserveShot(nano, renderFrame);
+        if (token == null) return;
         MCAP_PENDING.incrementAndGet();
         try {
-            net.minecraft.client.Screenshot.grab(dir, mc.getMainRenderTarget(), p -> {
-                MCAP_PENDING.decrementAndGet();
-                TacLightMod.LOGGER.info("[TacLight] MCAP shot {}", p.getString());
+            net.minecraft.client.Screenshot.grab(token.sessionDir(), token.filename(), mc.getMainRenderTarget(), component -> {
+                try {
+                    boolean success = token.expectedFile().isFile();
+                    dev.taclight.channel.FrameRecorder.completeShot(token, success,
+                            success ? "ok" : "expected-file-missing");
+                    if (success) TacLightMod.LOGGER.info("[TacLight] REC shot {}", token.expectedFile());
+                    else TacLightMod.LOGGER.error("[TacLight] REC shot missing {} callback={}",
+                            token.expectedFile(), component.getString());
+                } finally {
+                    MCAP_PENDING.decrementAndGet();
+                }
             });
         } catch (Throwable t) {
             MCAP_PENDING.decrementAndGet();
-            TacLightMod.LOGGER.warn("[TacLight] MCAP grab failed: {}", t.toString());
+            dev.taclight.channel.FrameRecorder.completeShot(token, false,
+                    "grab-throw:" + t.getClass().getSimpleName());
+            TacLightMod.LOGGER.error("[TacLight] REC grab failed for {}", token.expectedFile(), t);
         }
     }
 
@@ -249,7 +265,8 @@ public class ClientEvents {
         if (event.phase != TickEvent.Phase.END) return;
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null || mc.player == null) {
-            // 退出世界后停摆 SSBO(清空灯光,防残留数据被后续上下文读到)
+            // 退出世界后可信关闭录制并停摆 SSBO；shutdown 幂等，可被多个 world-null hook 调用。
+            dev.taclight.channel.MotionCapture.shutdown("world-unload");
             dev.taclight.channel.LightBuffer.upload(java.util.List.of());
             return;
         }
@@ -276,6 +293,7 @@ public class ClientEvents {
         }
 
         ClientLightState.setGunLight(status == GunLaserReader.Status.OUR_LIGHT);
+        // Gun state remains tick-driven above; SSBO collection/upload occurs only in onRenderLevel.
         probeIfEnabled();
         checkShaderPackDiag(mc);
         if ("1".equals(System.getenv("TACLIGHT_PROBE")) && ++boardTick % 60 == 0) {
@@ -285,7 +303,6 @@ public class ClientEvents {
                     dev.taclight.channel.LightBuffer.binding7(),
                     Integer.toHexString(dev.taclight.channel.LightBuffer.readReserved()));
         }
-        dev.taclight.channel.ClientSpotlightUploader.onFrame();
         if (status != lastGunStatus) {
             TacLightMod.LOGGER.info("[TacLight] gun light {} ({})",
                     status == GunLaserReader.Status.OUR_LIGHT ? "ON" : "OFF", detail);

@@ -18,6 +18,7 @@ $OLogE  = Join-Path $SessionDir 'observer.log.err'
 $ALatest = Join-Path $Project 'run\logs\latest.log'
 $OLatest = Join-Path $Project 'run-observer\logs\latest.log'
 $RelayA  = Join-Path $Project 'run\taclight-cmds.txt'
+$Gradle = Join-Path $Project 'gradlew-java17.cmd'
 
 function Step([string]$m) { Write-Output ('[{0}] {1}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $m) }
 function Drv([string]$a, [string]$t = '', [string]$o = '') {
@@ -34,13 +35,15 @@ function Drv([string]$a, [string]$t = '', [string]$o = '') {
 New-Item -ItemType Directory -Force -Path $SessionDir | Out-Null
 $PrepLog = Join-Path $SessionDir 'mp-setup.log'
 Step 'PREP taclightMpSetup (observer options/oculus config) ...'
-& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Project 'gradlew-java17.ps1') 'taclightMpSetup' *> $PrepLog
+$prepCommand = ('"{0}" -p "{1}" taclightMpSetup > "{2}" 2>&1' -f $Gradle, $Project, $PrepLog)
+& cmd.exe /d /c $prepCommand
 if ($LASTEXITCODE -ne 0) { throw ('taclightMpSetup failed: see ' + $PrepLog) }
 Step 'PREP done'
 
 # 1. 玩家 A:复用 session.ps1(preflight/options/QuickPlay/READY 全套)
 Step 'PLAYER-A launching via session.ps1 ...'
 & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Tools 'session.ps1') -World $World
+if ($LASTEXITCODE -ne 0) { throw ('PLAYER-A session failed with exit code ' + $LASTEXITCODE) }
 Step 'PLAYER-A READY'
 
 # 2. A 开 LAN(/publish;test 存档 Cheats 开)
@@ -64,9 +67,9 @@ Step ('LAN port = ' + $port)
 
 # 4. 观察者 B(独立 run-observer 目录;低配 options 已由 taclightMpSetup 预置)
 New-Item -ItemType Directory -Force -Path $SessionDir | Out-Null
-$g = @('-NoProfile','-ExecutionPolicy','Bypass','-File', (Join-Path $Project 'gradlew-java17.ps1'),
+$g = @('-p', $Project,
        ('-PtaclightJoin=127.0.0.1:' + $port), '-PtaclightUser=ObserverB', 'runClientObserver')
-$obs = Start-Process -FilePath 'powershell' -ArgumentList $g -WorkingDirectory $Project `
+$obs = Start-Process -FilePath $Gradle -ArgumentList $g -WorkingDirectory $Project `
         -RedirectStandardOutput $OLog -RedirectStandardError $OLogE -WindowStyle Hidden -PassThru
 Step ('OBSERVER launching (pid=' + $obs.Id + ')')
 
@@ -75,7 +78,7 @@ $deadline = (Get-Date).AddMinutes(7)
 $ok = $false
 while ((Get-Date) -lt $deadline) {
   Start-Sleep -Seconds 6
-  if ((Test-Path $OLatest) -and (Select-String -Path $OLatest -Pattern 'logged in with entity id' -Quiet)) { $ok = $true; break }
+  if ((Test-Path $OLatest) -and (Select-String -Path $OLatest -Pattern 'LIGHT-SYNC-ACK' -Quiet)) { $ok = $true; break }
   if ($obs.HasExited) { throw 'OBSERVER exited early: 检查 tools/.session/observer.log' }
 }
 if (-not $ok) { throw 'OBSERVER READY timeout (7min): 检查 tools/.session/observer.log' }

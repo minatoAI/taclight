@@ -45,6 +45,11 @@ try {
   $nodeOut = & node imgdiff.test.js 2>&1
   Assert ($LASTEXITCODE -eq 0) ("node imgdiff.test.js 退出码 0: " + ($nodeOut | Select-Object -Last 1))
 
+  Write-Output '== [1b] rec-analyze.test.js (离线录制分析器) =='
+  $recOut = & node rec-analyze.test.js 2>&1
+  $recAuthority = @($recOut | Where-Object { $_ -match '^REC-ANALYZE-TEST PASS' }).Count -eq 1
+  Assert ($LASTEXITCODE -eq 0 -and $recAuthority) ("node rec-analyze.test.js 退出码 0 + 权威串: " + ($recOut | Select-Object -Last 1))
+
   Write-Output '== [2] 合成测试图 =='
   $pngA = Join-Path $WorkDir 'A.png'
   $pngB = Join-Path $WorkDir 'B.png'

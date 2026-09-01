@@ -84,6 +84,14 @@ public final class DebugCommandRelay {
             }
             return;
         }
+        if (line.equals("!rec") || line.startsWith("!rec ")) {
+            // 一键录制(09-01 深夜⑥,与 !mcap 同一状态机):on 后本地/远程任一运动
+            // 自动开录(逐帧 CSV + 60fps 截图),静止自动收窗。精确匹配防吞 !reload。
+            String arg = line.length() > 4 ? line.substring(4).trim() : "";
+            TacLightMod.LOGGER.info("[TacLight] RELAY rec -> {}",
+                    dev.taclight.channel.MotionCapture.configure(arg));
+            return;
+        }
         if (line.startsWith("!diag")) {
             ClientEvents.dumpDiag();
             return;

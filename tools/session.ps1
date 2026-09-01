@@ -15,6 +15,7 @@ $Drive   = Join-Path $Tools 'drive.ps1'
 $Log     = Join-Path $RunDir 'logs\latest.log'
 $OptTxt  = Join-Path $RunDir 'options.txt'
 $SessionDir = Join-Path $Tools '.session'
+$Gradle = Join-Path $Project 'gradlew-java17.cmd'
 
 function Step([string]$m) { Write-Output ('[{0}] {1}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $m) }
 function Drv([string]$a, [string]$t = '', [string]$o = '') {
@@ -64,8 +65,8 @@ if ($NoLaunch) { Step 'NOLAUNCH: 只做 preflight/pref,跳过启动'; exit 0 }
 # 2. 后台启动 runClient(QuickPlay 自动进存档;控制台重定向供排障)
 New-Item -ItemType Directory -Force -Path $SessionDir | Out-Null
 $console = Join-Path $SessionDir 'console.log'
-$gArgs = @('-NoProfile','-ExecutionPolicy','Bypass','-File', (Join-Path $Project 'gradlew-java17.ps1'), ('-PtaclightQuickPlay=' + $World), 'runClient', '--offline')
-Start-Process -FilePath 'powershell' -ArgumentList $gArgs -WorkingDirectory $Project -RedirectStandardOutput $console -RedirectStandardError ($console + '.err') -WindowStyle Hidden
+$gArgs = @('-p', $Project, ('-PtaclightQuickPlay=' + $World), 'runClient', '--offline')
+Start-Process -FilePath $Gradle -ArgumentList $gArgs -WorkingDirectory $Project -RedirectStandardOutput $console -RedirectStandardError ($console + '.err') -WindowStyle Hidden
 Step ('LAUNCH started (quickPlay=' + $World + ')')
 
 # 3. 就绪等待:游戏窗口存在 + 日志登录标记(最多 7 分钟)

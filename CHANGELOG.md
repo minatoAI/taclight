@@ -1,5 +1,69 @@
 # TacLight Changelog
 
+## 未提交 · 09-02 凌晨(!rec 可信录制器实机通过,待独立里程碑提交)
+
+- **schema/集成门已对齐**:`S/F=type,t,frame,seq,filename...`;footer `dropped=ΣD.count`。
+  Node fixture 改为生产布局并加入 D 两行/count 总和 5 的反漂移用例；Java
+  `FrameRecorderContract` 直接产出 CSV+PNG 后调用真实 `rec-analyze.js`，防止两边各自绿。
+- **生产协议**:唯一 run/session 目录、ShotToken、显式 `shot-%06d.png`、C/L/R/P/S/F/D、
+  pending 清零后 footer、纳秒 deadline accumulator、每渲染帧唯一采样、world-unload 幂等
+  封口；header 固化 `targetFps`，分析器严格核对 footer/token/PNG 精确集合和渲染帧单调性。
+- **双端实机 canary(ObserverB 走动,Dev 远程灯静止)**:目标 60fps，最终会话
+  `run-20260902-012910-105-p18948/s0002` 为 **138 C/P/S + 138 PNG、F=0、D=0、
+  2.292s、实际 59.773fps**；无 ≤5ms 双采样；L 灯锚/方向与 R 远程显示位置 range=0。
+  严格分析器 `REC-ANALYZE PASS`。证据 `docs/evidence/2026-09-02-recorder-canary/`。
+- **权威门**:`REC-ANALYZE-TEST PASS (56)`、`FrameRecorderContract ALL PASS (22)`、
+  `MotionCaptureContract ALL PASS (20)`、`TOOLS-SELFTEST PASS`、`AllContracts: ALL PASS`。
+- **启动器顺手修复(同一调试基础设施范围)**:`session/mp-session` 改走规定的
+  `gradlew-java17.cmd` 并显式 `-p taclight`;A 子会话失败向父级传播；B READY 改判
+  客户端真实 `LIGHT-SYNC-ACK`，不再等待只出现在服务端的 `logged in with entity id`。
+- **因果注释纠错**:保留“手持/fallback 锚玩家眼位”的行为事实，明确 vanilla bob 位于
+  projection、不写 Java Camera.position；录制器完成不代表条纹根因已确认。下一步才加
+  `!bob` 并执行 bob×voxel 四臂 ABBA，证据前仍禁止改 DDA。
+
+## 暂停点 · 09-01 深夜⑥(!rec 可信录制器已实现,待 schema 对齐+实机 canary;条纹根因未改)
+
+- **用户目标**:先把调试环境提效成 `!rec`——布防后本地/远程一运动即自动开窗,
+  按目标 60fps 截最终画面并逐渲染帧记录 C/L/R,双通道静止后自动封口;再用它定位
+  “观察者移动时地面条纹随视角晃动节奏放大”,确认根因后才修渲染算法。
+- **关键纠错(本地 1.20.1 Forge/Oculus 1.8.0 字节码已核实)**:`GameRenderer.bobView`
+  只修改 projection 用的局部 PoseStack,不写 `Camera.position`/Java camera rotation;
+  Oculus `cameraPosition` 仍读 main Camera。故 9530b09 的“手持/fallback 枪灯改锚玩家眼位”
+  是真实改动,但“vanilla bob 注入 Camera.position”因果解释已推翻。现有截图观测保留,
+  机制须重做正交 A/B;旧 CHANGELOG/证据/契约注释尚待本轮收尾更正。
+- **当前最强候选但尚未实证**:09-01 新增 1 格体素 DDA 的硬离散边界/tie 语义可能把
+  画面 bob 的屏幕采样位移放大为周期条纹;也可能是纯 projection 视差/bloom/体积链。
+  **未改 GLSL、未宣布根因**。下一步必须先做 bob on/off × `!voxel on/off` 四臂 ABBA。
+- **`!rec` Java 侧已完成(TDD)**:
+  - 唯一目录 `mcap/run-<wallclock>-p<pid>[-n]/sNNNN`,不再跨重启复用 s0001;
+  - 不可变 ShotToken 固定 session/seq/frame/显式 `shot-%06d.png`,CSV 为 C/L/R/P/S/F/D;
+  - closing 与 current 会话并存,异步回调写回原会话,pending 清零后才写 footer;
+  - 60fps 纳秒 deadline accumulator,跨 deadline 写 D;max 边界 token 归旧会话后翻窗;
+  - C/L/R 只从 RenderLevelStage 每渲染帧采一次(ClientTick 重复 onFrame 已删除),
+    C 位置 1e-5 精度并记录 walkDist/walkDistO/bob/oBob/bobEnabled;
+  - off/re-arm/world-unload 清参考并幂等封口。FrameRecorderContract 19 +
+    MotionCaptureContract 20 全绿。
+- **分析器候选已实现但暂停在集成审查**:`tools/rec-analyze.js` 严格 footer/token/PNG
+  完整性、50 张分批 lumastats、真实时间 lag、L/R 不变量;`rec-analyze.test.js` 55 项绿,
+  已接 `tools/selftest.ps1`。刚修了真实 header 可识别 `TacLight rec` 的一行,但发现两处
+  **尚未对齐,重启后先修**:
+  1. Java `S/F = type,t,frame,seq,filename...`,分析器当前把第 3 列误读为 seq;
+  2. Java footer `dropped` 是所有跳过 deadline 的总数,单条 D 可含 count>1;分析器当前
+     错拿 `dropped == D 行数`。应统一 S/F 列索引,并用 `ΣD.count` 校验 footer。
+  测试 fixture 也要改成真实 Java schema,防止“两边各自绿、集成仍红”。
+- **暂停时权威结果**:`gradlew-java17.cmd taclightContracts` 通过:
+  `REC-ANALYZE-TEST PASS (55 checks)`、`TOOLS-SELFTEST PASS`、
+  `MotionCaptureContract ALL PASS (20)`、`FrameRecorderContract ALL PASS (19)`、
+  `AllContracts: ALL PASS`、`BUILD SUCCESSFUL in 18s`。该门运行在 schema 交叉审查前,
+  因 fixture 漂移不能替代待做的真实 canary。
+- **工作树/环境暂停事实**:HEAD 仍为 `9530b09`,无 commit/push;10 个目标源码/工具文件
+  保持未提交(另有 `tools/.selftest-rec-analyze/` 临时目录待确认后清理);系统重启前未发现
+  java/javaw 游戏进程,无需关服。没有创建本轮 evidence 包。
+- **重启后的第一段工作**:①查 `git status`;②修上述 schema+fixture,跑 node 测试与完整
+  contracts;③启动双端一次做 `!rec` canary(OPEN/CLOSE/footer、P=S+F、ΣD、PNG 精确集合、
+  render C 无 1–5ms 双采样、实际 FPS);④ canary 绿后才加 `!bob` 并跑四臂 ABBA;
+  ⑤按证据决定是否给 DDA tie 写红灯/修复。禁止直接按当前假设改 GLSL。
+
 ## 未提交 · 09-01 深夜⑤(第一人称灯锚 view-bob 根治:"地面条纹随观察者视角晃动同频放大")
 
 - **定位(用户报:观察另一个玩家的灯光光晕时,观察者移动则地面条纹随视角晃动

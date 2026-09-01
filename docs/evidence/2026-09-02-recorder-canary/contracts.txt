@@ -1,0 +1,296 @@
+To honour the JVM settings for this build a single-use Daemon process will be forked. See https://docs.gradle.org/8.1.1/userguide/gradle_daemon.html#sec:disabling_the_daemon.
+Daemon will be stopped at the end of the build 
+
+> Configure project :
+Java: 17.0.20, JVM: 17.0.20+8 (Eclipse Adoptium), Arch: amd64
+
+> Task :compileJava UP-TO-DATE
+> Task :processResources UP-TO-DATE
+> Task :classes UP-TO-DATE
+> Task :compileTestJava UP-TO-DATE
+
+> Task :taclightToolsSelftest
+== [1] imgdiff.test.js (node ???) ==
+  ok  node imgdiff.test.js ????? 0: imgdiff.test.js: ALL PASS (15 checks)
+== [1b] rec-analyze.test.js (????????????) ==
+  ok  node rec-analyze.test.js ????? 0 + ?????: REC-ANALYZE-TEST PASS (56 checks)
+== [2] ??????? ==
+  ok  ????????
+== [3] imgdiff CLI(A vs B) ==
+  ok  imgdiff changed>=5200(????2400+?2827), ??? 5202
+  ok  imgdiff bbox ???????+?
+  ok  ???????
+== [4] griddiff(8x8 ????) ==
+  ok  griddiff ????????????(c2,r2)
+  ok  griddiff ???????????(c5,r5)
+  ok  griddiff ????>=2, ??? 14
+== [5] clusterprobe(????) ==
+  ok  clusterprobe green ????=1, ??? 1
+  ok  ??????(180,120)??3, ??? (180,121)
+  ok  ????????2827??500, ??? 2802
+  ok  clusterprobe red ????=1, ??? 1
+  ok  ???????(65,48)??3, ??? (64.5,47.5)
+  ok  ?????? 2400??300, ??? 2400
+== [6] stylemetrics(?????) ==
+  ok  ????: SAT/SHADOW/CONTRAST/TEMPAXIS ? 0
+  ok  ????: SAT=1
+  ok  ????: SHADOW=1(Rec.709 luma=0.2126<0.25)
+  ok  ????: TEMPAXIS=-4.7037, ??? -4.7037
+  ok  ?????????? 2 ??
+  ok  ??128: SHADOW=0(0.502>=0.25)
+  ok  ??20: SHADOW=1(0.078<0.25)
+== [7] acceptance(????????/???/?????,?????) ==
+  ok  acceptance centroid ????(0.547,0.495)??0.01, ??? (0.5449,0.4922)
+  ok  acceptance centroid frac??0.034(????????), ??? 0.0428
+  ok  acceptance align ????? = PASS
+  ok  acceptance align ????40px(0.156>0.05) = FAIL
+  ok  acceptance side ???????(0.547??[0.49,0.58]) = PASS
+  ok  acceptance side ?????(0.273) = FAIL(???????)
+  ok  acceptance side ?????? = FAIL(????????????)
+TOOLS-SELFTEST PASS
+
+> Task :processTestResources NO-SOURCE
+> Task :testClasses UP-TO-DATE
+
+> Task :taclightContracts
+== GunLaserReaderContract ==
+  PASS 无枪(枪id null)→ NONE
+  PASS 有枪无激光 → NONE
+  PASS 空激光id → NONE
+  PASS 他人激光 → OTHER_LASER(不点亮)
+  PASS 我们的附件 → OUR_LIGHT
+  PASS 其他枪+我们的灯 → OUR_LIGHT
+GunLaserReaderContract: ALL PASS (6 checks)
+== SpotlightBufferLayoutContract ==
+  PASS 第2灯偏移=112
+  PASS 第8灯偏移(定长数组内)
+  PASS voxOrigin 紧跟 8 灯
+  PASS voxOrigin 16B 对齐(std430 vec4)
+  PASS voxMeta 偏移
+  PASS voxData 偏移
+  PASS VOX_MAX_UINTS=2bit 打包 128^3
+  PASS 缓冲=定长布局
+  PASS 无效位=w<0(GLSL 回退 SSO)
+  PASS voxOrigin 写入+有效位
+  PASS voxMeta 写入
+  PASS lightCount=1
+  PASS flags=HAS_DATA
+  PASS FLAG_HAS_DATA=1
+  PASS FLAG_DEBUG=2
+  PASS FLAG_TIMING_PROBE=8
+  PASS flag bits distinct
+  PASS posX roundtrip
+  PASS posY roundtrip
+  PASS dirZ roundtrip (normalized)
+  PASS cosOuter roundtrip
+  PASS intensity roundtrip
+  PASS type=1 spot
+SpotlightBufferLayoutContract: ALL PASS (23 checks)
+== VoxelFieldContract ==
+  PASS ox=floor(minX)
+  PASS oy=floor(minY)
+  PASS dx=ceil(max)-floor(min)
+  PASS dims≤MAX_DIM
+  PASS 灯心在盒内
+  PASS 远灯 x 轴钳到 128
+  PASS 其余轴仍≤128
+  PASS GLSL 位序读回=CODE_SOLID
+  PASS unpack=CODE_SOLID
+  PASS 相邻体素不受污染
+  PASS 同字双体素独立
+  PASS 重写覆盖旧码
+  PASS snapshot 字段直传
+  PASS usedUints=ceil(voxels/16)
+  PASS 小半径盒非退化
+VoxelFieldContract: ALL PASS (14 checks)
+== UploaderSemanticContract ==
+  PASS posX == world x(无眼位减法)
+  PASS posY == world y
+  PASS posZ == world z
+  PASS type=1 spot
+  PASS 内外锥 cos 直传
+  PASS dir 归一化(spot() 内部行为)
+  PASS 参考亮度=基准半径 56(√1)
+  PASS intensity 直传
+  PASS 亮度×2 → 半径×√2 ≈ 79.20
+  PASS intensity ×2 = 12
+  PASS 半径钳制 ≤ radiusMax(90亮度→√15×56→钳96)
+  PASS 亮度×0.05 → 半径×√0.05 ≈ 12.52(暗光短照)
+  PASS 重复构造逐位一致
+  PASS 朝北看右手=东 (+1,0,0)
+  PASS 朝东看右手=南 (0,0,+1)
+  PASS 朝南看右手=西 (-1,0,0)
+  PASS 朝西看右手=北 (0,0,-1)
+  PASS 斜视向:右手垂直于视线且归一化
+  PASS 斜视向:right = look×up = (-lz,0,lx)
+  PASS 手持偏移沿视线分量 = +0.35
+  PASS 手持偏移沿右手分量 = +0.22(右手侧!)
+  PASS 朝东看手持偏移向南(z=+0.22,右手侧)
+  PASS 手持偏移垂直分量 = -0.14
+  PASS 枪灯回退偏移沿视线分量 = +0.55
+  PASS 枪灯回退偏移沿右手分量 = +0.18(右手侧!)
+  PASS 枪灯回退偏移垂直分量 = -0.10
+  PASS 默认灯 cookie w=0(自体胶囊未启用)
+  PASS withSelfCapsule 写入 (灯→胶囊中心偏移.xyz, 半径)
+  PASS withSelfCapsule 不改变布局其余字段(灯位/半径/亮度原样)
+  PASS selfCapped:cookie 偏移 = (眼位?0.55y) ? 灯位
+  PASS selfCapped:cookie w = 常量 SELF_CAP_RADIUS(>0 启用)
+  PASS selfCapped 不改变布局其余字段
+  PASS 测试前提:相机眼与玩家眼位确有 bob 差(>5cm)
+  PASS FP 灯锚 = 玩家眼位(不取带 bob 的相机眼)
+  PASS 灯锚值 = 玩家眼位(无 bob 分量,坐标原样)
+UploaderSemanticContract: ALL PASS (32 checks)
+== MuzzlePoseMathContract ==
+  PASS identity valid
+  PASS identity origin zero
+  PASS identity forward = -Z
+  PASS identity up = +Y
+  PASS translated matrix valid
+  PASS origin translation extracted
+  PASS forward normalized
+  PASS wrong length rejected
+  PASS degenerate rejected
+  PASS laser_beam supported
+  PASS laser_beam_2 supported
+  PASS other node rejected
+MuzzlePoseMathContract: ALL PASS (11 checks)
+== ScenePlanContract ==
+ScenePlanContract: ALL PASS (204 checks)
+== MultiLightCollectorContract ==
+  PASS 恰好 = maxDist 保留(≤ 语义)
+  PASS > maxDist 丢弃
+  PASS 无设备候选被过滤,不占就近名额
+  PASS 上限=2 只留 2 个
+  PASS 按距离升序就近保留(5m,12m)
+  PASS 选中保留设备开关语义(handheld+gun)
+  PASS 等距保持输入序(稳定,先入先留)
+  PASS 空输入 → 空
+  PASS maxLights=0 → 空
+  PASS 远程手持灯 = 玩家眼位 + handheldOffset(world 直传,无相机减法)
+  PASS 远程枪灯近似锚眼位+0.45look,强度=GUN_MULTIPLIER
+MultiLightCollectorContract: ALL PASS (11 checks)
+== RemoteLookPredictorContract ==
+2026-09-02 01:32:17,148 main WARN Advanced terminal features are not available in this environment
+  PASS 首见直取:ext=ω×ticks=11.25(无爬坡)
+  PASS 零角速度通道外推为 0
+  PASS 稳态收敛 11.25(EMA 对恒值目标无衰减),实际 11.25
+  PASS 急停 1.5s 后残量 <2°,实际 8.0934285E-8
+  PASS 传送级 ω 被钳到角上限 12,实际 12.0
+  PASS 传送后下一帧回落且有界
+  PASS 负 ω 对称:yawExt→-7.5,实际 -7.5
+  PASS 俯仰通道独立:ext→-2.5,实际 -2.5
+  PASS off 直通:ext 恒 0
+  PASS off 期间状态被清:重开后首见直取
+  PASS 陈旧状态作废:复现即首见直取
+  PASS ticks=3 时目标 27 被钳到 12,实际 12.0
+  PASS 空参 = 状态查询
+  PASS log on 可开
+  PASS 非法参数报错不炸
+RemoteLookPredictorContract: ALL PASS (15 checks)
+== RemoteBaseSnapContract ==
+RemoteBaseSnapContract: PASS (25/25)
+== RemotePosSnapContract ==
+RemotePosSnapContract: PASS (21/21)
+== LookTraceContract ==
+PASS: 默认不采集
+PASS: 空参返回状态含 off: off
+PASS: configure(120) 后采集开启
+PASS: 首帧发 START 标记(含 id/type)
+PASS: START 标记带窗口剩余帧数
+PASS: 全部数据行匹配固定格式正则(50 行,含 pos/tgt/disp 字段)
+PASS: 首行相对时间为 0: [TacLight] LOOKTRACE t=0.0 pt=0.5000 hO=-179.000 hC=-178.000 bO=0.000 bC=0.200 pO=10.000 pC=11.000 base=(-179.100,10.500) om=1.000 ext=1.250 posO=(10.50,64.00,-3.25) posC=(10.75,64.00,-3.00) tgt=(10.800,64.100,-3.100) disp=(10.900,64.150,-3.050)
+PASS: 相对时间单调不减
+PASS: 目标变更时发新 START 标记
+PASS: 剩余帧耗尽自动停
+PASS: 窗口结束发 END 标记
+PASS: 自动停后状态回 off
+PASS: 停止后 row 不产生输出
+PASS: 手动 off 幂等不抛
+PASS: 超大帧数钳到 7200: on(7200 帧,自动停)
+PASS: 过小帧数钳到 60: on(60 帧,自动停)
+PASS: configure(on) 开启门控模式
+PASS: 门控模式 START 标记剩余=gated
+PASS: 门控模式超 7200 帧不自动停
+PASS: 门控模式手动 off 发 END(why=手动)
+PASS: 门控 off 后 row 静默
+PASS: 门控收窗后状态回 off
+LookTraceContract: ALL PASS (22 checks)
+== MotionCaptureContract ==
+PASS: 默认未布防
+PASS: status 显示 target fps=60
+PASS: re-arm 第一采样只建远程/本地基线
+PASS: 超过阈值开启 s0001
+PASS: 首 deadline 立即 reserve token
+PASS: 60fps: 16ms 尚未到 round(1e9/60) deadline
+PASS: 60fps: 16,666,667ns 到第二 deadline
+PASS: 跨 deadline 仍只预留当前截图 token
+PASS: max 边界 token 归旧会话后才 close/reopen
+PASS: rollover 新会话计数清零
+PASS: deadline accumulator 记录跨过的两个 D dropped
+PASS: rollover 旧会话 footer counters 完整
+PASS: off 撤防
+PASS: off 关闭 current session
+PASS: 重新 on 后第一采样只重建基线
+PASS: re-arm 后第二采样运动正常开新会话
+PASS: world-unload shutdown 幂等关闭/撤防
+PASS: world-unload 后第一远程/本地采样只建基线
+PASS: fps 接受 double 并显示目标值
+PASS: periodNs=round(1e9/fps)
+MotionCaptureContract: ALL PASS (20 checks)
+== FrameRecorderContract ==
+PASS: runDir 位于唯一 mcap/run-* 层级
+PASS: runDir 名含 wallclock/pid/collision suffix: run-20260902-013217-487-p12172
+PASS: 生产 header 固化目标 FPS 元数据
+PASS: 暴露当前会话目录与 label
+PASS: C 行包含 walkDist/walkDistO/bob/oBob/bobEnabled 新列
+PASS: C 世界位置至少 1e-5 精度: 2004.12346,2004.12346
+PASS: C 真实 bob 驱动列值
+PASS: reserveShot 返回不可变 token 并同步编号
+PASS: token 携带显式文件名/目录/expected file
+PASS: reserveShot 同步写 P 行
+PASS: pending>0 时延迟 footer/close
+PASS: closing 与 current session 可并存
+PASS: close 后 callback 仍写回旧会话 S
+PASS: footer 含 rows/requested/succeeded/failed/dropped/reason counters
+PASS: 新会话独立 P 序号
+PASS: 失败 callback 写 F 行
+PASS: 调度丢帧写 D 行
+PASS: footer 汇总 P/S/F/D counters
+PASS: 同 baseDir 两次 run 不复用目录
+PASS: 正常 I/O 无硬失败状态
+PASS: Java 生产 CSV 可由实际 Node 分析器消费: REC-ANALYZE PASS session=s0001 C=2 shots=2 duration=0.020s actualFps=50.000
+summary -> C:\Users\20506\AppData\Local\Temp\taclight-rec-contract7881540568540652245\mcap\run-20260902-013217-519-p12172\s0001\summary.json
+PASS: 跨语言集成保留 shot frame/seq 与 ΣD.count
+FrameRecorderContract: ALL PASS (22 checks)
+== PlayerLightSyncContract ==
+  PASS mixins.json 有公共 mixins 列表
+  PASS PlayerSynchedDataMixin 在公共列表(非 client)
+  PASS Player 同步 mixin 旁路 TaCZ 门控(恒 true)
+  PASS TaCZ 专属 mixin 门控值 == TaczCompat.present()(true)
+[01:32:19] [main/WARN] [minecraft/SynchedEntityData]: defineId called for: class net.minecraft.world.entity.player.Player from class dev.taclight.sync.PlayerLightAccess
+[01:32:19] [main/WARN] [minecraft/SynchedEntityData]: defineId called for: class net.minecraft.world.entity.player.Player from class dev.taclight.sync.PlayerLightAccess
+  PASS 两个 EntityDataAccessor 定义成功(Bootstrap 后静态初始化)
+  PASS accessor id 互异
+  PASS 离线 JVM 无 mixin 应用:syncReady=false(读侧优雅降级)
+  PASS C2S wire = 2 字节(双布尔)
+  PASS C2S 回环 (true,false)
+  PASS S2C wire = 2 字节
+  PASS S2C 回环 (false,true)
+PlayerLightSyncContract: ALL PASS (10 checks)
+== LightStatePersistenceContract ==
+PASS: 未写过时 present=false
+PASS: 回环 handheld=true gun=true
+PASS: 回环 handheld=true gun=false
+PASS: 回环 handheld=false gun=true
+PASS: 回环 handheld=false gun=false
+PASS: 旗标落在 persisted 子树
+PASS: 枪灯旗标同子树
+PASS: forgeData 同级键不受影响
+PASS: persisted 子树他模组键不受影响
+PASS: 重复写覆盖旧值
+PASS: 裸键不入读(仅认 persisted 子树)
+LightStatePersistenceContract: ALL PASS (11 checks)
+AllContracts: ALL PASS
+
+BUILD SUCCESSFUL in 15s
+5 actionable tasks: 2 executed, 3 up-to-date

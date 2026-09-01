@@ -2,6 +2,7 @@ package dev.taclight;
 
 import dev.taclight.channel.LookTraceContract;
 import dev.taclight.channel.MotionCaptureContract;
+import dev.taclight.channel.FrameRecorderContract;
 import dev.taclight.channel.MultiLightCollectorContract;
 import dev.taclight.channel.RemoteBaseSnapContract;
 import dev.taclight.channel.RemotePosSnapContract;
@@ -42,6 +43,8 @@ public class AllContracts {
         LookTraceContract.main(args);
         System.out.println("== MotionCaptureContract ==");
         MotionCaptureContract.main(args);
+        System.out.println("== FrameRecorderContract ==");
+        FrameRecorderContract.main(args);
         System.out.println("== PlayerLightSyncContract ==");
         PlayerLightSyncContract.main(args);
         System.out.println("== LightStatePersistenceContract ==");

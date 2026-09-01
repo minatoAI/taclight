@@ -60,8 +60,10 @@ public final class ClientSpotlightUploader {
     private ClientSpotlightUploader() {}
 
     public static void onFrame() {
+        recFrame++;
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null || mc.player == null) {
+            MotionCapture.shutdown("world-unload");
             LightBuffer.upload(List.of());
             return;
         }
@@ -75,15 +77,12 @@ public final class ClientSpotlightUploader {
         // Freecam/旁观修正(旁观视角与多人调试方案.md §2):相机实体不是本地玩家时
         // (Freecam 分离相机)一律锚玩家,防止灯跟着观察相机跑。
         boolean fp = mc.options.getCameraType().isFirstPerson() && cam.getEntity() == mc.player;
-        // F2(2026-08-30):自体胶囊基准 —— 玩家眼位(SSO 豁免用,与灯锚解耦;
-        // FP 的 view-bob 微差可忽略,胶囊半径 0.45 覆盖)。
+        // F2 自体胶囊基准为玩家眼位；相机眼只表示本帧相机位置，不能当作 bob 信号。
         Vec3 playerEye = mc.player.getEyePosition(mc.getPartialTick());
         if (ClientLightState.isOn()) {
-            // 世界空间锚定(第三人称/他人视角需求,Handheld Moon 型效果的行为前提):
-            // 锚一律取玩家眼位(2026-09-01 修复:旧行为 FP 锚相机眼球,而相机眼含行走
-            // view-bob ±~0.09m@~1.3Hz,灯源高度同频振荡 → 地面光池"条纹随观察者视角
-            // 晃动同频放大"根因,详见 spotAnchor);视线仍取相机(所见即所照)。
-            // 光锥本体(体积光束)由 M3 composite1 raymarch 呈现。
+            // 世界空间锚定:手持灯锚取玩家眼位，视线仍取实际观察相机(所见即所照)；
+            // 这保证第一/第三人称与 Freecam 的灯源归属语义一致。vanilla view-bob 位于
+            // projection，不写 Java Camera.position；不能把本锚点规则解释成 bob 根治。
             Vec3 anchor = spotAnchor(eye, playerEye);
             Vec3 lookDir = fp ? look : mc.player.getLookAngle();
             SpotlightData hand = toSpot(anchor.add(handheldOffset(lookDir)), lookDir, cfg, 0.9f);
@@ -103,7 +102,7 @@ public final class ClientSpotlightUploader {
             } else {
                 // F4(2026-08-30):非第一人称(或枪口姿态未捕获)禁止锚相机——
                 // TP 下灯浮在观察相机上(0830 R4.2"TP 枪灯 fallback 锚相机")。
-                // 与手持灯同一规则(09-01):锚一律玩家眼位(bob-free),视线 FP 用相机。
+                // 与手持灯同一规则(09-01):锚一律玩家眼位,视线 FP 用相机。
                 Vec3 gAnchor = spotAnchor(eye, playerEye);
                 Vec3 gLook = fp ? look : mc.player.getLookAngle();
                 SpotlightData gun = toSpot(gAnchor.add(gunFallbackOffset(gLook)), gLook, cfg,
@@ -117,9 +116,31 @@ public final class ClientSpotlightUploader {
         // 禁用/无灯 → null,GLSL 逐光线回退屏幕空间 SSO。
         var voxelGrid = dev.taclight.client.VoxelGrid.update(mc, lights);
         LightBuffer.upload(lights, extraFlags, voxelGrid);
+        if (FrameRecorder.active()) {
+            long t = System.nanoTime() / 1_000_000L;
+            // C 行明确区分相机眼/玩家眼位，并记录 vanilla bobView 的真实驱动字段。
+            FrameRecorder.append(FrameRecorder.cameraRow(t, recFrame,
+                    eye.x, eye.y, eye.z, mc.player.getYRot(), mc.player.getXRot(),
+                    mc.player.getX(), mc.player.getY(), mc.player.getZ(),
+                    playerEye.x, playerEye.y, playerEye.z,
+                    mc.player.walkDist, mc.player.walkDistO, mc.player.bob, mc.player.oBob,
+                    mc.options.bobView().get()));
+            // L 行:每灯一次(顺序=SSBO 顺序,自身/枪/远程)
+            for (int i = 0; i < lights.size() && i < 8; i++) {
+                SpotlightData s = lights.get(i);
+                FrameRecorder.append(FrameRecorder.lightRow(t, recFrame, i,
+                        s.posX(), s.posY(), s.posZ(), s.dirX(), s.dirY(), s.dirZ(),
+                        s.radius(), s.intensity(), s.cosOuter(), s.cosInner()));
+            }
+        }
         lookTraceTick(mc);
         dumpDiagOnce();
     }
+
+    /** Monotonic render-hook frame number used by all C/L/R/P/S/F/D rows. */
+    private static long recFrame;
+
+    public static long currentRenderFrame() { return recFrame; }
 
     /** 消融探针胶水(09-01):!looktrace 激活时逐帧记录最近非自身 LivingEntity 的角度链路;
      *  09-01 晚兼作 MotionCapture 门控输入(布防时每帧喂位姿,会话开/关联动 LookTrace 门控模式)。 */
@@ -129,6 +150,13 @@ public final class ClientSpotlightUploader {
     private static void lookTraceTick(Minecraft mc) {
         boolean mcapArmed = dev.taclight.channel.MotionCapture.armed();
         if (!dev.taclight.channel.LookTrace.active() && !mcapArmed) return;
+        long nano = System.nanoTime();
+        // 本地(观察者)通道(09-01 深夜⑥):自身走路/转视角同样门控 —— 必须先于
+        // 远程目标扫描(best==null 时本地运动仍要记录，观察者运动场景正是"对方灯不动")。
+        if (mcapArmed) {
+            dev.taclight.channel.MotionCapture.observeLocal(mc.player.getYRot(), mc.player.getXRot(),
+                    mc.player.getX(), mc.player.getY(), mc.player.getZ(), nano);
+        }
         net.minecraft.world.entity.LivingEntity best = null;
         double bestD = 48.0 * 48.0;
         for (var ent : mc.level.entitiesForRendering()) {
@@ -137,7 +165,6 @@ public final class ClientSpotlightUploader {
             if (d < bestD) { bestD = d; best = le; }
         }
         if (best == null) return;
-        long nano = System.nanoTime();
         if (mcapArmed) {
             dev.taclight.channel.MotionCapture.observe(best.getId(), best.yHeadRot, best.getXRot(),
                     best.getX(), best.getY(), best.getZ(), nano);
@@ -194,6 +221,13 @@ public final class ClientSpotlightUploader {
                 pt, hO, hC, bO, bC, pO, pC, baseYaw, basePitch, omYaw, rowExt,
                 best.xo, best.yo, best.zo, best.getX(), best.getY(), best.getZ(),
                 tX, tY, tZ, dX, dY, dZ);
+        // R 行(09-01 深夜⑥):与 LOOKTRACE 同值的 CSV 副本,会话期内离线拼链路
+        if (dev.taclight.channel.FrameRecorder.active()) {
+            FrameRecorder.append(FrameRecorder.remoteRow(nano / 1_000_000L, recFrame, best.getId(), pt,
+                    hO, hC, bO, bC, pO, pC, baseYaw, basePitch, omYaw, rowExt,
+                    best.xo, best.yo, best.zo, best.getX(), best.getY(), best.getZ(),
+                    tX, tY, tZ, dX, dY, dZ));
+        }
     }
 
     /** SSBO 硬上限(LightBuffer/GLSL 两侧同值 8;自身灯优先,远程补足余量)。 */
@@ -293,13 +327,13 @@ public final class ClientSpotlightUploader {
     public static final float INTENSITY_REFERENCE = 6.0f;
 
     /** 灯源锚点(2026-09-01 "地面条纹随观察者视角晃动同频放大"修复):
-     *  旧行为 FP 锚相机眼球(cam.getPosition()),而相机眼含行走 view-bob(±~0.09m @
-     *  ~1.3Hz,原版 bobView 注入相机位置)——灯源高度同频振荡,地面光池半径/亮度随之
-     *  同频脉动,再经 bloom 软阈值带放大成可见的"有节奏放大"。统一锚玩家眼位
-     *  (getEyePosition,bob-free,与 SSO 豁免胶囊同源);freecam/TP 语义不变。
+     *  第一人称灯若锚渲染相机眼位，灯源会耦合相机变换并令地面光池同频脉动。
+     *  统一锚玩家眼位(getEyePosition,与 SSO 豁免胶囊同源);真实 bob 分析必须读取
+     *  walkDist/walkDistO/bob/oBob/bobView，而不能把 cameraEye-playerEye 冒充 bob。
+     *  freecam/TP 语义不变。
      *  ⚠ 契约:taclightContracts → UploaderSemanticContract §7 钉死"FP 锚 = 玩家眼位"。
-     *  @param cameraEye 相机眼球(可能含 bob,仅诊断/旁路用)  @param playerEye 玩家眼位
-     *  @return 玩家眼位(bob-free) */
+     *  @param cameraEye 渲染相机眼位(仅诊断/旁路用)  @param playerEye 玩家眼位
+     *  @return 玩家眼位 */
     public static Vec3 spotAnchor(Vec3 cameraEye, Vec3 playerEye) {
         return playerEye;
     }
