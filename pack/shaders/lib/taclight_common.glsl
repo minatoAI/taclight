@@ -53,7 +53,12 @@ layout(std430, binding = 7) buffer TacLightSSBO {
 };
 
 // ---- 各阶段矩阵约定(doc06 §2.2 表)----
-uniform mat4 gbufferModelView;         // composite/final:纯旋转(R-only)
+// 2026-09-02 更正:gbufferModelView = R·T **含 bob 平移**(bobView 写进渲染
+// PoseStack,Iris 原样捕获;旧注释"R-only"是错误前提,曾致 mat3-only 换算把
+// ±bob 位移注入世界/视图坐标=影子随步频跳位,见坑57)。方向向量用 mat3 仍正确
+// (平移对方向无意义,且 bob 微转两侧一致)。
+uniform mat4 gbufferModelView;         // composite/final:R·T(含 bob 平移!)
+uniform mat4 gbufferModelViewInverse;  // 全矩阵逆(view→world 必须用它抵消 bob 平移)
 uniform mat4 gbufferProjection;        // view→clip(composite 中有效)
 uniform mat4 gbufferProjectionInverse; // clip→view(深度重建用)
 uniform vec3 cameraPosition;
@@ -68,9 +73,11 @@ vec3 taclight_world_to_scene(vec3 worldPos) {
     return worldPos - cameraPosition;
 }
 
-/** 场景相对 → 视图空间。composite/final 阶段 gbufferModelView 是 R-only,只能乘 |mat3|。 */
+/** 场景相对 → 视图空间。**必须用全矩阵**:gbufferModelView = R·T 含 bob 平移
+ *  (bobView 写进渲染 PoseStack,Iris 原样捕获),光栅化几何的 fragView 带同一平移;
+ *  两侧都含平移,相减才抵消。旧 mat3-only 形式丢平移 → 距离/锥角以步频抖动。 */
 vec3 taclight_scene_to_view(vec3 scenePos) {
-    return mat3(gbufferModelView) * scenePos;
+    return (gbufferModelView * vec4(scenePos, 1.0)).xyz;
 }
 
 /** 视图空间 → 屏幕 uv(供遮挡步进等屏幕空间运算取参考 uv)。 */
@@ -86,10 +93,12 @@ vec3 taclight_depth_to_view(vec2 uv, float depth) {
     return view.xyz / view.w;
 }
 
-/** 视图空间 → world(composite 的 gbufferModelView 是 R-only,转置即逆旋转)。
+/** 视图空间 → world。**必须用全矩阵逆**:旧 transpose(mat3) 形式丢掉 gbufferModelView
+ *  里的 bob 平移 → 反算世界坐标带 ±bob 位移假偏移,体素 DDA 阴影随步频相对画面跳位
+ *  (实机差分 7.2-7.4px@bob开 vs 2.3-2.7px@bob关,evidence/2026-09-02-bob-sway-verdict/)。
  *  体素栅格/SSBO 均为 world 域,消费端经本函数出入,不内联换算(铁律 3)。 */
 vec3 taclight_view_to_world(vec3 viewPos) {
-    return cameraPosition + transpose(mat3(gbufferModelView)) * viewPos;
+    return cameraPosition + (gbufferModelViewInverse * vec4(viewPos, 1.0)).xyz;
 }
 
 // ----------------------------------------------------------------------------

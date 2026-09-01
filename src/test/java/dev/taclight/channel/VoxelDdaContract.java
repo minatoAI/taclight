@@ -85,6 +85,20 @@ public class VoxelDdaContract {
                 "128³ 对角线在 384 guard 内完整遍历且终点豁免");
 
         String shader = Files.readString(Path.of("pack/shaders/lib/taclight_common.glsl"));
+        // ---- 坐标换算契约(2026-09-02 bob 跳位根因轮) ----
+        // gbufferModelView 含 bob 平移(R·T);mat3/transpose-only 换算丢平移,
+        // 给世界/视图坐标注入 ±bob 位移的假偏移 = 影子/光锥随步频跳位。
+        // 实机差分:影界-石柱相对摆动 bob开 7.2-7.4px vs bob关 2.3-2.7px(噪声底)。
+        check(shader.contains("(gbufferModelViewInverse * vec4(viewPos, 1.0)).xyz"),
+                "view→world 用全矩阵逆(平移被正确抵消)");
+        check(shader.contains("uniform mat4 gbufferModelViewInverse;"),
+                "显式声明 gbufferModelViewInverse(Iris 只注入已声明的 uniform)");
+        check(!shader.contains("transpose(mat3(gbufferModelView))"),
+                "view→world 禁止 transpose(mat3) 形式(丢弃 bob 平移=假偏移)");
+        check(shader.contains("(gbufferModelView * vec4(scenePos, 1.0)).xyz"),
+                "scene→view 用全矩阵(与光栅化几何同含 bob 平移,差分才可抵消)");
+        check(!shader.contains("mat3(gbufferModelView) * scenePos"),
+                "scene→view 禁止 mat3-only 形式(与带平移的 fragView 相减=步频抖动)");
         check(shader.contains("float tNext = min(tMax.x, min(tMax.y, tMax.z));"),
                 "GLSL 使用统一 crossing time");
         check(shader.contains("bvec3 tied = lessThanEqual(abs(tMax - vec3(tNext)), vec3(tieEps));"),

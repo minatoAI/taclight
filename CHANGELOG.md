@@ -1,5 +1,25 @@
 # TacLight Changelog
 
+## 09-02 05:1x · bob 跳位真因修复:view→world/scene→view 换算丢 bob 平移(坑57)
+
+- **用户观察"影子相对画面跳位(非整体晃)"指对**。差分判决(影界−石柱,消刚体
+  公共摆动):bob 开 7.2-7.4px vs bob 关 2.3-2.7px(噪声底)——影子相对世界真实
+  跳位,幅度=bob 平移 ±0.05 格。上一轮"透视呼吸物理正确"结论已撤回
+  (evidence/2026-09-02-bob-sway-verdict/README 顶部更正)。
+- **真因**:`taclight_view_to_world` 用 `transpose(mat3(gbufferModelView))`、
+  `taclight_scene_to_view` 用 `mat3(gbufferModelView)·scene`——gbufferModelView
+  实为 R·T 含 bob 平移(旧注释"R-only"错误前提),mat3-only 换算丢平移 →
+  DDA 阴影/锥判定/距离随步频抖动。体积束(composite1)同函数,一并修正。
+- **修复(TDD)**:契约先红(4 条坐标换算契约,VoxelDdaContract 20→24 项)→
+  全矩阵形式 `(gbufferModelViewInverse*vec4(v,1)).xyz` /
+  `(gbufferModelView*vec4(s,1)).xyz` → `AllContracts: ALL PASS`。次坑:漏声明
+  `uniform mat4 gbufferModelViewInverse` = 编译错 C1503 + Iris 静默禁包(实机
+  踩中,已补声明并入契约)。坑57 入册(§6 坑位册)。
+- **实机**:双端 oculus.properties `enableShaders=true` + `Iris.reload() ok`,
+  pack=TACLIGHT_PACK、0 编译错。**待用户开视角摇晃实测:看别人静止灯,影子
+  不应再相对画面跳位(只剩整体刚体摆=正常)**。静态数字回归(漏光/直射池)
+  在 FUZZ 0.35+本修复下仍未补跑,下轮布防优先。
+
 ## 09-02 05:0x · bob 晃动判决定案(用户判决实验+同帧摆动测量+数据流排除)
 
 - **定案**:出厂功能下"看别人静止灯,步行时地面影子随步频晃动放大"的唯一触发
