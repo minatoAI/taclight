@@ -121,7 +121,21 @@ public class UploaderSemanticContract {
                 && Float.compare(cappedAuto.intensity(), light.intensity()) == 0,
                 "selfCapped 不改变布局其余字段");
 
-        System.out.println("UploaderSemanticContract: ALL PASS (29 checks)");
+        // ---- 7) 第一人称灯锚 = 玩家眼位(bob-free)(2026-09-01 "地面条纹随观察者
+        //        视角晃动同频放大"修复)----
+        // 根因:相机眼球 cam.getPosition() 含行走 view-bob(±~0.09m @ ~1.3Hz);灯锚
+        // 跟随 → 灯源高度同频振荡 → 地面光池半径/亮度脉动(软阈值放大→可见"有节奏放大")。
+        // 契约:锚一律取玩家眼位(getEyePosition,bob-free),无论 FP/TP/freecam。
+        Vec3 bobbedCam = new Vec3(2004.0, 122.71, 3.5);   // 行走中相机眼(bob 峰值)
+        Vec3 playerEyeB = new Vec3(2004.0, 122.62, 3.5);  // 玩家眼位(bob-free)
+        check(Math.abs(bobbedCam.y - playerEyeB.y) > 0.05, "测试前提:相机眼与玩家眼位确有 bob 差(>5cm)");
+        Vec3 anchorFp = ClientSpotlightUploader.spotAnchor(bobbedCam, playerEyeB);
+        check(anchorFp == playerEyeB, "FP 灯锚 = 玩家眼位(不取带 bob 的相机眼)");
+        Vec3 anchorTp = ClientSpotlightUploader.spotAnchor(bobbedCam, playerEyeB);
+        check(anchorTp.y == 122.62 && anchorTp.x == 2004.0 && anchorTp.z == 3.5,
+                "灯锚值 = 玩家眼位(无 bob 分量,坐标原样)");
+
+        System.out.println("UploaderSemanticContract: ALL PASS (32 checks)");
     }
 
     private static void check(boolean cond, String what) {

@@ -80,9 +80,11 @@ public final class ClientSpotlightUploader {
         Vec3 playerEye = mc.player.getEyePosition(mc.getPartialTick());
         if (ClientLightState.isOn()) {
             // 世界空间锚定(第三人称/他人视角需求,Handheld Moon 型效果的行为前提):
-            // 第一人称锚相机(原行为,含 view-bob 手感);第三人称锚玩家眼睛 + 玩家视线,
-            // 避免"灯浮在相机上"。光锥本体(体积光束)由 M3 composite1 raymarch 呈现。
-            Vec3 anchor = fp ? eye : playerEye;
+            // 锚一律取玩家眼位(2026-09-01 修复:旧行为 FP 锚相机眼球,而相机眼含行走
+            // view-bob ±~0.09m@~1.3Hz,灯源高度同频振荡 → 地面光池"条纹随观察者视角
+            // 晃动同频放大"根因,详见 spotAnchor);视线仍取相机(所见即所照)。
+            // 光锥本体(体积光束)由 M3 composite1 raymarch 呈现。
+            Vec3 anchor = spotAnchor(eye, playerEye);
             Vec3 lookDir = fp ? look : mc.player.getLookAngle();
             SpotlightData hand = toSpot(anchor.add(handheldOffset(lookDir)), lookDir, cfg, 0.9f);
             lights.add(selfCapped(hand, playerEye));
@@ -101,8 +103,8 @@ public final class ClientSpotlightUploader {
             } else {
                 // F4(2026-08-30):非第一人称(或枪口姿态未捕获)禁止锚相机——
                 // TP 下灯浮在观察相机上(0830 R4.2"TP 枪灯 fallback 锚相机")。
-                // 与手持灯同一规则:FP 锚相机眼(=玩家眼),TP 锚玩家眼 + 玩家视线。
-                Vec3 gAnchor = fp ? eye : playerEye;
+                // 与手持灯同一规则(09-01):锚一律玩家眼位(bob-free),视线 FP 用相机。
+                Vec3 gAnchor = spotAnchor(eye, playerEye);
                 Vec3 gLook = fp ? look : mc.player.getLookAngle();
                 SpotlightData gun = toSpot(gAnchor.add(gunFallbackOffset(gLook)), gLook, cfg,
                         dev.taclight.config.TacLightConfig.GUN_MULTIPLIER.get().floatValue());
@@ -289,6 +291,18 @@ public final class ClientSpotlightUploader {
 
     /** 参考亮度:radius 配置语义的锚点;亮度-距离按反平方等照度律耦合(d ∝ √I,doc06 §8.7)。 */
     public static final float INTENSITY_REFERENCE = 6.0f;
+
+    /** 灯源锚点(2026-09-01 "地面条纹随观察者视角晃动同频放大"修复):
+     *  旧行为 FP 锚相机眼球(cam.getPosition()),而相机眼含行走 view-bob(±~0.09m @
+     *  ~1.3Hz,原版 bobView 注入相机位置)——灯源高度同频振荡,地面光池半径/亮度随之
+     *  同频脉动,再经 bloom 软阈值带放大成可见的"有节奏放大"。统一锚玩家眼位
+     *  (getEyePosition,bob-free,与 SSO 豁免胶囊同源);freecam/TP 语义不变。
+     *  ⚠ 契约:taclightContracts → UploaderSemanticContract §7 钉死"FP 锚 = 玩家眼位"。
+     *  @param cameraEye 相机眼球(可能含 bob,仅诊断/旁路用)  @param playerEye 玩家眼位
+     *  @return 玩家眼位(bob-free) */
+    public static Vec3 spotAnchor(Vec3 cameraEye, Vec3 playerEye) {
+        return playerEye;
+    }
 
     /** 纯数据装配:world 坐标原样直传给 SSBO(唯一合法性入口;无相机/GL/MC 类型,可离线测试)。
      *  亮度-距离耦合:有效半径 = radius × √(finalIntensity/6.0),钳制 ≤ radiusMax ——
