@@ -154,6 +154,14 @@ public final class DebugCommandRelay {
                     dev.taclight.channel.RemotePosSnap.configure(arg));
             return;
         }
+        if (line.startsWith("!bob")) {
+            String arg = line.length() > 4 ? line.substring(4).trim() : "";
+            String result = BobViewControl.configure(arg,
+                    () -> mc.options.bobView().get(),
+                    enabled -> mc.options.bobView().set(enabled));
+            TacLightMod.LOGGER.info("[TacLight] RELAY bob -> {}", result);
+            return;
+        }
         if (line.startsWith("!voxel")) {
             // 体素 DDA 遮挡总开关(09-01 深夜④,墙后漏光立项):off = SSBO 无效位,GLSL 回退 SSO
             String arg = line.length() > 6 ? line.substring(6).trim() : "";

@@ -9,7 +9,9 @@ import dev.taclight.channel.RemotePosSnapContract;
 import dev.taclight.channel.RemoteLookPredictorContract;
 import dev.taclight.channel.SpotlightBufferLayoutContract;
 import dev.taclight.channel.UploaderSemanticContract;
+import dev.taclight.channel.VoxelDdaContract;
 import dev.taclight.channel.VoxelFieldContract;
+import dev.taclight.client.BobViewControlContract;
 import dev.taclight.pose.MuzzlePoseMathContract;
 import dev.taclight.scene.ScenePlanContract;
 import dev.taclight.sync.LightStatePersistenceContract;
@@ -25,6 +27,8 @@ public class AllContracts {
         SpotlightBufferLayoutContract.main(args);
         System.out.println("== VoxelFieldContract ==");
         VoxelFieldContract.main(args);
+        System.out.println("== VoxelDdaContract ==");
+        VoxelDdaContract.main(args);
         System.out.println("== UploaderSemanticContract ==");
         UploaderSemanticContract.main(args);
         System.out.println("== MuzzlePoseMathContract ==");
@@ -45,6 +49,8 @@ public class AllContracts {
         MotionCaptureContract.main(args);
         System.out.println("== FrameRecorderContract ==");
         FrameRecorderContract.main(args);
+        System.out.println("== BobViewControlContract ==");
+        BobViewControlContract.main(args);
         System.out.println("== PlayerLightSyncContract ==");
         PlayerLightSyncContract.main(args);
         System.out.println("== LightStatePersistenceContract ==");

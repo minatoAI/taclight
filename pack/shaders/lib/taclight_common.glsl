@@ -247,6 +247,10 @@ float taclight_sso(vec3 fragView, vec3 lightView, TacLightSpot L) {
 /** M1 表面照明总增益(与 knee 配合;实测反馈驱动调参)。2026-08-29 实测过曝,2.0→1.0。 */
 #define TACLIGHT_LIGHT_GAIN 2.2
 
+/** M1 · 体素 DDA 实心格穿透软化带宽(方块,2026-09-02 根因轮):≥带宽 T=0,
+ *  掠边按比例放行;取值依据见 taclight_vox_transmit 头注释。 */
+#define TACLIGHT_VOX_FUZZ 0.20
+
 // ----------------------------------------------------------------------------
 // M1 · 体素 DDA 遮挡(v0.12,2026-09-01 深夜④;立项 = 用户实测墙后地面漏光,
 // 满足 AGENTS §4 条件项"实机真见漏光才立项")
@@ -260,6 +264,14 @@ float taclight_sso(vec3 fragView, vec3 lightView, TacLightSpot L) {
 // 端点格双向豁免:起点格(灯所在空气格)先步进后判定,天然跳过;终点格(被照
 // 表面所属方块,沿射线回退 1e-3 定位)步进至即停,不自遮——端点各让一格后,
 // 中间任何实心格都是真遮挡。
+// 2026-09-02 根因轮两修(实机四臂消融 evidence/2026-09-02-dda-bob-stripe/):
+// ① tie 语义:Amanatides-Woo 同一 crossing time 的全部 tied axes 一次推进——
+//   旧单轴分轮会访问射线仅擦边、并未穿入的侧邻格(假阴影边界,随 bob 成片翻转);
+// ② 穿透软化带 TACLIGHT_VOX_FUZZ:实心格按射线在其内穿透长度放行(≥带宽仍
+//   严格 T=0,墙后遮挡基线不变;掠边按比例部分透射)——影子轮廓上硬 0/1 在 bob
+//   亚像素采样移动下成片翻转,即"条纹随视角晃动节奏放大"的机制。帧证据:
+//   条纹 = 墙柱硬影(SSO 漏光时被糊掉不可见);实机标定 0.08 不够(边缘 |bob|
+//   相关仍 0.13),0.20 ≈ bob 视差(1-2.5cm@3-5m)的 4-8×、≈ 20% 条纹周期。
 // ----------------------------------------------------------------------------
 float taclight_vox_transmit(vec3 worldA, vec3 worldB) {
     if (voxOrigin.w <= 0.0) return -1.0;
@@ -285,18 +297,25 @@ float taclight_vox_transmit(vec3 worldA, vec3 worldB) {
                      abs(dir.z) > 1e-9 ? (dir.z > 0.0 ? (float(cell.z) + 1.0 - a.z) : (a.z - float(cell.z))) * tDelta.z : 1e9);
     float T = 1.0;
     for (int guard = 0; guard < 384; guard++) {   // 128^3 对角线步数上限
-        int axis;
-        if (tMax.x <= tMax.y && tMax.x <= tMax.z) axis = 0;
-        else if (tMax.y <= tMax.z) axis = 1;
-        else axis = 2;
-        cell[axis] += istep[axis];
-        tMax[axis] += tDelta[axis];
+        float tNext = min(tMax.x, min(tMax.y, tMax.z));
+        float tieEps = max(1e-6, abs(tNext) * 1e-6);
+        bvec3 tied = lessThanEqual(abs(tMax - vec3(tNext)), vec3(tieEps));
+        cell += istep * ivec3(tied);
+        tMax += tDelta * vec3(tied);
         if (any(lessThan(cell, ivec3(0))) || any(greaterThanEqual(cell, ivec3(dim)))) return T;
         if (all(equal(cell, last))) return T;
         int idx = cell.x + cell.y * int(dim.x) + cell.z * int(dim.x) * int(dim.y);
         uint code = (voxData[idx >> 4] >> uint((idx & 15) * 2)) & 3u;
-        if (code == 3u) return 0.0;
-        if (code == 2u) T *= 0.40;      // 树叶:0.6 遮挡/格 → 透射 0.4/格
+        if (code == 3u) {
+            // 穿透长度软化:tMax 以归一化方向计,单位=沿射线方块数(终点在 t=len);
+            // 出格时间-入格时间(钳到 len)即该格内穿透长度;≥带宽仍 T=0。
+            float tExit = min(tMax.x, min(tMax.y, tMax.z));
+            float penLen = max(0.0, min(tExit, len) - tNext);
+            float f = clamp(penLen / TACLIGHT_VOX_FUZZ, 0.0, 1.0);
+            if (f >= 1.0) return 0.0;
+            T *= 1.0 - f;
+        }
+        else if (code == 2u) T *= 0.40;      // 树叶:0.6 遮挡/格 → 透射 0.4/格
         else if (code == 1u) T *= 0.75; // 软植被:0.25 遮挡/格
     }
     return T;
