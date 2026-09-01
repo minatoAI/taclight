@@ -139,7 +139,8 @@ void main() {
             for (uint i = 0u; i < lightCount && i < 8u; i++) {
                 TacLightSpot L = lights[i];
                 if (L.dirType.w < 0.5) continue;          // 预留:类型过滤
-                vec3 lightView = taclight_scene_to_view(taclight_world_to_scene(L.posRadius.xyz));
+                vec3 lightScene = taclight_world_to_scene(L.posRadius.xyz);
+                vec3 lightView = taclight_scene_to_view(lightScene);
                 vec3 toFrag = fragView - lightView;
                 float dist = length(toFrag);
                 float radius = L.posRadius.w;
@@ -154,19 +155,24 @@ void main() {
                 vec3 l = -lf;
                 float ndl = max(dot(n, l), 0.0);
                 if (ndl <= 0.0) continue;                 // 廉价门:背面
-                // vis 按灯-相机几何分流(M1 热修 12):第一人称灯锚眼睛 = 同轴光,
-                // "可见即无遮挡"是几何事实,SSO 步进只会沿轮廓假消光(黑边②实锤);
-                // 第三人称灯在角色眼、与相机分离,存在真遮挡(实测树干透光),走 SSO。
+                // vis 分流(2026-09-02 修订,坑58):体素 DDA **无条件先执行**——它是
+                // 世界空间射线,灯≈相机时依然有效(起点格先步进后判定、终点格回退
+                // 1e-3,双端豁免,视线即光路),跳过它 = 自灯影子整体丢失。
+                // 同轴豁免("可见即无遮挡",热修 12)只救屏幕空间 SSO 的退化
+                // (灯在相机处 SSO 假消光黑边),且判定必须在**场景域**
+                // (world−camera,无 bob):坑 57 修复后 lightView 是真实视图距离,
+                // 含 bob 平移 ±0.1,自灯锚点(手持 0.44/枪灯 ~0.6)恰在 0.5 格阈值
+                // 两侧,随步频翻转 = 影子"消失+移动闪烁"(实机回归)。
                 float vis;
-                if (dot(lightView, lightView) < 0.25) {
-                    vis = 1.0;
+                float vt = taclight_vox_transmit(L.posRadius.xyz, taclight_view_to_world(fragView));
+                if (vt >= 0.0) {
+                    vis = vt;
+                } else if (dot(lightScene, lightScene) < 0.25) {
+                    vis = 1.0;    // 同轴+栅格无效:可见即无遮挡(热修 12 原意)
                 } else {
-                    // v0.12 体素 DDA 优先(世界空间,根治视锥外遮挡者漏光);
-                    // 栅格无效/光线端点出栅格 → -1,回退屏幕空间 SSO(保守一致)。
-                    float vt = taclight_vox_transmit(L.posRadius.xyz, taclight_view_to_world(fragView));
-                    vis = vt >= 0.0 ? vt : taclight_sso(fragView, lightView, L);
-                    if (vis <= 0.003) continue;
+                    vis = taclight_sso(fragView, lightView, L);
                 }
+                if (vis <= 0.003) continue;
 
                 vec3 lc = L.colorIntensity.rgb * L.colorIntensity.a;
                 float atten = taclight_attenuation(dist, radius);

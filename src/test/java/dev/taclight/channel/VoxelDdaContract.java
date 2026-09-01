@@ -116,6 +116,24 @@ public class VoxelDdaContract {
         check(!shader.contains("if (code == 3u) return 0.0;"),
                 "GLSL 不再对实心格无条件硬消光");
 
+        // ---- 同轴快速通道契约(2026-09-02 自灯影子回归轮,坑58) ----
+        // 旧版在 composite.fsh 用视图域 dot(lightView,lightView)<0.25 判"灯≈相机"
+        // 并直接 vis=1(跳过遮挡)。坑57 修复后 lightView 含 bob 平移(±0.1),自灯
+        // 锚点(手持 0.44/枪灯 ~0.6)恰在 0.5 阈值两侧,随步频翻转 → 影子"消失+闪烁"。
+        // 且灯≈相机时体素 DDA 依然有效(世界空间射线,起点/终点格双豁免),
+        // 跳过 DDA = 自灯影子整体丢失;同轴豁免只应用于 DDA 无效时的屏幕空间回退。
+        String composite = Files.readString(Path.of("pack/shaders/composite.fsh"));
+        check(!composite.contains("dot(lightView, lightView) < 0.25"),
+                "同轴判定禁止视图域距离(含 bob 平移,随步频跨阈值=影子闪烁)");
+        check(composite.contains("dot(lightScene, lightScene) < 0.25"),
+                "同轴判定用场景域距离(world−camera,无 bob,恒定)");
+        check(composite.indexOf("taclight_vox_transmit") >= 0
+                        && composite.indexOf("taclight_vox_transmit")
+                                < composite.indexOf("dot(lightScene, lightScene) < 0.25"),
+                "体素 DDA 在同轴判定之前无条件执行(灯≈相机时 DDA 依然有效,跳过=自灯影子丢失)");
+        check(composite.contains("} else if (dot(lightScene, lightScene) < 0.25) {"),
+                "同轴豁免只作为 DDA 无效(-1)时的回退分支(热修12 的 SSO 退化只属于屏幕空间路径)");
+
         System.out.println("VoxelDdaContract: ALL PASS (" + checks + " checks)");
     }
 
