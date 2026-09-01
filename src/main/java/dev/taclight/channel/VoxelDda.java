@@ -13,8 +13,10 @@ public final class VoxelDda {
      * 0.20 = 2026-09-02 实机标定:0.08 不足以抑制墙柱硬影条纹在 bob 视差下的节律闪烁
      * (四臂 s0001 vs s0002,条纹边缘 |bob| 相关 0.13 残留),0.20 ≈ 视差 4-8×、
      * ≈ 20% 条纹周期;墙后遮挡内部(穿透≥1 格)仍一票否决。
+     * 0.35 = 2026-09-02 体感轮:用户实测步行条纹放大仍在、跳跃前进(原版 bob 离地
+     * 衰减)即不明显 → 步频 bob × 硬影缘残留闪烁,加宽半影压边缘时间对比度。
      */
-    public static final double FUZZ_BLOCKS = 0.20;
+    public static final double FUZZ_BLOCKS = 0.35;
 
     public record Cell(int x, int y, int z) { }
 

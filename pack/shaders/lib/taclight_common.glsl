@@ -249,7 +249,7 @@ float taclight_sso(vec3 fragView, vec3 lightView, TacLightSpot L) {
 
 /** M1 · 体素 DDA 实心格穿透软化带宽(方块,2026-09-02 根因轮):≥带宽 T=0,
  *  掠边按比例放行;取值依据见 taclight_vox_transmit 头注释。 */
-#define TACLIGHT_VOX_FUZZ 0.20
+#define TACLIGHT_VOX_FUZZ 0.35
 
 // ----------------------------------------------------------------------------
 // M1 · 体素 DDA 遮挡(v0.12,2026-09-01 深夜④;立项 = 用户实测墙后地面漏光,
@@ -272,6 +272,9 @@ float taclight_sso(vec3 fragView, vec3 lightView, TacLightSpot L) {
 //   亚像素采样移动下成片翻转,即"条纹随视角晃动节奏放大"的机制。帧证据:
 //   条纹 = 墙柱硬影(SSO 漏光时被糊掉不可见);实机标定 0.08 不够(边缘 |bob|
 //   相关仍 0.13),0.20 ≈ bob 视差(1-2.5cm@3-5m)的 4-8×、≈ 20% 条纹周期。
+// ③ 0.20→0.35(2026-09-02 体感轮):用户实测"步行条纹放大仍在,跳跃前进(原版
+//   bob 振幅离地衰减)即不明显"= 步频 bob 摇晃 × 硬影缘残留闪烁;加宽半影带
+//   压掉边缘时间对比度。墙后遮挡不变(穿墙射线穿透 >> 0.35 仍 T=0)。
 // ----------------------------------------------------------------------------
 float taclight_vox_transmit(vec3 worldA, vec3 worldB) {
     if (voxOrigin.w <= 0.0) return -1.0;

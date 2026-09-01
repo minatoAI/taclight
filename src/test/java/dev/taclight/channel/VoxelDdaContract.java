@@ -54,11 +54,15 @@ public class VoxelDdaContract {
         check(VoxelDda.transmit(0.5, 0.5, 0.5, 2.5, 0.5, 0.5,
                         cell -> cell.x() == 1 ? VoxelField.CODE_SOLID : VoxelField.CODE_EMPTY) == 0.0,
                 "深穿透实心格仍一票否决 T=0");
-        // 掠边(穿透 0.061 格 < 带宽 0.20):大部分透射,不再硬翻转。
+        // 掠边(穿透 0.061 格 < 带宽):大部分透射,不再硬翻转;范围随带宽推导,
+        // 不硬编码,防调参时契约与实现脱节。
         double graze = VoxelDda.transmit(0.912, 0.5, 0.5, 1.112, 1.5, 0.5,
                 cell -> cell.y() == 0 ? VoxelField.CODE_SOLID : VoxelField.CODE_EMPTY);
-        check(graze > 0.6 && graze < 0.8,
-                "掠边实心格得部分透射(实测 " + graze + ")");
+        // 该射线的几何穿透长度 ≈0.0612 格,与带宽无关;由 (1-T)×带宽 反推应守恒。
+        double grazePen = (1.0 - graze) * VoxelDda.FUZZ_BLOCKS;
+        check(graze < 1.0 && Math.abs(grazePen - 0.0612) < 2e-3,
+                "掠边实心格得部分透射且穿透长度守恒(实测 T=" + graze + ",穿透 "
+                        + String.format("%.5f", grazePen) + " 格,带宽 " + VoxelDda.FUZZ_BLOCKS + ")");
         double grazeShallower = VoxelDda.transmit(0.906, 0.5, 0.5, 1.106, 1.5, 0.5,
                 cell -> cell.y() == 0 ? VoxelField.CODE_SOLID : VoxelField.CODE_EMPTY);
         check(grazeShallower > graze,
@@ -89,8 +93,8 @@ public class VoxelDdaContract {
                 "GLSL 同时推进全部 tied axes");
         check(!shader.contains("cell[axis] += istep[axis]"),
                 "GLSL 不再按单轴分轮访问擦边格");
-        check(shader.contains("#define TACLIGHT_VOX_FUZZ 0.20"),
-                "GLSL 定义穿透软化带宽 0.20 格");
+        check(shader.contains("#define TACLIGHT_VOX_FUZZ 0.35"),
+                "GLSL 定义穿透软化带宽 0.35 格(0.20 仍随步行 bob 在硬影缘闪烁,加宽给真实半影)");
         check(shader.contains("float tExit = min(tMax.x, min(tMax.y, tMax.z));"),
                 "GLSL 按出格时间计算实心格穿透长度");
         check(shader.contains("clamp(penLen / TACLIGHT_VOX_FUZZ"),
