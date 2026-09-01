@@ -20,7 +20,7 @@ import net.minecraftforge.registries.ForgeRegistries;
 
 /**
  * /taclight 调试命令组:
- *  kit —— 一键发放验收套件:手电筒 + HK416D + 战术枪灯(TaCZ 走官方 API,无 TaCZ 时仅给手电筒)。
+ *  kit —— 一键发放验收套件:手电筒 + HK416D(预装战术枪灯,TaCZ 官方 API;无 TaCZ 时仅给手电筒)。
  *  cam here / save <name> / goto <name> —— 确定性机位(注册表 run/config/taclight-cams.json)。
  *  scene <preset> —— 场景区程序化布景(计划 = ScenePresets 纯数据,执行 = SceneExecutor)。
  * 全组 hasPermission(0):调试工具,SP 场景使用;结果同时入日志(自动化 grep 依赖)。
@@ -179,17 +179,22 @@ public class TacLightCommand {
         int extra = 0;
         if (TaczCompat.present()) {
             try {
-                if (tryAdd(player, "tacz", "modern_kinetic_gun", gun -> IGun.getIGunOrNull(gun).setGunId(gun, new ResourceLocation("tacz", "hk416d")))) {
-                    extra++;
-                }
-                if (tryAdd(player, "tacz", "attachment", att -> IAttachment.getIAttachmentOrNull(att).setAttachmentId(att, new ResourceLocation("taclight", "gun_light")))) {
-                    extra++;
-                }
+            if (tryAdd(player, "tacz", "modern_kinetic_gun", gun -> {
+                IGun.getIGunOrNull(gun).setGunId(gun, new ResourceLocation("tacz", "hk416d"));
+                // 2026-09-02:枪灯经官方 API 预装上枪。此前 kit 发散件,需进改装 UI 手动
+                // 安装——GLFW UI 后台鼠标注入无效(坑41),自动化枪姿验证一直被阻塞。
+                // 附件类型 laser 由 index/attachments/gun_light.json 声明,按类型入 LASER 槽。
+                ItemStack att = new ItemStack(ForgeRegistries.ITEMS.getValue(new ResourceLocation("tacz", "attachment")));
+                IAttachment.getIAttachmentOrNull(att).setAttachmentId(att, new ResourceLocation("taclight", "gun_light"));
+                IGun.getIGunOrNull(gun).installAttachment(gun, att);
+            })) {
+                extra++;
+            }
             } catch (Throwable t) {
                 TacLightMod.LOGGER.warn("[TacLight] kit TaCZ part failed: {}", t.toString());
             }
         }
-        String message = "[TacLight] kit given: flashlight" + (extra > 0 ? " + HK416D + gun_light" : "");
+        String message = "[TacLight] kit given: flashlight" + (extra > 0 ? " + HK416D(预装 gun_light)" : "");
         source.sendSuccess(() -> Component.literal(message), false);
         return 1;
     }

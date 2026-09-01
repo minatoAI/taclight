@@ -31,7 +31,24 @@ public class MuzzlePoseMathContract {
         check(MuzzlePoseMath.supportedNodeName("laser_beam"), "laser_beam supported");
         check(MuzzlePoseMath.supportedNodeName("laser_beam_2"), "laser_beam_2 supported");
         check(!MuzzlePoseMath.supportedNodeName("scope"), "other node rejected");
-        System.out.println("MuzzlePoseMathContract: ALL PASS (11 checks)");
+
+        // ---- 枪渲染空间(GL 视图,-Z 前)→ 世界(2026-09-02 坑60 标定)----
+        // 相机 yaw=180 pitch=25(=09-02 DIAG 实测参数);vanilla 构造 rotationYXZ(-yaw, pitch, 0)。
+        // 旧 conjugate 实验值 = -look(y/z 双翻);正确值 = 玩家视线 (0,-sin25,-cos25)。
+        var camQ = new org.joml.Quaternionf().rotationYXZ(
+                (float) Math.toRadians(180), (float) Math.toRadians(25), 0f);
+        var d = MuzzlePoseMath.gunViewDirToWorld(0f, 0f, -1f, camQ);
+        check(close(d.x(), 0f), "view fwd->world x=0");
+        check(close(d.y(), -(float) Math.sin(Math.toRadians(25))), "view fwd->world y=-sin25(非 +)");
+        check(close(d.z(), -(float) Math.cos(Math.toRadians(25))), "view fwd->world z=-cos25(非 +)");
+        // GL 视图右 (1,0,0) -> 面北(yaw180)时世界右 = 东(+X)
+        var rt = MuzzlePoseMath.gunViewDirToWorld(1f, 0f, 0f, camQ);
+        check(close(rt.x(), 1f) && close(rt.y(), 0f) && close(rt.z(), 0f), "view right->world east(+X)");
+        // GL 视图上 (0,1,0) -> 俯视 25° 时上向应后仰(z 分量为负)
+        var upv = MuzzlePoseMath.gunViewDirToWorld(0f, 1f, 0f, camQ);
+        check(close(upv.y(), (float) Math.cos(Math.toRadians(25))), "view up->world y=cos25");
+        check(close(upv.z(), -(float) Math.sin(Math.toRadians(25))), "view up->world z=-sin25(后仰)");
+        System.out.println("MuzzlePoseMathContract: ALL PASS (18 checks)");
     }
 
     private static boolean close(float a, float b) { return Math.abs(a - b) < 1e-5f; }

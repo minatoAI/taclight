@@ -42,4 +42,18 @@ public final class MuzzlePoseMath {
                 (float) (ux / ul), (float) (uy / ul), (float) (uz / ul));
         return new Result(true, "OK", p);
     }
+
+    /**
+     * 枪渲染空间(GL 视图空间,-Z 为前)→ 世界方向/偏移(2026-09-02 坑60 标定)。
+     * Camera.rotation() 采用 MC 约定(+Z 为前),故先绕 Y 翻 180° 对齐两套前向,
+     * 再按相机旋转到世界。旧上传器实现用共轭,产出恒为 -look(y/z 双翻)——
+     * DIAG L0 实测钉死:dir=(0.003,0.434,0.901) vs look=(0,-0.423,-0.906)。
+     * 换算 = Q_cam · Ry(180°) · v(joml mul 语义:右侧先作用)。
+     */
+    public static org.joml.Vector3f gunViewDirToWorld(float vx, float vy, float vz,
+                                                      org.joml.Quaternionf camRotation) {
+        org.joml.Quaternionf q = new org.joml.Quaternionf(camRotation)
+                .mul(new org.joml.Quaternionf().rotationY((float) Math.PI));
+        return new org.joml.Vector3f(vx, vy, vz).rotate(q);
+    }
 }

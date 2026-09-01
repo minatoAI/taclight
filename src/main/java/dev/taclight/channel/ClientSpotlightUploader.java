@@ -91,12 +91,15 @@ public final class ClientSpotlightUploader {
         if (ClientLightState.gunLightOn()) {
             dev.taclight.pose.MuzzlePoseMath.Pose muzzle = dev.taclight.client.MuzzlePoseCapture.consumeFresh();
             if (muzzle != null && fp) {
-                // 视图空间 → 场景空间:相机旋转共轭
-                org.joml.Quaternionf rotConj = new org.joml.Quaternionf(cam.rotation()).conjugate();
-                org.joml.Vector3f off = new org.joml.Vector3f(muzzle.ox(), muzzle.oy(), muzzle.oz()).rotate(rotConj);
-                org.joml.Vector3f fwd = new org.joml.Vector3f(muzzle.fx(), muzzle.fy(), muzzle.fz()).rotate(rotConj);
+                // 枪渲染空间 → 世界(2026-09-02 坑60):捕获矩阵是 GL 视图空间(-Z 前),
+                // Camera.rotation() 的 +Z 为前,先 Ry(180) 再相机旋转;旧共轭实现方向
+                // 恒为 -look(实机 DIAG L0 y/z 双翻钉死)。
+                org.joml.Vector3f off = dev.taclight.pose.MuzzlePoseMath.gunViewDirToWorld(
+                        muzzle.ox(), muzzle.oy(), muzzle.oz(), cam.rotation());
+                org.joml.Vector3f fwdW = dev.taclight.pose.MuzzlePoseMath.gunViewDirToWorld(
+                        muzzle.fx(), muzzle.fy(), muzzle.fz(), cam.rotation());
                 Vec3 pos = eye.add(off.x(), off.y(), off.z());
-                Vec3 dir = new Vec3(fwd.x(), fwd.y(), fwd.z());
+                Vec3 dir = new Vec3(fwdW.x(), fwdW.y(), fwdW.z());
                 SpotlightData gun = toSpot(pos, dir, cfg, dev.taclight.config.TacLightConfig.GUN_MULTIPLIER.get().floatValue());
                 lights.add(selfCapped(gun, playerEye));
             } else {

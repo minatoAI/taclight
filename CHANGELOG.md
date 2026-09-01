@@ -1,5 +1,36 @@
 # TacLight Changelog
 
+## 09-02 07:0x · 遮挡静态回归关闭 + 枪灯坑60修复(姿态跟随实机验证);配件适配提案就绪
+
+- **遮挡静态数字回归(悬置项)关闭**:在 FUZZ 0.35+坑57+坑58 三重变更下复测 09-01
+  同协议,四项判定全吻合——北漏光 off/on 82.2/44.3(历史 82.3/44.3,DDA 后=无灯
+  基线 43.7)、南直射池 64.5 逐分位恒等(历史 64.5)、imgdiff N 14.996/40.0%
+  (历史 14.94/40%)、S 2.623/3.19%(历史 2.58/3.2%)。**零回归**,
+  证据 evidence/2026-09-02-occlusion-static-regression/。
+- **坑60 修复(TDD,姿态契约 11→18 项,AllContracts ALL PASS)**:枪灯姿态跟随链
+  (BeamRenderer 捕获→MuzzlePoseCapture→上传器)自接入以来首次实机验证方向,即发现
+  上传方向恒为 −look、灯位在眼后上方 1.5m。根因=捕获矩阵是枪渲染空间(GL 视图,
+  −Z 为前)而 `Camera.rotation()` 是 MC 约定(+Z 为前),正确换算 = **Q_cam·Ry(180°)·v**,
+  旧实现用 conjugate。字节码反编译锁定机制(injection 点在骨变换之后、stringVertex
+  光束沿骨局部 −Z),修复后 DIAG dir 逐分量等于视线。**枪渲染空间换算一律走
+  MuzzlePoseMath.gunViewDirToWorld,禁止裸 conjugate。**
+- **kit 预装附件**:`/taclight kit` 经官方 API `IGun.installAttachment` 把
+  taclight:gun_light 直接装上 HK416D(原先发散件需改装 UI 手动装,后台鼠标注入
+  无效=自动化死路,坑41)。
+- **实机验证**:腰射灯池=枪口指向的前下方;疾跑(双击 W)枪横持抬起、灯池甩向
+  左上方——姿态跟随确认。证据 evidence/2026-09-02-gunlight-pose-following/。
+  ADS 需按住鼠标右键,后台注入无效(坑41),留用户体感(机制与疾跑同链)。
+- **坑59 入册(§6 条 45)**:K 键(本模组霓虹调试)与 Iris/Oculus"切换光影包"
+  默认键冲突,按 K=禁包;游戏内禁包后 `!reload` 不恢复,且 Oculus 落盘坏文件名
+  `config/\oculus.properties`(正确文件未被改)。恢复=删坏文件+再按 K 翻回+`!reload`。
+  待办:DEBUG_TOGGLE 改绑非冲突键(涉及用户肌肉记忆,先登记不动)。
+- **收尾**:双端关灯+光影包禁用(oculus.properties enableShaders=false+reload,
+  双端日志 "Shaders are disabled" 确认)。
+- **下一步 = 枪械配件适配里程碑(用户 09-02 提出,方案待批)**:核心链已实装并
+  验证(附件+枪姿捕获+坑60 修复);缺口=①全枪械 allow_attachments 白名单(现仅
+  hk416d)②第三人称/远程枪灯近似改进(现眼位+look×0.45,无远程枪姿数据)
+  ③可选:头盔/独立物品形态。提案详见会话汇报。
+
 ## 09-02 05:5x · bob 跳位链闭环:用户终验通过(坑57+坑58);复盘文档+临时数据清理
 
 - **用户终验:"实测没啥摇晃的视觉瑕疵现象了"** —— 坑57(远灯跳位)+坑58
