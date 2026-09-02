@@ -1,5 +1,29 @@
 # TacLight Changelog
 
+## 09-02 21:2x · interop 实机回归闭环(像素恒等)+ 独立实例与程序化测试通道
+
+- **实机回归(上一条目的待办,已闭环)**:独立实例 run-interop 上,基线包
+  (c3bb689)vs 重构包(5302eab)同场景同机位冻结午夜对照,**干净四对
+  imgdiff:草地开/关灯逐位零差异(changed=0/409920),走廊开/关灯各仅
+  4px(0.001%)且为 3×2 固定点、开/关灯同位同幅=与光影无关的外来元素**。
+  热重载 ×3 全部 `RELAY Iris.reload() ok` 零编译错误。证据
+  `docs/evidence/2026-09-02-interop-live-regression/`(8 图+imgdiff 输出+
+  manifest.sha256)。**方案 C 第一里程碑(核心剥离)实机零回归,可合并。**
+- **独立实例(run-interop)**:build.gradle 新增 `clientInterop` run 配置
+  (parents=client;quickPlay 靠继承勿复写,坑73)+ `syncShaderPackInterop`;
+  世界 = PROBE 存档克隆(停更存档零写入风险);`ops.json`(InteropA level 4,
+  UUID=playerdata 文件名,坑74);启动 = `gradlew-interop.cmd runClientInterop
+  -PtaclightQuickPlay=interop -PtaclightUser=InteropA`(gradle 缓存复用主仓,
+  坑61)。里程碑 2 运行时注入的换包测试就在此实例做。
+- **测试驱动程序化(用户明令,坑76)**:drive.ps1 postkey 会前台激活目标窗口
+  → MC 抓鼠标+抢用户焦点(用户实测被锁鼠标)。改为:中继新增 `!shot`
+  (Screenshot.grab 直读主帧缓冲,与 F2 像素等价);`/` 行改走
+  `sendUnsignedCommand`(绕过 dev 客户端不完整命令树本地预解析,原版命令
+  /time /gamerule 全通,坑74);中继批发同 tick 多命令会被服务端反刷屏踢出
+  (坑72,一条一写 ≥0.9s);单机 GUI 不吃后台键盘(坑75,恢复=杀进程
+  quickPlay 重启)。AllContracts ALL PASS 复验。
+- 分支:`interop/core-extract` @ 5302eab(git worktree wt-interop)。
+
 ## 09-02 08:3x · interop 核心剥离:照明核心与包私有编码分层(方案 C 第一里程碑)
 
 - **背景与决策**:为让玩家用其他光影包时保留锥形照明,方案 C 定型为**运行时注入**

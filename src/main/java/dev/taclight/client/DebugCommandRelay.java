@@ -70,6 +70,20 @@ public final class DebugCommandRelay {
     private static void execute(String line) {
         Minecraft mc = Minecraft.getInstance();
         TacLightMod.LOGGER.info("[TacLight] RELAY exec: {}", line);
+        if (line.startsWith("!shot")) {
+            // 程序化截图(2026-09-02 用户要求:测试驱动弃用键鼠模拟/抢前台窗口):
+            // 与 F2 同源直接读主帧缓冲落盘,零输入模拟;中继在渲染线程 tick 内执行,
+            // GL 上下文在位,读到的是最近一帧。文件名 = 原版时间戳规则。
+            try {
+                net.minecraft.client.Screenshot.grab(
+                        net.minecraftforge.fml.loading.FMLPaths.GAMEDIR.get().toFile(),
+                        mc.getMainRenderTarget(),
+                        (msg) -> TacLightMod.LOGGER.info("[TacLight] RELAY shot: {}", msg.getString()));
+            } catch (Throwable t) {
+                TacLightMod.LOGGER.warn("[TacLight] RELAY shot failed: {}", t.toString());
+            }
+            return;
+        }
         if (line.startsWith("!reload")) {
             // Iris.reload() = 重载键绑(J)的最终入口,从磁盘重解析+重编译整包。
             // 反射调用:oculus 是 runtimeOnly 可选依赖;Iris 为模组自有类,方法名不经 SRG 重映射。
@@ -170,7 +184,10 @@ public final class DebugCommandRelay {
         }
         if (line.startsWith("/")) {
             if (mc.getConnection() != null) {
-                mc.getConnection().sendCommand(line.substring(1));
+                // 2026-09-02:dev 客户端命令树不完整(javadoc 顶部已载,原版节点缺失,
+                // /fill /gamemode /time 被本地预解析拒"未知或不完整的命令");
+                // sendUnsignedCommand 跳过本地校验/签名直发服务端,服务端分发器健康。
+                mc.getConnection().sendUnsignedCommand(line.substring(1));
             } else {
                 TacLightMod.LOGGER.warn("[TacLight] RELAY no-connection, dropped: {}", line);
             }

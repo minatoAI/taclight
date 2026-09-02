@@ -1,0 +1,8 @@
+== CLEAN grass light ON ==
+{"w":854,"h":480,"meanDiff":0,"maxDiff":0,"changed":0,"total":409920,"bbox":null}
+== CLEAN grass light OFF ==
+{"w":854,"h":480,"meanDiff":0,"maxDiff":0,"changed":0,"total":409920,"bbox":null}
+== CLEAN corridor light ON ==
+{"w":854,"h":480,"meanDiff":0.0004830210772833724,"maxDiff":49,"changed":4,"total":409920,"bbox":[353,105,355,106]}
+== CLEAN corridor light OFF ==
+{"w":854,"h":480,"meanDiff":0.000665983606557377,"maxDiff":48,"changed":4,"total":409920,"bbox":[353,105,355,106]}
