@@ -1,0 +1,1 @@
+[029月2026 11:32:28.713] [Server thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] KIT-INSTALL thread=Server thread gunId=hk416d allowed=true slot=taclight:gun_light tags(CommonAssetsManager:10)

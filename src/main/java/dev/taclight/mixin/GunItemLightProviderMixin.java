@@ -32,14 +32,20 @@ public abstract class GunItemLightProviderMixin implements IrisItemLightProvider
         if (stack == null || stack.isEmpty()) return false;
         IGun gun = IGun.getIGunOrNull(stack);
         if (gun == null) return false;
-        ItemStack laser = gun.getAttachment(stack, AttachmentType.LASER);
-        if (laser.isEmpty()) {
-            laser = gun.getBuiltinAttachment(stack, AttachmentType.LASER);
-        }
-        if (laser.isEmpty()) return false;
-        IAttachment ia = IAttachment.getIAttachmentOrNull(laser);
-        if (ia == null) return false;
-        var id = ia.getAttachmentId(laser);
-        return id != null && "taclight:gun_light".equals(id.toString());
+        // 决议顺序同 TaczClientLightProbe(2026-09-02 类型门修复):gated 安装件 →
+        // 原始 NBT(读门关闭的枪唯一可见,ak47 实测)→ 内置件。
+        String id = dev.taclight.tacz.GunLaserReader.resolveLaserId(
+                attachmentId(gun.getAttachment(stack, AttachmentType.LASER)),
+                attachmentId(dev.taclight.tacz.TaczClientLightProbe.rawInstalledAttachment(stack, AttachmentType.LASER)),
+                attachmentId(gun.getBuiltinAttachment(stack, AttachmentType.LASER)));
+        return dev.taclight.tacz.GunLaserReader.OUR_ATTACHMENT_ID.equals(id);
+    }
+
+    private static String attachmentId(ItemStack stack) {
+        if (stack == null || stack.isEmpty()) return null;
+        IAttachment ia = IAttachment.getIAttachmentOrNull(stack);
+        if (ia == null) return null;
+        var id = ia.getAttachmentId(stack);
+        return id == null ? null : id.toString();
     }
 }

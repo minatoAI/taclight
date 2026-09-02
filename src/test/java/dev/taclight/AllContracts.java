@@ -13,16 +13,20 @@ import dev.taclight.channel.VoxelDdaContract;
 import dev.taclight.channel.VoxelFieldContract;
 import dev.taclight.client.BobViewControlContract;
 import dev.taclight.pose.MuzzlePoseMathContract;
+import dev.taclight.pose.MuzzlePoseStoreContract;
 import dev.taclight.scene.ScenePlanContract;
 import dev.taclight.sync.LightStatePersistenceContract;
 import dev.taclight.sync.PlayerLightSyncContract;
 import dev.taclight.tacz.GunLaserReaderContract;
+import dev.taclight.tacz.GunLightAllowContract;
 
 /** 汇总契约运行器(离线、纯 JVM)。 */
 public class AllContracts {
     public static void main(String[] args) throws Exception {
         System.out.println("== GunLaserReaderContract ==");
         GunLaserReaderContract.main(args);
+        System.out.println("== GunLightAllowContract ==");
+        GunLightAllowContract.main(args);
         System.out.println("== SpotlightBufferLayoutContract ==");
         SpotlightBufferLayoutContract.main(args);
         System.out.println("== VoxelFieldContract ==");
@@ -33,6 +37,8 @@ public class AllContracts {
         UploaderSemanticContract.main(args);
         System.out.println("== MuzzlePoseMathContract ==");
         MuzzlePoseMathContract.main(args);
+        System.out.println("== MuzzlePoseStoreContract ==");
+        MuzzlePoseStoreContract.main(args);
         System.out.println("== ScenePlanContract ==");
         ScenePlanContract.main(args);
         System.out.println("== MultiLightCollectorContract ==");

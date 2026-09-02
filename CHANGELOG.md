@@ -1,5 +1,67 @@
 # TacLight Changelog
 
+## 09-02 11:4x · 里程碑②闭环:TP 枪口捕获空间标定(Q·Ry180)+ 束向离体校正;步行跟随实机验证通过
+
+- **TP 空间映射定案:与坑60 FP 同构 `世界 = 相机位 + Q_cam·Ry(180°)·v`**。上轮
+  "TP 无 180° 翻转"假设(Q·v)被 DIAG-TP 实测推翻:落点偏枪口线 16.87 格,唯
+  Q·Ry180 落 1.00 格(tools/tp-space-solve.js 五候选枚举,DIAG-REMOTE 实测位为真值;
+  翻转源自 level 渲染栈 YP180,非手部渲染私有)。**捕获语义换代**:成对差值方向法
+  退役(激光模块侧轨安装,根→束起点不沿枪管,73° vs +Z 列 28.8°),改直采
+  origin=束起点平移(枪口)+dir=束骨局部 +Z 列归一(字节码 stringVertex z=0..length)。
+- **修复后三重自洽**:mdir-look 夹角 26.5°(腰射下垂合理)、mpos 距眼 1.08 格
+  (沿视线前 0.84/下 0.4)、|offRaw|=8.35≈|相机→眼| 8.32。端到端:光池亮白椭圆落在
+  标定预测位(luma 3.15 倍),门探针示 composite 全门通过,A 本体 FP 对照正常。
+  **主图**:束线自枪口发出、光池正落在束线×地面交点(透视投影逐点核算吻合);
+  观察者换机位 mpos 逐位不变(世界锚定)。证据 docs/evidence/2026-09-02-tp-muzzle-calibration/。
+- **新坑+修复(束向离体校正 alignBeamAway)**:A 步行后捕获 +Z 列偶发反平行翻转
+  (mdir 103°/155°,取反后 76°/25°),位置链不受影响,灯照持枪者本人(实机截图)。
+  物理不变式 dot(束向,枪口−眼睛)≥0 恒成立,uploader/DIAG 自校正,契约 5 项;
+  修复后步行 mdir 保持 28.3° 前向、往返复现。根因上游(疑远程步行动画翻转束骨系,
+  视觉束线疑同步翻)记开放项。
+- **gun_light_display.json 补 third_person_length=18**(LaserConfig 字节码实锤键名),
+  TP 束长与 FP 一致。契约:MuzzlePoseMath 31 项,AllContracts ALL PASS;新增
+  RenderedEntityTracker+LivingEntityRenderEntityMixin(基方法注入,坑63)+GunModelRenderProbeMixin。
+- 里程碑①(全枪械 allow 白名单+ak47 原始 NBT 兜底读,坑62)本轮一并实机验证收口:
+  ak47 灯亮归属证据+hk416d 回归零偏差(见 09-02 前轮记录)。剩余开放项:束向翻转
+  根因(B 端远程动画状态?)、TP 束线/光池体感验收、③playerAnimator 引入对比。
+
+## 09-02 08:0x · 远程枪姿机制字节码核实:TaCZ 有完整同步+第三人称渲染链;配件提案②路线修正
+
+- **用户质询"远程枪姿 TaCZ 不同步"→ 逐类读 tacz-1.1.8-hotfix.jar 字节码,结论:
+  上轮提案中该说法有误**。三层证据链全部实锤:
+  ①同步:`ClientMessagePlayerAim(boolean)` C2S → 服务端 `IGunOperator.fromLivingEntity
+  (sender).aim(isAim)`(lambda$handle$0 字节码)→ TaCZ 自有 `entity.sync.core.
+  SyncedEntityData` → `ServerMessageUpdateEntityData(entityId, entries)` 广播观察端
+  (握手 `ServerMessageSyncedEntityDataMapping` 注册键);②数据:`LivingEntityMixin`
+  把 IGunOperator 混入所有 LivingEntity,观察端可查 `getSynIsAiming()/
+  getSynAimingProgress()`(0~1 连续)/`getSynSprintTime()`/`getSynReloadState()`;
+  ③渲染:`HumanoidModelMixin`→`ThirdPersonManager` 对每个被渲染人形应用
+  `IThirdPersonAnimation.animateGunHold/animateGunAim`(持枪/瞄准两套姿态)。
+  **远程玩家并非单一固定持枪姿。**
+- **提案②路线升级(零新增包,M5 兼容)**:`renderLaserBeam` 头部门禁字节码 =
+  `attachment==null→return; !firstPerson && context!=THIRD_PERSON_RIGHT_HAND→return`
+  ——TaCZ 刻意在第三人称渲染激光束(专属 lengthThird/widthThird),且
+  BedrockGunModel/BedrockAttachmentModel 均在第三人称路径调用它 → 现有
+  BeamRendererMixin 注入点在观察端渲染远程玩家时本来就触发,仅被我方
+  `context.firstPerson()` 门禁挡掉。实施=去门禁按 context 分流+ThreadLocal 识别
+  当前渲染实体(TaCZ 不传实体给 BETWR)+重标定第三人称捕获矩阵空间语义(坑60
+  同款三重自洽,矩阵来自 level poseStack 而非手部渲染)。原"三档姿态近似"降级
+  fallback。附带:gun_light_display.json 缺 lengthThird/widthThird(第三人称光束
+  走默认长度),实施时补。
+
+- **追加(用户追问疾跑枪姿):默认第三人称动画无疾跑姿态**。ThirdPersonManager$1
+  (DEFAULT)字节码 = animateGunHold 纯常数角叠加(−0.3/0.8/−1.4 rad)+animateGunAim
+  按 aimingProgress lerp,**零 sprint 输入**;getSynSprintTime() 读
+  ModSyncedEntityData.SPRINT_TIME_KEY(已网络同步)但默认实现不消费。分流顺序:
+  PlayerAnimatorCompat.hasPlayerAnimator3rd(可选模组,**本环境未装**→恒走原版回退);
+  默认包自带 player_animator/rifle_default.player_animation.json 含 run_upper/lower
+  +walk+crouch_walk 全套(**装 playerAnimator 即得第三人称疾跑姿态,TaCZ 官方数据**)。
+  hk416d_display.json third_person_animation="default"。影响:提案②"捕获所见"路线下
+  观察端灯枪恒一致;远程疾跑灯效幅度 = 固定持枪姿+原版摆臂(<FP 疾跑),差异属 TaCZ
+  第三人称视觉行为,非灯链缺陷。补齐路线:装 playerAnimator(推荐,双端,零改动)/
+  自研 TP 疾跑姿 mixin(改 TaCZ 视觉,超灯范畴,不建议)/灯单独加疾跑摆(制造灯枪
+  不一致,违背"灯跟枪"原则,排除)。
+
 ## 09-02 07:0x · 遮挡静态回归关闭 + 枪灯坑60修复(姿态跟随实机验证);配件适配提案就绪
 
 - **遮挡静态数字回归(悬置项)关闭**:在 FUZZ 0.35+坑57+坑58 三重变更下复测 09-01

@@ -35,7 +35,12 @@ public class TacLightCommand {
         event.getDispatcher().register(Commands.literal("taclight")
                 .then(Commands.literal("kit")
                         .requires(s -> s.hasPermission(0))
-                        .executes(ctx -> giveKit(ctx.getSource())))
+                        .executes(ctx -> giveKit(ctx.getSource()))
+                        // 里程碑①(2026-09-02):可选枪械 id(默认包 index 名,如 ak47)——
+                        // 白名单实测用:任意枪发下来即预装 gun_light。
+                        .then(Commands.argument("gunId", StringArgumentType.word())
+                                .executes(ctx -> giveKit(ctx.getSource(),
+                                        StringArgumentType.getString(ctx, "gunId")))))
                 .then(Commands.literal("cam")
                         .requires(s -> s.hasPermission(0))
                         .then(Commands.literal("here")
@@ -174,19 +179,44 @@ public class TacLightCommand {
     }
 
     private static int giveKit(CommandSourceStack source) throws CommandSyntaxException {
+        return giveKit(source, "hk416d");
+    }
+
+    /** kit 发放:手电 + 指定枪械 id(默认 hk416d)预装 gun_light;白名单实测入口。 */
+    private static int giveKit(CommandSourceStack source, String gunId) throws CommandSyntaxException {
         var player = source.getPlayerOrException();
         player.getInventory().add(new ItemStack(ModItems.FLASHLIGHT.get()));
         int extra = 0;
         if (TaczCompat.present()) {
             try {
             if (tryAdd(player, "tacz", "modern_kinetic_gun", gun -> {
-                IGun.getIGunOrNull(gun).setGunId(gun, new ResourceLocation("tacz", "hk416d"));
+                IGun igun = IGun.getIGunOrNull(gun);
+                igun.setGunId(gun, new ResourceLocation("tacz", gunId));
                 // 2026-09-02:枪灯经官方 API 预装上枪。此前 kit 发散件,需进改装 UI 手动
                 // 安装——GLFW UI 后台鼠标注入无效(坑41),自动化枪姿验证一直被阻塞。
                 // 附件类型 laser 由 index/attachments/gun_light.json 声明,按类型入 LASER 槽。
                 ItemStack att = new ItemStack(ForgeRegistries.ITEMS.getValue(new ResourceLocation("tacz", "attachment")));
                 IAttachment.getIAttachmentOrNull(att).setAttachmentId(att, new ResourceLocation("taclight", "gun_light"));
-                IGun.getIGunOrNull(gun).installAttachment(gun, att);
+                // 安装时点决定性探针(2026-09-02 installAttachment 静默失败定位):全部在
+                // 服务端命令线程上测。allowed=白名单判定;slot=装后 LASER 槽读回
+                // (EMPTY=静默拒装);tags=服务端数据源内该枪 allow 条目数;src=数据源类别。
+                boolean allowed = igun.allowAttachment(gun, att);
+                igun.installAttachment(gun, att);
+                ItemStack slot = igun.getAttachment(gun,
+                        com.tacz.guns.api.item.attachment.AttachmentType.LASER);
+                String slotId = slot.isEmpty() ? "EMPTY"
+                        : String.valueOf(IAttachment.getIAttachmentOrNull(slot).getAttachmentId(slot));
+                String tags;
+                try {
+                    var prov = (com.tacz.guns.resource.ICommonResourceProvider)
+                            com.tacz.guns.resource.CommonAssetsManager.get();
+                    var t = prov.getAllowAttachmentTags(new ResourceLocation("tacz", gunId));
+                    tags = prov.getClass().getSimpleName() + ":" + (t == null ? "null" : t.size());
+                } catch (Throwable t2) {
+                    tags = "ERR:" + t2.getClass().getSimpleName();
+                }
+                TacLightMod.LOGGER.info("[TacLight] KIT-INSTALL thread={} gunId={} allowed={} slot={} tags({})",
+                        Thread.currentThread().getName(), gunId, allowed, slotId, tags);
             })) {
                 extra++;
             }
@@ -194,7 +224,7 @@ public class TacLightCommand {
                 TacLightMod.LOGGER.warn("[TacLight] kit TaCZ part failed: {}", t.toString());
             }
         }
-        String message = "[TacLight] kit given: flashlight" + (extra > 0 ? " + HK416D(预装 gun_light)" : "");
+        String message = "[TacLight] kit given: flashlight" + (extra > 0 ? " + " + gunId + "(预装 gun_light)" : "");
         source.sendSuccess(() -> Component.literal(message), false);
         return 1;
     }

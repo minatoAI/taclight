@@ -56,4 +56,49 @@ public final class MuzzlePoseMath {
                 .mul(new org.joml.Quaternionf().rotationY((float) Math.PI));
         return new org.joml.Vector3f(vx, vy, vz).rotate(q);
     }
+
+    /**
+     * 第三人称捕获(level 渲染 PoseStack,相机空间、含实体平移)→ 世界方向/偏移
+     * (2026-09-02 里程碑②实机标定):与第一人称坑60 同构 —— YP180 翻转源自 level
+     * 渲染栈而非手部渲染私有,换算同为 Q_cam · Ry(180°) · v。DIAG-TP 实测钉死:
+     * Q·v 落点偏 16.9 格,唯 Q·Ry180 距枪口线 1.0 格(tools/tp-space-solve.js 可复算)。
+     * 轴向语义:TP 捕获 origin=束起点平移、forward=束骨局部 +Z 列归一(与 FP 的
+     * -Z 前向约定相反,符号由捕获侧负责,本函数只做空间映射)。
+     */
+    public static org.joml.Vector3f muzzleViewDirToWorldTP(float vx, float vy, float vz,
+                                                           org.joml.Quaternionf camRotation) {
+        return gunViewDirToWorld(vx, vy, vz, camRotation);
+    }
+
+    /**
+     * 束向量成对捕获的方向归一(2026-09-02 TP 标定):renderLaserBeam 外层 HEAD 与深处
+     * (束骨遍历后)两次矩阵平移之差 = 视空间束方向向量(模长=束长)。非有限或长度
+     * 退化(<1e-3 视空间)→ null,调用方放弃本次捕获(灯回退近似锚点)。
+     */
+    public static float[] normalizeBeamDelta(float dx, float dy, float dz) {
+        if (!Float.isFinite(dx) || !Float.isFinite(dy) || !Float.isFinite(dz)) {
+            return null;
+        }
+        double len = Math.sqrt(dx * (double) dx + dy * (double) dy + dz * (double) dz);
+        if (len < 1e-3) {
+            return null;
+        }
+        return new float[]{(float) (dx / len), (float) (dy / len), (float) (dz / len)};
+    }
+
+    /**
+     * 束方向离体校正(2026-09-02 里程碑②实机标定):捕获的束骨 +Z 列在世界中偶发
+     * 反平行翻转(远程步行动画状态下,位置链不受影响),灯会照到持枪者本人(实机
+     * 截图:亮斑在头/胸)。物理不变式:束从枪口(into=枪口−眼睛)向外延伸,故
+     * dot(fwd, into) < 0 时取反;垂直或已向外则原样返回。零向量 into 无法判定,
+     * 原样返回。纯函数,FP/TP 通用。
+     */
+    public static float[] alignBeamAway(float fx, float fy, float fz,
+                                        float ax, float ay, float az) {
+        double dot = fx * (double) ax + fy * (double) ay + fz * (double) az;
+        if (dot < 0) {
+            return new float[]{-fx, -fy, -fz};
+        }
+        return new float[]{fx, fy, fz};
+    }
 }

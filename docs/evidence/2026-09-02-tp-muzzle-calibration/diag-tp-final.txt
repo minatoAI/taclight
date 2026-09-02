@@ -1,0 +1,1 @@
+[029月2026 11:35:50.443] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] DIAG-TP player=Dev raw=(-0.537,0.722,-0.436) mpos=(2010.07,122.09,2.86) mdir=(0.693,-0.506,-0.514) look=(0.857,-0.171,-0.486) tpCount=1 camQ=(0.133,-0.706,0.137,0.682) offRaw=(-0.91,0.39,-7.72)

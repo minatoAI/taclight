@@ -113,7 +113,7 @@ public final class ClientSpotlightUploader {
                 lights.add(selfCapped(gun, playerEye));
             }
         }
-        collectRemoteLights(mc, eye, cfg, lights);
+        collectRemoteLights(mc, eye, cam.rotation(), cfg, lights);
         int extraFlags = ClientLightState.debugMode() ? SpotlightBufferLayout.FLAG_DEBUG : 0;
         // 体素遮挡栅格(09-01 深夜④ DDA):墙后漏光立项,与灯数据同缓冲上传;
         // 禁用/无灯 → null,GLSL 逐光线回退屏幕空间 SSO。
@@ -237,7 +237,8 @@ public final class ClientSpotlightUploader {
     private static final int MAX_LIGHTS = 8;
 
     /** M5 远程玩家灯收集:实体数据开关 → 距离剔除/就近上限 → 第三人称锚定数学复用。 */
-    private static void collectRemoteLights(Minecraft mc, Vec3 camEye, LightParams cfg, List<SpotlightData> out) {
+    private static void collectRemoteLights(Minecraft mc, Vec3 camEye, org.joml.Quaternionf camRot,
+                                            LightParams cfg, List<SpotlightData> out) {
         if (out.size() >= MAX_LIGHTS) return;
         var remotes = new ArrayList<net.minecraft.client.player.AbstractClientPlayer>();
         var cands = new ArrayList<MultiLightCollector.Candidate>();
@@ -299,9 +300,31 @@ public final class ClientSpotlightUploader {
                 out.add(selfCapped(hand, eye));
             }
             if (sel.gun() && out.size() < MAX_LIGHTS) {
-                // 他人枪灯:无精确枪口矩阵(本地捕获仅第一人称),眼位近似(旁观方案 §4.5)
-                SpotlightData gun = toSpot(eye.add(look.scale(0.45)), look, cfg,
-                        dev.taclight.config.TacLightConfig.GUN_MULTIPLIER.get().floatValue());
+                // 里程碑②(2026-09-02):第三人称渲染捕获 = 该玩家当前渲染枪姿(瞄准/
+                // 疾跑臂姿等)下的真实枪口,零新增网络包。矩阵来自 level 渲染 PoseStack
+                // (相机空间,含实体平移),世界 = camEye + Q_cam·Ry(180°)·v —— 与第一
+                // 人称坑60 同构:YP180 翻转源自 level 渲染栈("TP 无翻转"假设已被
+                // DIAG-TP 实测推翻,Q·v 偏 16.9 格,tools/tp-space-solve.js)。未捕获
+                // (出视锥/LOD 模型无激光骨/未渲染)回退眼位近似(旁观方案 §4.5)。
+                SpotlightData gun;
+                var mp = dev.taclight.client.MuzzlePoseCapture.consumeFreshThirdPerson(p.getId());
+                if (mp != null) {
+                    org.joml.Vector3f off = dev.taclight.pose.MuzzlePoseMath.muzzleViewDirToWorldTP(
+                            mp.ox(), mp.oy(), mp.oz(), camRot);
+                    org.joml.Vector3f fwdW = dev.taclight.pose.MuzzlePoseMath.muzzleViewDirToWorldTP(
+                            mp.fx(), mp.fy(), mp.fz(), camRot);
+                    Vec3 pos = new Vec3(camEye.x + off.x(), camEye.y + off.y(), camEye.z + off.z());
+                    // 束方向离体校正(09-02 实机:远程步行动画状态下捕获 +Z 列偶发反平行
+                    // 翻转,灯照持枪者本人;物理不变式 dot(fwd, 枪口−眼睛) ≥ 0)。
+                    float[] fwdA = dev.taclight.pose.MuzzlePoseMath.alignBeamAway(
+                            fwdW.x(), fwdW.y(), fwdW.z(),
+                            (float) (pos.x - eye.x), (float) (pos.y - eye.y), (float) (pos.z - eye.z));
+                    gun = toSpot(pos, new Vec3(fwdA[0], fwdA[1], fwdA[2]), cfg,
+                            dev.taclight.config.TacLightConfig.GUN_MULTIPLIER.get().floatValue());
+                } else {
+                    gun = toSpot(eye.add(look.scale(0.45)), look, cfg,
+                            dev.taclight.config.TacLightConfig.GUN_MULTIPLIER.get().floatValue());
+                }
                 out.add(selfCapped(gun, eye));
             }
         }

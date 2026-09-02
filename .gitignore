@@ -26,3 +26,6 @@ logs/
 *.log.gz
 build-log.txt
 tools/.session/
+
+# 第三方依赖库(里程碑③用)不入库:红线1 零分发
+libs/*.jar
