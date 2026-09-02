@@ -121,7 +121,6 @@ void main() {
             } else if (dot(n, vPos) > 0.0) {
                 n = -n;                            // 构造性朝向:可见面必朝相机
             }
-            vec3 v = -normalize(fragView);
             // 阶段二材质解码:LabPBR smoothness(旧占位 0.3 由 gbuffers 回落值兼容)
             // 粗糙度映射换为 LabPBR 标准的 (1-s)²(此前 1-s 线性);下限 0.20 是
             // 能量护栏——(1-s)² 下近镜面 GGX 分布项 D 峰值 ∝ 1/a⁴ 量级发散,
@@ -135,51 +134,10 @@ void main() {
             // diffuse 清零(金属无体散射)。
             vec3 f0 = mix(vec3(g5.r), albedo, metal);
 
-            vec3 radiance = vec3(0.0);
-            for (uint i = 0u; i < lightCount && i < 8u; i++) {
-                TacLightSpot L = lights[i];
-                if (L.dirType.w < 0.5) continue;          // 预留:类型过滤
-                vec3 lightScene = taclight_world_to_scene(L.posRadius.xyz);
-                vec3 lightView = taclight_scene_to_view(lightScene);
-                vec3 toFrag = fragView - lightView;
-                float dist = length(toFrag);
-                float radius = L.posRadius.w;
-                if (dist > radius || radius < 1e-3) continue;   // 廉价门:半径窗口
-                vec3 lf = toFrag / max(dist, 1e-4);       // 灯→片元(锥判定轴,与绿锥同式)
-                float cosAng = dot(lf, normalize(mat3(gbufferModelView) * normalize(L.dirType.xyz)));
-                float spot = smoothstep(L.cone.x, L.cone.y, cosAng);
-                if (spot <= 0.001) continue;              // 廉价门:锥外
-                // M1 根因热修(2026-08-27):l 此前直接沿用灯→片元方向,同轴光下
-                // dot(n,l) 恒负 → ndl 门拒绝全部像素(五轮"无白光"的真正根因);
-                // 光照约定必须是 表面→灯。
-                vec3 l = -lf;
-                float ndl = max(dot(n, l), 0.0);
-                if (ndl <= 0.0) continue;                 // 廉价门:背面
-                // vis 分流(2026-09-02 修订,坑58):体素 DDA **无条件先执行**——它是
-                // 世界空间射线,灯≈相机时依然有效(起点格先步进后判定、终点格回退
-                // 1e-3,双端豁免,视线即光路),跳过它 = 自灯影子整体丢失。
-                // 同轴豁免("可见即无遮挡",热修 12)只救屏幕空间 SSO 的退化
-                // (灯在相机处 SSO 假消光黑边),且判定必须在**场景域**
-                // (world−camera,无 bob):坑 57 修复后 lightView 是真实视图距离,
-                // 含 bob 平移 ±0.1,自灯锚点(手持 0.44/枪灯 ~0.6)恰在 0.5 格阈值
-                // 两侧,随步频翻转 = 影子"消失+移动闪烁"(实机回归)。
-                float vis;
-                float vt = taclight_vox_transmit(L.posRadius.xyz, taclight_view_to_world(fragView));
-                if (vt >= 0.0) {
-                    vis = vt;
-                } else if (dot(lightScene, lightScene) < 0.25) {
-                    vis = 1.0;    // 同轴+栅格无效:可见即无遮挡(热修 12 原意)
-                } else {
-                    vis = taclight_sso(fragView, lightView, L);
-                }
-                if (vis <= 0.003) continue;
-
-                vec3 lc = L.colorIntensity.rgb * L.colorIntensity.a;
-                float atten = taclight_attenuation(dist, radius);
-                vec3 diffuse = albedo * (ndl * (1.0 - metal));
-                vec3 spec = taclight_ggx(n, v, l, roughness, f0) * (ndl * TACLIGHT_SPEC_DAMP);
-                radiance += (diffuse + spec) * lc * (spot * atten * vis);
-            }
+            // interop 分层(v1.0):灯循环/锥判定/衰减/遮挡分流(DDA 先行+同轴
+            // 场景域回退,坑58)全部在 core 的 taclight_surface_lighting ——
+            // 跨光影包通用逻辑,不随包改写;本 pass 只做本包 G-Buffer 解码。
+            vec3 radiance = taclight_surface_lighting(fragView, albedo, n, roughness, metal, f0);
 
             // NaN 品红警报:任何一盏灯的路径产生 NaN 会毒化整个辐射和
             if (radiance.x != radiance.x || radiance.y != radiance.y || radiance.z != radiance.z) {

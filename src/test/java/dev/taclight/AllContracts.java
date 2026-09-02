@@ -16,6 +16,7 @@ import dev.taclight.pose.MuzzlePoseMathContract;
 import dev.taclight.scene.ScenePlanContract;
 import dev.taclight.sync.LightStatePersistenceContract;
 import dev.taclight.sync.PlayerLightSyncContract;
+import dev.taclight.shader.ShaderCoreContract;
 import dev.taclight.tacz.GunLaserReaderContract;
 
 /** 汇总契约运行器(离线、纯 JVM)。 */
@@ -29,6 +30,8 @@ public class AllContracts {
         VoxelFieldContract.main(args);
         System.out.println("== VoxelDdaContract ==");
         VoxelDdaContract.main(args);
+        System.out.println("== ShaderCoreContract ==");
+        ShaderCoreContract.main(args);
         System.out.println("== UploaderSemanticContract ==");
         UploaderSemanticContract.main(args);
         System.out.println("== MuzzlePoseMathContract ==");

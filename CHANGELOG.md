@@ -1,5 +1,30 @@
 # TacLight Changelog
 
+## 09-02 08:3x · interop 核心剥离:照明核心与包私有编码分层(方案 C 第一里程碑)
+
+- **背景与决策**:为让玩家用其他光影包时保留锥形照明,方案 C 定型为**运行时注入**
+  (模组内 patch 引擎把核心 GLSL 注入玩家所选光影包;未知包系提示不支持),
+  替代"事前工具生成修改包"。第一里程碑 = 把跨包可移植的照明核心从本包私有
+  编码中切出。HandheldMoon 调研结论支撑路线决策:动态光照路线(CPU chunk
+  重建 churn + 0-15 级灰度量化 + 泛洪漏光)视觉上限是硬的,只配做兜底不做主线。
+- **新分层**(pack/shaders/lib/):
+  `taclight_math.glsl`(IGN/HG 公开数学,core 与 style 共用)→
+  `taclight_core.glsl`(**零依赖照明核心**:SSBO 契约+坐标换算五函数+衰减/软膝/
+  肩部/GGX+SSO+体素 DDA+绿锥+表面照明主循环 `taclight_surface_lighting()`;
+  仅依赖 Iris 标准 uniform+depthtex1+SSBO,**禁止 colortex 字面量**)→
+  `taclight_adapter.glsl`(本包私有:colortex3.a 遮挡系数经
+  `TACLIGHT_OCCLUSION_AT` 宏注入 core,默认回退保守 1.0;量纲标定
+  `TACLIGHT_LIGHT_GAIN` 移入——移植到其他包时**整文件替换+重标定**)。
+  `taclight_common.glsl` 改纯聚合头(adapter→core→gbuffer→style),
+  对 composite 家族接口零变化;gbuffers/final 零改动。
+- **契约**:新增 `ShaderCoreContract`(31 项)钉死分层边界(core 零依赖/
+  宏注入点/聚合顺序 adapter 先于 core/无残留双份定义/消费 pass 不残留照明门);
+  `VoxelDdaContract` 的 GLSL 文本断言跟代码迁至 core(断言内容不变)。
+  先红(旧结构上 FAIL 实证)后绿:**AllContracts ALL PASS(495 checks)**。
+- **实机回归(待做)**:双实例当前被并行任务占用(08:15 场景布防中),
+  待空闲后 sync+!reload+截图回归;行为预期零变化(纯重构,逐行搬运)。
+- 分支:`interop/core-extract`(git worktree wt-interop,与其他任务隔离)。
+
 ## 09-02 07:0x · 遮挡静态回归关闭 + 枪灯坑60修复(姿态跟随实机验证);配件适配提案就绪
 
 - **遮挡静态数字回归(悬置项)关闭**:在 FUZZ 0.35+坑57+坑58 三重变更下复测 09-01
