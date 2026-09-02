@@ -95,6 +95,32 @@ public class TpLightResolverContract {
         check(rdec.state().equals("blend") && Math.abs(rdec.weight() - 0.9f) < 1e-6, "姿态变:出速率 400ms(40ms→0.9)");
         check(rdec.pos().distance(reconstructExpect(yawMoved)) < 1e-6, "blend:锚 = 重构(降级不弃跟,容差含龄期衰减)");
 
+        // ---- 束向符号对齐(2026-09-03 实机钉死):束骨沿局部 ±Z 拉伸,捕获侧符号未定;
+        // resolver 必须以"枪口−持灯者捕获眼位"为外向基准对齐,否则 fresh/hold 方向反 180°
+        // (hold 帧 dYaw=179.98° 实测),且 dir=lerp(fallback,capDir) 过渡穿零向量 →
+        // 归一化后单帧扫动 >100°(用户"入场突变"真凶)。 ----
+        // fz=(−1,0,0) → Q·Ry180 映射后朝东(已向外)→ 原样保留
+        TpLightResolver.CaptureView capFwd = new TpLightResolver.CaptureView(
+                new MuzzlePoseMath.Pose(0, 0, 1f, -1, 0, 0, 0, 1, 0), ms(0), idCam,
+                new Vector3d(101.064, 63.674, 51.142));
+        TpLightResolver.Resolved rFwd = TpLightResolver.resolve(capFwd, refE, refE, fbDir, 1f, ms(400), ms(16), true);
+        check(rFwd.state().equals("hold") && rFwd.dir().x() > 0.99,
+                "束向已向外(朝东):hold 方向原样保留");
+        // fz=(1,0,0) → 映射后朝西(反平行)→ 必须翻转到枪口前方
+        TpLightResolver.CaptureView capRev = new TpLightResolver.CaptureView(
+                new MuzzlePoseMath.Pose(0, 0, 1f, 1, 0, 0, 0, 1, 0), ms(0), idCam,
+                new Vector3d(101.064, 63.674, 51.142));
+        TpLightResolver.Resolved rRev = TpLightResolver.resolve(capRev, refE, refE, fbDir, 1f, ms(400), ms(16), true);
+        check(rRev.dir().x() > 0.99, "束向反平行(朝西):对齐翻转到枪口前方(dot(束向,枪口−眼)≥0)");
+        // 爬升中段:两向同向后 lerp 不穿零向量,fresh weight=0.25 时方向仍朝东(不扫动)
+        TpLightResolver.Resolved rRevMid = TpLightResolver.resolve(capRev, refE, refE, fbDir, 0f, ms(1), ms(50), true);
+        check(rRevMid.state().equals("fresh") && rRevMid.dir().x() > 0.99,
+                "爬升中段:方向线性过渡不穿零(单帧扫动 ≤ 摆动级)");
+        // 对齐基准 = capturedRef(捕获时刻眼位),非 liveRef:referent 远走后 hold 仍按捕获帧判定
+        TpLightResolver.Referent farAway = new TpLightResolver.Referent(130, 64, 90, -90f, 0f, false, 7);
+        TpLightResolver.Resolved rFar = TpLightResolver.resolve(capRev, refE, farAway, fbDir, 1f, ms(400), ms(16), true);
+        check(rFar.dir().x() > 0.99, "对齐基准=捕获时刻 referent(非实时眼位),传送后 hold 方向不变");
+
         // ---- hold 硬上限:超 10s 强制降级(防漏判姿态变化) ----
         TpLightResolver.Resolved rmax = TpLightResolver.resolve(capE, refE, refE, fbDir, 1f,
                 ms(0) + TpLightResolver.HOLD_MAX_NANOS + 1, ms(16), true);
@@ -168,7 +194,7 @@ public class TpLightResolverContract {
         check(Math.abs(TpLightResolver.advanceWeight(0f, true, 10_000_000_000L) - 0.5f) < 1e-6,
                 "权重:超大 dt 钳到 100ms");
 
-        System.out.println("TpLightResolverContract: ALL PASS (46 checks)");
+        System.out.println("TpLightResolverContract: ALL PASS (50 checks)");
     }
 
     /** blend 断言用的重构期望值(面东捕获的局部偏移 (1.038,−0.326,0.142) 随 live 偏航旋转)。 */

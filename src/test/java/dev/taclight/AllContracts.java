@@ -15,6 +15,7 @@ import dev.taclight.client.BobViewControlContract;
 import dev.taclight.client.CameraSweepContract;
 import dev.taclight.client.TpFallbackControlContract;
 import dev.taclight.pose.MuzzlePoseMathContract;
+import dev.taclight.pose.MuzzlePoseModelContract;
 import dev.taclight.pose.MuzzlePoseStoreContract;
 import dev.taclight.pose.TpLightResolverContract;
 import dev.taclight.scene.ScenePlanContract;
@@ -42,6 +43,8 @@ public class AllContracts {
         MuzzlePoseMathContract.main(args);
         System.out.println("== MuzzlePoseStoreContract ==");
         MuzzlePoseStoreContract.main(args);
+        System.out.println("== MuzzlePoseModelContract ==");
+        MuzzlePoseModelContract.main(args);
         System.out.println("== TpLightResolverContract ==");
         TpLightResolverContract.main(args);
         System.out.println("== CameraSweepContract ==");

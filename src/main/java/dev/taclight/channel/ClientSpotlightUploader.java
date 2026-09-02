@@ -246,6 +246,9 @@ public final class ClientSpotlightUploader {
         TpLightResolver.Referent ref;
         long lastNanos = System.nanoTime();
         long lastCaptureNanos;
+        // 模型方向先验的速度差分基(上一帧 psnap 眼位;首帧无基 → 静止族)
+        double prevEyeX, prevEyeY, prevEyeZ;
+        boolean hasPrevEye;
     }
 
     /** DIAG-TP 摘要(每持枪远程玩家一行,单帧覆盖;诊断从上传器读单一真源)。 */
@@ -338,10 +341,24 @@ public final class ClientSpotlightUploader {
                     st.ref = liveRef; // 捕获落地帧刷新稳态快照/自校准基准(过期窗口不刷新,保同帧 basis)
                     st.lastCaptureNanos = entry.nanos();
                 }
-                long dt = Math.min(Math.max(nowNano - st.lastNanos, 0L), TpLightResolver.MAX_STEP_NANOS);
+                long rawDt = Math.min(Math.max(nowNano - st.lastNanos, 1L), 1_000_000_000L);
+                long dt = Math.min(rawDt, TpLightResolver.MAX_STEP_NANOS);
                 st.lastNanos = nowNano;
+                // 模型方向先验(2026-09-03 方案B,CPU 侧枪口姿态模型 v1=方向族):
+                // fallback 方向从"头部视线"升级为"视线+姿态族俯仰偏移"(移动 −6°/静止 −2°,
+                // 步行/疾跑同族,313 帧实测标定)。屏内外方向族连续 —— hold 判破/入场交接
+                // 不再发生 −6°↔0° 族跳变(8m 处光池 ~0.9m 摆动 = 用户"跳变/卡顿"主体)。
+                // 速度=psnap 眼位帧差分(rawDt 未钳 100ms,首帧/长停顿保守取静止族)。
+                org.joml.Vector3d modelDir = dev.taclight.pose.MuzzlePoseModel.fallbackDir(
+                        yHead + extYaw, xRot + extPitch, liveRef.aiming(),
+                        st.prevEyeX, st.prevEyeY, st.prevEyeZ, eye.x, eye.y, eye.z,
+                        st.hasPrevEye ? rawDt : 0L);
+                st.prevEyeX = eye.x;
+                st.prevEyeY = eye.y;
+                st.prevEyeZ = eye.z;
+                st.hasPrevEye = true;
                 var res = TpLightResolver.resolve(capView, st.ref, liveRef,
-                        new org.joml.Vector3d(look.x, look.y, look.z),
+                        modelDir,
                         st.weight, nowNano, dt, dev.taclight.client.TpFallbackControl.blended());
                 st.weight = res.weight();
                 // 束方向离体校正(09-02 实机:捕获 +Z 列偶发反平行翻转,灯照持枪者本人;

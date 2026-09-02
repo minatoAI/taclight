@@ -110,6 +110,20 @@ public final class TpLightResolver {
         Vector3f fwd = MuzzlePoseMath.muzzleViewDirToWorldTP(
                 cap.pose().fx(), cap.pose().fy(), cap.pose().fz(), cap.camRot());
         Vector3d capDir = normalize(new Vector3d(fwd.x(), fwd.y(), fwd.z()));
+        // 束向符号对齐(2026-09-03 实机钉死):束骨沿局部 ±Z 拉伸,捕获矩阵无法判定
+        // 朝前朝后,符号历来由上传端 alignBeamAway 兜底——但 resolver 内不对齐会让
+        // fresh/hold 方向反 180°(hold 帧 dYaw=179.98° 实测),且 dir=lerp(fallback,capDir)
+        // 过渡穿零向量,归一化后单帧扫动 >100°(用户"入场突变"真凶)。基准用
+        // capturedRef(捕获时刻眼位,与捕获同帧),非实时眼位。
+        if (capturedRef != null) {
+            Vector3d capPos = capPosExact(cap);
+            double intoX = capPos.x - capturedRef.x();
+            double intoY = capPos.y - capturedRef.y();
+            double intoZ = capPos.z - capturedRef.z();
+            if (capDir.x * intoX + capDir.y * intoY + capDir.z * intoZ < 0) {
+                capDir.negate();
+            }
+        }
         Vector3d dir = normalize(new Vector3d(fallbackDir).lerp(capDir, weight));
         return new Resolved(pos, dir, state, weight);
     }

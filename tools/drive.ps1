@@ -76,19 +76,30 @@ public static class T0Send {
 function Find-McWindow() {
   $script:mc = [IntPtr]::Zero
   $script:gameMats = @('^Minecraft')
+  # 并行任务隔离(2026-09-03,wt-interop 里程碑2 实例常态共存):标题匹配会误中
+  # runClientInterop 窗口 → 排除其属主 pid(命令行含 wt-interop 的 java 进程)。
+  # 显式 -ProcId 不受影响(调用方点名 pid,本就不走标题匹配)。
+  if (-not $script:skipPids) {
+    $script:skipPids = @{}
+    Get-CimInstance Win32_Process -Filter "name='java.exe' or name='javaw.exe'" |
+      Where-Object { $_.CommandLine -and $_.CommandLine -match 'wt-interop' } |
+      ForEach-Object { $script:skipPids[[uint32]$_.ProcessId] = $true }
+  }
   $cb = [T0Win+EnumProc]{ param($h,$lp)
     if ([T0Win]::IsWindowVisible($h)) {
-      if ($ProcId -gt 0) {
-        $wpid = [uint32]0
-        [T0Win]::GetWindowThreadProcessId($h, [ref]$wpid) | Out-Null
-        if ($wpid -eq [uint32]$ProcId) { $script:mc = $h }
-      } else {
-        $sb = New-Object System.Text.StringBuilder 256
-        [T0Win]::GetWindowTextW($h, $sb, 256) | Out-Null
-        $t = $sb.ToString()
-        $ok = $false
-        foreach ($m in $script:gameMats) { if ($t -match $m) { $ok = $true; break } }
-        if ($ok) { $script:mc = $h }
+      $wpid = [uint32]0
+      [T0Win]::GetWindowThreadProcessId($h, [ref]$wpid) | Out-Null
+      if (-not $script:skipPids.ContainsKey($wpid)) {
+        if ($ProcId -gt 0) {
+          if ($wpid -eq [uint32]$ProcId) { $script:mc = $h }
+        } else {
+          $sb = New-Object System.Text.StringBuilder 256
+          [T0Win]::GetWindowTextW($h, $sb, 256) | Out-Null
+          $t = $sb.ToString()
+          $ok = $false
+          foreach ($m in $script:gameMats) { if ($t -match $m) { $ok = $true; break } }
+          if ($ok) { $script:mc = $h }
+        }
       }
     }
     return $true
