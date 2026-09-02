@@ -494,6 +494,9 @@ const TP_THRESHOLDS = {
   MAX_CORR: 0.5,           // |Δdir| 与 |Δcam| 的 Pearson 上限(坑68 特征≈0.9+)
   MAX_POS_STEP: 0.15,      // blend 模式状态过渡锚点最大步进(格)
   MAX_DIR_STEP_DEG: 8.0,   // blend 模式状态过渡方向最大步进
+  MAX_FOLLOW_DRIFT: 0.3,   // 灯随人:局部系"枪口−眼位"偏移分量最大漂移(格;实测标定摆动≈0.15)
+  MIN_FOLLOW_ROWS: 20,     // 灯随人分组最少帧数
+  MIN_FOLLOW_TRAVEL: 2.0,  // 灯随人分组最少 referent 行程(格,保证有激励)
 };
 
 function wrapDeg(d) {
@@ -603,7 +606,46 @@ function tpCheck(rows, C) {
     } else {
       continuity.verdict = 'REPORT-ONLY'; // hard 模式:跳变数字留档,不判 PASS/FAIL
     }
-    entities.push({ id, samples: group.length, states, modes, invariance, continuity });
+    // 灯随人(2026-09-02 入场跳变修复不变式):局部坐标系(绕 refYaw 反旋)下
+    // "枪口−眼位"偏移应恒定 —— 重构跟随的数学本质,偏航旋转在局部系中抵消。
+    // 旧实现两处签名都会被抓:①hold 世界钉死+referent 步行 → 偏移随步行增长(13 格级);
+    // ②fallback(0.45 近似)↔fresh(1.04 真实)组间前向跳 0.6(=入场滑落的本质)。
+    // 按 (aim,item) 分组各自判稳(瞄准/换枪的合法偏移变化不入组间)。
+    const followGroups = new Map();
+    for (const row of group) {
+      const key = row[31] + '/' + row[32];
+      if (!followGroups.has(key)) followGroups.set(key, []);
+      const ox = Number(row[20]) - Number(row[26]);
+      const oy = Number(row[21]) - Number(row[27]);
+      const oz = Number(row[22]) - Number(row[28]);
+      const yaw = Number(row[29]) * Math.PI / 180;
+      followGroups.get(key).push({
+        fwd: ox * -Math.sin(yaw) + oz * Math.cos(yaw),
+        up: oy,
+        right: ox * -Math.cos(yaw) + oz * -Math.sin(yaw),
+        ref: [Number(row[26]), Number(row[27]), Number(row[28])],
+      });
+    }
+    const follow = { groups: [], verdict: 'REPORT-ONLY' };
+    for (const [key, rowsF] of followGroups) {
+      let travel = 0;
+      for (let i = 1; i < rowsF.length; i++) travel += dist3(rowsF[i].ref, rowsF[i - 1].ref);
+      let drift = 0;
+      for (const comp of ['fwd', 'up', 'right']) {
+        const vals = rowsF.map(x => x[comp]);
+        drift = Math.max(drift, Math.max(...vals) - Math.min(...vals));
+      }
+      const verdict = (rowsF.length < TP_THRESHOLDS.MIN_FOLLOW_ROWS
+        || travel < TP_THRESHOLDS.MIN_FOLLOW_TRAVEL) ? 'REPORT-ONLY'
+        : (drift <= TP_THRESHOLDS.MAX_FOLLOW_DRIFT ? 'PASS' : 'FAIL');
+      follow.groups.push({
+        aimItem: key, rows: rowsF.length, travel: Number(travel.toFixed(2)),
+        drift: Number(drift.toFixed(4)), verdict,
+      });
+    }
+    if (follow.groups.some(g => g.verdict === 'FAIL')) follow.verdict = 'FAIL';
+    else if (follow.groups.some(g => g.verdict === 'PASS')) follow.verdict = 'PASS';
+    entities.push({ id, samples: group.length, states, modes, invariance, continuity, follow });
   }
   return { thresholds: TP_THRESHOLDS, entities };
 }
@@ -702,6 +744,11 @@ function analyze(dir, bbox) {
       if (e.continuity.verdict === 'FAIL') {
         fail(`TP-CONTINUITY FAIL entity=${e.id} transitionPosStep=${e.continuity.maxTransitionPosStep} transitions=${JSON.stringify(e.continuity.transitions)}`);
       }
+      if (e.follow.verdict === 'FAIL') {
+        const bad = e.follow.groups.filter(g => g.verdict === 'FAIL')
+          .map(g => `${g.aimItem}:drift=${g.drift}/travel=${g.travel}`).join(' ');
+        fail(`TP-FOLLOW FAIL entity=${e.id} (局部偏移漂移超 ${TP_THRESHOLDS.MAX_FOLLOW_DRIFT} 格=灯不随持灯者) ${bad}`);
+      }
     }
   }
 
@@ -729,7 +776,9 @@ function main() {
           + ` camTravel=${e.invariance.cameraTravelDeg.toFixed(1)}deg heldSamples=${e.invariance.samples}`
           + ` maxDirDev=${e.invariance.maxDirDevDeg}deg corr=${Number(e.invariance.corr).toFixed(3)}`
           + ` -> TP-INVARIANCE ${e.invariance.verdict}`
-          + ` | transStep=${e.continuity.maxTransitionPosStep} -> TP-CONTINUITY ${e.continuity.verdict}`);
+          + ` | transStep=${e.continuity.maxTransitionPosStep} -> TP-CONTINUITY ${e.continuity.verdict}`
+          + ` | follow=` + e.follow.groups.map(g => `${g.aimItem}:${g.drift}/${g.travel}m`).join(',')
+          + ` -> TP-FOLLOW ${e.follow.verdict}`);
       }
     }
     console.log(`summary -> ${summaryPath}`);

@@ -1,0 +1,15 @@
+== rec-analyze 判定串(2026-09-02 分析器 v2:含 TP-FOLLOW;各会话对原始目录重跑) ==
+
+--- s0012 缺陷会话(旧构建,默认近似 fallback) ---
+REC-ANALYZE FAIL: TP-FOLLOW FAIL entity=1 (局部偏移漂移超 0.3 格=灯不随持灯者) 0/840661918:drift=0.7912/travel=12.94
+
+--- s0001 设计验证(重构跟随 v1,默认=单会话标定 1.038) ---
+REC-ANALYZE PASS session=s0001 C=267 shots=266 duration=4.468s actualFps=59.534
+TP-PROBE entity=1 states={"fallback":99,"fresh":168} tpfb=blend tproe=col camTravel=0.0deg heldSamples=158 maxDirDev=4.8247deg corr=0.000 -> TP-INVARIANCE INSUFFICIENT-SIGNAL | transStep=0.1093 -> TP-CONTINUITY PASS | follow=0/569302238:0.1458/13.05m -> TP-FOLLOW PASS
+
+--- s0001 投毒会话(边缘姿态捕获污染,坑73 复现) ---
+REC-ANALYZE FAIL: TP-CONTINUITY FAIL entity=1 transitionPosStep=1.2118 transitions=[{"from":"fallback","to":"fresh","posStep":1.2118,"dirStep":0.707}]
+
+--- s0001 最终回归(默认=双会话标定 1.064 + 证据随龄衰减) ---
+REC-ANALYZE PASS session=s0001 C=268 shots=259 duration=4.476s actualFps=59.651
+TP-PROBE entity=1 states={"fallback":102,"fresh":166} tpfb=blend tproe=col camTravel=0.0deg heldSamples=155 maxDirDev=4.8885deg corr=0.000 -> TP-INVARIANCE INSUFFICIENT-SIGNAL | transStep=0.1247 -> TP-CONTINUITY PASS | follow=0/840661918:0.1459/13.04m -> TP-FOLLOW PASS

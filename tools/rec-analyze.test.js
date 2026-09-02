@@ -264,6 +264,50 @@ try {
     expectFailure(createSession('tp-bad-state', { n: 12, gunFor }), /G\.state unknown/);
   }
 
+  // 15) Green follow: referent walks AND turns; local-frame (muzzle−eye) offset constant
+  //     (yaw rotation cancels in local frame) -> TP-FOLLOW PASS. 修复核心不变式。
+  {
+    const OFF = [1.038, -0.326, 0.142];
+    const gunFor = (i, t) => {
+      const yaw = -90 + i * 1.2;
+      const rad = yaw * Math.PI / 180;
+      const wx = OFF[0] * -Math.sin(rad) + OFF[2] * -Math.cos(rad);
+      const wz = OFF[0] * Math.cos(rad) + OFF[2] * -Math.sin(rad);
+      const rz = (1 + i * 0.05).toFixed(4);
+      return gunLine(t, 100 + i, {
+        state: i < 60 ? 'hold' : 'fresh',
+        pos: [(1 + wx).toFixed(4), '63.674', (Number(rz) + wz).toFixed(4)],
+        refPos: ['1', '64', rz],
+        refAng: [yaw.toFixed(3), '0'],
+      });
+    };
+    const s = expectSuccess(createSession('tp-follow-green', { n: 120, gunFor }));
+    const f = s.tp.entities[0].follow;
+    check(f.verdict === 'PASS', `follow PASS: ${JSON.stringify(f)}`);
+    check(f.groups[0].travel > 5.5 && f.groups[0].drift <= 0.3, 'walk 6 blocks with turning; local offset drift ~0');
+  }
+
+  // 16) Red follow: walking referent but fwd offset jumps 0.45->1.04 mid-hold
+  //     (灯不随人/偏移漂移签名;全程 hold 避开状态过渡由 TP-CONTINUITY 先截) -> TP-FOLLOW FAIL.
+  {
+    const gunFor = (i, t) => {
+      const fwd = i < 60 ? 0.45 : 1.04;
+      return gunLine(t, 100 + i, {
+        state: 'hold',
+        pos: [(1 + fwd).toFixed(4), '63.674', String(1 + i * 0.05)],
+        refPos: ['1', '64', (1 + i * 0.05).toFixed(4)],
+      });
+    };
+    expectFailure(createSession('tp-follow-red', { n: 120, gunFor }), /TP-FOLLOW FAIL/);
+  }
+
+  // 17) Follow REPORT-ONLY: no referent travel (static scene) never hard-fails.
+  {
+    const gunFor = (i, t) => gunLine(t, 100 + i, {});
+    const s = expectSuccess(createSession('tp-follow-static', { n: 120, gunFor }));
+    check(s.tp.entities[0].follow.verdict === 'REPORT-ONLY', 'static scene follow report-only');
+  }
+
   console.log(`REC-ANALYZE-TEST PASS (${checks} checks)`);
 } finally {
   fs.rmSync(root, { recursive: true, force: true });

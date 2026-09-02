@@ -1,0 +1,3132 @@
+{
+  "session": "s0001",
+  "integrity": {
+    "ok": true,
+    "hardErrors": [],
+    "warnings": [],
+    "checks": {
+      "footerCounts": true,
+      "shotTokens": true,
+      "pngSetExact": true,
+      "cTimestampsStrict": true,
+      "renderFramesStrict": true,
+      "noDuplicateSamplingAtOrBelow5ms": true
+    }
+  },
+  "input": {
+    "counts": {
+      "C": 268,
+      "L": 268,
+      "R": 268,
+      "G": 268,
+      "P": 259,
+      "S": 259,
+      "F": 0,
+      "D": 10
+    },
+    "dataRows": 1600,
+    "pngs": 259,
+    "footer": {
+      "rows": 1600,
+      "requested": 259,
+      "succeeded": 259,
+      "failed": 0,
+      "dropped": 10,
+      "closeReason": "still"
+    }
+  },
+  "targetFps": 60,
+  "actualFps": 59.6514745308311,
+  "fps": {
+    "target": 60,
+    "actual": 59.6514745308311
+  },
+  "dropped": 10,
+  "durationMs": 4476,
+  "durationS": 4.476,
+  "invariance": {
+    "lights": [
+      {
+        "idx": 0,
+        "samples": 268,
+        "anchor": {
+          "x": {
+            "min": 1995.63037,
+            "max": 2008.71033,
+            "range": 13.079960000000028
+          },
+          "y": {
+            "min": 122.23824,
+            "max": 122.38419,
+            "range": 0.14594999999999914
+          },
+          "z": {
+            "min": 7.61165,
+            "max": 7.69146,
+            "range": 0.07981000000000016
+          }
+        },
+        "direction": {
+          "x": {
+            "min": 0.33487,
+            "max": 1,
+            "range": 0.66513
+          },
+          "y": {
+            "min": -0.88886,
+            "max": 0.27158,
+            "range": 1.16044
+          },
+          "z": {
+            "min": -0.07308,
+            "max": 0.31271,
+            "range": 0.38578999999999997
+          }
+        },
+        "radius": {
+          "min": 18.87856,
+          "max": 18.87856,
+          "range": 0
+        },
+        "intensity": {
+          "min": 6.6,
+          "max": 6.6,
+          "range": 0
+        }
+      }
+    ],
+    "remote": [
+      {
+        "id": 1,
+        "samples": 268,
+        "base": {
+          "yaw": {
+            "min": -90,
+            "max": -90,
+            "range": 0
+          },
+          "pitch": {
+            "min": 0,
+            "max": 0,
+            "range": 0
+          }
+        },
+        "ext": {
+          "min": 0,
+          "max": 0,
+          "range": 0
+        },
+        "disp": {
+          "x": {
+            "min": 1994.54361,
+            "max": 2007.59998,
+            "range": 13.056370000000015
+          },
+          "y": {
+            "min": 122.62,
+            "max": 122.62,
+            "range": 0
+          },
+          "z": {
+            "min": 7.5,
+            "max": 7.5,
+            "range": 0
+          }
+        }
+      }
+    ]
+  },
+  "tp": {
+    "thresholds": {
+      "MIN_SAMPLES": 100,
+      "MIN_TRAVEL_DEG": 30,
+      "MAX_DIR_DEV_DEG": 3,
+      "MAX_CORR": 0.5,
+      "MAX_POS_STEP": 0.15,
+      "MAX_DIR_STEP_DEG": 8,
+      "MAX_FOLLOW_DRIFT": 0.3,
+      "MIN_FOLLOW_ROWS": 20,
+      "MIN_FOLLOW_TRAVEL": 2
+    },
+    "entities": [
+      {
+        "id": "1",
+        "samples": 268,
+        "states": {
+          "fallback": 102,
+          "fresh": 166
+        },
+        "modes": {
+          "tpfb": [
+            "blend"
+          ],
+          "tproe": [
+            "col"
+          ]
+        },
+        "invariance": {
+          "samples": 155,
+          "cameraTravelDeg": 0,
+          "maxDirDevDeg": 4.8885,
+          "corr": 0,
+          "verdict": "INSUFFICIENT-SIGNAL"
+        },
+        "continuity": {
+          "maxTransitionPosStep": 0.1247,
+          "maxTransitionDirStepDeg": 0.758,
+          "maxAllFramesPosStep": 0.1247,
+          "transitions": [
+            {
+              "from": "fallback",
+              "to": "fresh",
+              "posStep": 0.1247,
+              "dirStep": 0.758
+            }
+          ],
+          "verdict": "PASS"
+        },
+        "follow": {
+          "groups": [
+            {
+              "aimItem": "0/840661918",
+              "rows": 268,
+              "travel": 13.04,
+              "drift": 0.1459,
+              "verdict": "PASS"
+            }
+          ],
+          "verdict": "PASS"
+        }
+      }
+    ]
+  },
+  "cameraEyeDelta": {
+    "note": "API camera-eye difference only; not a measurement of the vanilla bob driver",
+    "samples": 258,
+    "x": {
+      "min": 0,
+      "max": 0,
+      "range": 0
+    },
+    "y": {
+      "min": 0,
+      "max": 0,
+      "range": 0
+    },
+    "z": {
+      "min": 0,
+      "max": 0,
+      "range": 0
+    }
+  },
+  "vanillaBobDriver": {
+    "definition": "bobEnabled ? sin(pi * linearlyInterpolatedWalkDist) * linearlyInterpolatedBob : 0",
+    "interpolationTimeline": "S.t milliseconds; out-of-range samples omitted (no endpoint clamp)",
+    "samples": 258,
+    "range": {
+      "min": 0,
+      "max": 0,
+      "range": 0
+    }
+  },
+  "visual": {
+    "bbox": null,
+    "lumastatsBatchSize": 50,
+    "lumastatsBatches": 6,
+    "summary": {
+      "mean": {
+        "min": 40.9,
+        "max": 64.9,
+        "mean": 49.42316602316599,
+        "relPulse": 0.4856022373951226,
+        "relPulsePct": 48.56022373951226
+      },
+      "p90": {
+        "min": 43.9,
+        "max": 165.4,
+        "mean": 77.46795366795419,
+        "relPulse": 1.5683904666021964,
+        "relPulsePct": 156.83904666021965
+      },
+      "p99": {
+        "min": 98,
+        "max": 220.5,
+        "mean": 157.22277992277992,
+        "relPulse": 0.7791491796555561,
+        "relPulsePct": 77.9149179655556
+      },
+      "ge200Fraction": {
+        "min": 0.0011977946916471506,
+        "max": 0.05670618657298985,
+        "mean": 0.01769591919621188,
+        "relPulse": 3.136790537177929,
+        "relPulsePct": 313.6790537177929
+      }
+    },
+    "series": [
+      {
+        "t": 70313510,
+        "requestT": 70313510,
+        "frame": 5081,
+        "seq": 1,
+        "filename": "shot-000001.png",
+        "mean": 60,
+        "p90": 121.9,
+        "p99": 207.5,
+        "ge200Fraction": 0.014793130366900858
+      },
+      {
+        "t": 70313528,
+        "requestT": 70313528,
+        "frame": 5082,
+        "seq": 2,
+        "filename": "shot-000002.png",
+        "mean": 60,
+        "p90": 122,
+        "p99": 207.5,
+        "ge200Fraction": 0.01479556986729118
+      },
+      {
+        "t": 70313539,
+        "requestT": 70313539,
+        "frame": 5083,
+        "seq": 3,
+        "filename": "shot-000003.png",
+        "mean": 60.1,
+        "p90": 122.7,
+        "p99": 207.6,
+        "ge200Fraction": 0.01479556986729118
+      },
+      {
+        "t": 70313554,
+        "requestT": 70313554,
+        "frame": 5084,
+        "seq": 4,
+        "filename": "shot-000004.png",
+        "mean": 60.2,
+        "p90": 123,
+        "p99": 207.6,
+        "ge200Fraction": 0.014798009367681499
+      },
+      {
+        "t": 70313571,
+        "requestT": 70313571,
+        "frame": 5085,
+        "seq": 5,
+        "filename": "shot-000005.png",
+        "mean": 60.2,
+        "p90": 123.2,
+        "p99": 207.6,
+        "ge200Fraction": 0.01479556986729118
+      },
+      {
+        "t": 70313588,
+        "requestT": 70313588,
+        "frame": 5086,
+        "seq": 6,
+        "filename": "shot-000006.png",
+        "mean": 60.3,
+        "p90": 123.9,
+        "p99": 207.6,
+        "ge200Fraction": 0.014798009367681499
+      },
+      {
+        "t": 70313604,
+        "requestT": 70313604,
+        "frame": 5087,
+        "seq": 7,
+        "filename": "shot-000007.png",
+        "mean": 60.5,
+        "p90": 124.9,
+        "p99": 207.7,
+        "ge200Fraction": 0.014798009367681499
+      },
+      {
+        "t": 70313621,
+        "requestT": 70313621,
+        "frame": 5088,
+        "seq": 8,
+        "filename": "shot-000008.png",
+        "mean": 60.5,
+        "p90": 125.1,
+        "p99": 207.7,
+        "ge200Fraction": 0.014800448868071818
+      },
+      {
+        "t": 70313638,
+        "requestT": 70313638,
+        "frame": 5089,
+        "seq": 9,
+        "filename": "shot-000009.png",
+        "mean": 60.7,
+        "p90": 126,
+        "p99": 207.7,
+        "ge200Fraction": 0.014800448868071818
+      },
+      {
+        "t": 70313654,
+        "requestT": 70313654,
+        "frame": 5090,
+        "seq": 10,
+        "filename": "shot-000010.png",
+        "mean": 60.8,
+        "p90": 126,
+        "p99": 207.8,
+        "ge200Fraction": 0.01480288836846214
+      },
+      {
+        "t": 70313671,
+        "requestT": 70313671,
+        "frame": 5091,
+        "seq": 11,
+        "filename": "shot-000011.png",
+        "mean": 60.9,
+        "p90": 126.7,
+        "p99": 207.8,
+        "ge200Fraction": 0.01480288836846214
+      },
+      {
+        "t": 70313690,
+        "requestT": 70313690,
+        "frame": 5092,
+        "seq": 12,
+        "filename": "shot-000012.png",
+        "mean": 61,
+        "p90": 127.2,
+        "p99": 207.9,
+        "ge200Fraction": 0.014824843871975019
+      },
+      {
+        "t": 70313706,
+        "requestT": 70313706,
+        "frame": 5093,
+        "seq": 13,
+        "filename": "shot-000013.png",
+        "mean": 61.2,
+        "p90": 128.7,
+        "p99": 208,
+        "ge200Fraction": 0.015059035909445746
+      },
+      {
+        "t": 70313723,
+        "requestT": 70313723,
+        "frame": 5094,
+        "seq": 14,
+        "filename": "shot-000014.png",
+        "mean": 61.3,
+        "p90": 129.1,
+        "p99": 208,
+        "ge200Fraction": 0.015166373926619828
+      },
+      {
+        "t": 70313741,
+        "requestT": 70313741,
+        "frame": 5095,
+        "seq": 15,
+        "filename": "shot-000015.png",
+        "mean": 61.5,
+        "p90": 130.1,
+        "p99": 208.1,
+        "ge200Fraction": 0.015302985948477751
+      },
+      {
+        "t": 70313757,
+        "requestT": 70313757,
+        "frame": 5096,
+        "seq": 16,
+        "filename": "shot-000016.png",
+        "mean": 61.7,
+        "p90": 131.8,
+        "p99": 208.1,
+        "ge200Fraction": 0.015385928961748634
+      },
+      {
+        "t": 70313775,
+        "requestT": 70313775,
+        "frame": 5097,
+        "seq": 17,
+        "filename": "shot-000017.png",
+        "mean": 61.8,
+        "p90": 132.2,
+        "p99": 208.1,
+        "ge200Fraction": 0.0156006049960968
+      },
+      {
+        "t": 70313790,
+        "requestT": 70313790,
+        "frame": 5098,
+        "seq": 18,
+        "filename": "shot-000018.png",
+        "mean": 62.1,
+        "p90": 134.2,
+        "p99": 208.1,
+        "ge200Fraction": 0.016500780640124904
+      },
+      {
+        "t": 70313807,
+        "requestT": 70313807,
+        "frame": 5099,
+        "seq": 19,
+        "filename": "shot-000019.png",
+        "mean": 62.2,
+        "p90": 135.2,
+        "p99": 208.1,
+        "ge200Fraction": 0.01719603825136612
+      },
+      {
+        "t": 70313825,
+        "requestT": 70313825,
+        "frame": 5100,
+        "seq": 20,
+        "filename": "shot-000020.png",
+        "mean": 62.4,
+        "p90": 136.2,
+        "p99": 208.1,
+        "ge200Fraction": 0.01799375487900078
+      },
+      {
+        "t": 70313841,
+        "requestT": 70313841,
+        "frame": 5101,
+        "seq": 21,
+        "filename": "shot-000021.png",
+        "mean": 62.6,
+        "p90": 137.2,
+        "p99": 208.2,
+        "ge200Fraction": 0.01875243950039032
+      },
+      {
+        "t": 70313858,
+        "requestT": 70313858,
+        "frame": 5102,
+        "seq": 22,
+        "filename": "shot-000022.png",
+        "mean": 62.6,
+        "p90": 138.1,
+        "p99": 208.4,
+        "ge200Fraction": 0.01906225604996097
+      },
+      {
+        "t": 70313875,
+        "requestT": 70313875,
+        "frame": 5103,
+        "seq": 23,
+        "filename": "shot-000023.png",
+        "mean": 62.7,
+        "p90": 138.4,
+        "p99": 209.1,
+        "ge200Fraction": 0.019394028103044497
+      },
+      {
+        "t": 70313892,
+        "requestT": 70313892,
+        "frame": 5104,
+        "seq": 24,
+        "filename": "shot-000024.png",
+        "mean": 62.9,
+        "p90": 139.3,
+        "p99": 209.3,
+        "ge200Fraction": 0.01990144418423107
+      },
+      {
+        "t": 70313908,
+        "requestT": 70313908,
+        "frame": 5105,
+        "seq": 25,
+        "filename": "shot-000025.png",
+        "mean": 63,
+        "p90": 140.1,
+        "p99": 209.6,
+        "ge200Fraction": 0.020438134270101483
+      },
+      {
+        "t": 70313926,
+        "requestT": 70313926,
+        "frame": 5106,
+        "seq": 26,
+        "filename": "shot-000026.png",
+        "mean": 63,
+        "p90": 140.5,
+        "p99": 210.2,
+        "ge200Fraction": 0.021240729898516785
+      },
+      {
+        "t": 70313942,
+        "requestT": 70313942,
+        "frame": 5107,
+        "seq": 27,
+        "filename": "shot-000027.png",
+        "mean": 63.2,
+        "p90": 142.1,
+        "p99": 210.4,
+        "ge200Fraction": 0.022953259172521466
+      },
+      {
+        "t": 70313959,
+        "requestT": 70313959,
+        "frame": 5108,
+        "seq": 28,
+        "filename": "shot-000028.png",
+        "mean": 63.3,
+        "p90": 142.4,
+        "p99": 211.2,
+        "ge200Fraction": 0.02384123731459797
+      },
+      {
+        "t": 70313977,
+        "requestT": 70313977,
+        "frame": 5109,
+        "seq": 29,
+        "filename": "shot-000029.png",
+        "mean": 63.4,
+        "p90": 143.4,
+        "p99": 211.2,
+        "ge200Fraction": 0.02508050351288056
+      },
+      {
+        "t": 70313993,
+        "requestT": 70313993,
+        "frame": 5110,
+        "seq": 30,
+        "filename": "shot-000030.png",
+        "mean": 63.6,
+        "p90": 145.2,
+        "p99": 211.4,
+        "ge200Fraction": 0.02695160031225605
+      },
+      {
+        "t": 70314009,
+        "requestT": 70314009,
+        "frame": 5111,
+        "seq": 31,
+        "filename": "shot-000031.png",
+        "mean": 63.7,
+        "p90": 145.8,
+        "p99": 211.4,
+        "ge200Fraction": 0.028227459016393442
+      },
+      {
+        "t": 70314027,
+        "requestT": 70314027,
+        "frame": 5112,
+        "seq": 32,
+        "filename": "shot-000032.png",
+        "mean": 63.8,
+        "p90": 146.8,
+        "p99": 212.2,
+        "ge200Fraction": 0.03008147931303669
+      },
+      {
+        "t": 70314042,
+        "requestT": 70314042,
+        "frame": 5113,
+        "seq": 33,
+        "filename": "shot-000033.png",
+        "mean": 64,
+        "p90": 147.1,
+        "p99": 212.3,
+        "ge200Fraction": 0.032857630757220924
+      },
+      {
+        "t": 70314059,
+        "requestT": 70314059,
+        "frame": 5114,
+        "seq": 34,
+        "filename": "shot-000034.png",
+        "mean": 64,
+        "p90": 148,
+        "p99": 213.1,
+        "ge200Fraction": 0.0342896174863388
+      },
+      {
+        "t": 70314077,
+        "requestT": 70314077,
+        "frame": 5115,
+        "seq": 35,
+        "filename": "shot-000035.png",
+        "mean": 64.1,
+        "p90": 149.2,
+        "p99": 213.2,
+        "ge200Fraction": 0.03595335675253708
+      },
+      {
+        "t": 70314093,
+        "requestT": 70314093,
+        "frame": 5116,
+        "seq": 36,
+        "filename": "shot-000036.png",
+        "mean": 64.3,
+        "p90": 150.5,
+        "p99": 214.1,
+        "ge200Fraction": 0.03866852068696331
+      },
+      {
+        "t": 70314109,
+        "requestT": 70314109,
+        "frame": 5117,
+        "seq": 37,
+        "filename": "shot-000037.png",
+        "mean": 64.4,
+        "p90": 151.4,
+        "p99": 214.2,
+        "ge200Fraction": 0.04029810694769711
+      },
+      {
+        "t": 70314127,
+        "requestT": 70314127,
+        "frame": 5118,
+        "seq": 38,
+        "filename": "shot-000038.png",
+        "mean": 64.4,
+        "p90": 152.5,
+        "p99": 214.5,
+        "ge200Fraction": 0.04224970725995316
+      },
+      {
+        "t": 70314143,
+        "requestT": 70314143,
+        "frame": 5119,
+        "seq": 39,
+        "filename": "shot-000039.png",
+        "mean": 64.6,
+        "p90": 154.1,
+        "p99": 215.4,
+        "ge200Fraction": 0.04442086260733802
+      },
+      {
+        "t": 70314159,
+        "requestT": 70314159,
+        "frame": 5120,
+        "seq": 40,
+        "filename": "shot-000040.png",
+        "mean": 64.6,
+        "p90": 154.5,
+        "p99": 216.2,
+        "ge200Fraction": 0.045194184231069474
+      },
+      {
+        "t": 70314177,
+        "requestT": 70314177,
+        "frame": 5121,
+        "seq": 41,
+        "filename": "shot-000041.png",
+        "mean": 64.7,
+        "p90": 155.5,
+        "p99": 216.6,
+        "ge200Fraction": 0.04684328649492584
+      },
+      {
+        "t": 70314193,
+        "requestT": 70314193,
+        "frame": 5122,
+        "seq": 42,
+        "filename": "shot-000042.png",
+        "mean": 64.8,
+        "p90": 156.7,
+        "p99": 217.4,
+        "ge200Fraction": 0.04917056986729118
+      },
+      {
+        "t": 70314210,
+        "requestT": 70314210,
+        "frame": 5123,
+        "seq": 43,
+        "filename": "shot-000043.png",
+        "mean": 64.8,
+        "p90": 157.5,
+        "p99": 217.7,
+        "ge200Fraction": 0.05030005854800937
+      },
+      {
+        "t": 70314228,
+        "requestT": 70314228,
+        "frame": 5124,
+        "seq": 44,
+        "filename": "shot-000044.png",
+        "mean": 64.8,
+        "p90": 158.4,
+        "p99": 218.4,
+        "ge200Fraction": 0.05122950819672131
+      },
+      {
+        "t": 70314244,
+        "requestT": 70314244,
+        "frame": 5125,
+        "seq": 45,
+        "filename": "shot-000045.png",
+        "mean": 64.9,
+        "p90": 159.4,
+        "p99": 218.6,
+        "ge200Fraction": 0.052793227946916474
+      },
+      {
+        "t": 70314261,
+        "requestT": 70314261,
+        "frame": 5126,
+        "seq": 46,
+        "filename": "shot-000046.png",
+        "mean": 64.9,
+        "p90": 160.1,
+        "p99": 218.7,
+        "ge200Fraction": 0.053371389539422324
+      },
+      {
+        "t": 70314278,
+        "requestT": 70314278,
+        "frame": 5127,
+        "seq": 47,
+        "filename": "shot-000047.png",
+        "mean": 64.9,
+        "p90": 160.8,
+        "p99": 219.4,
+        "ge200Fraction": 0.05427644418423107
+      },
+      {
+        "t": 70314294,
+        "requestT": 70314294,
+        "frame": 5128,
+        "seq": 48,
+        "filename": "shot-000048.png",
+        "mean": 64.9,
+        "p90": 162.1,
+        "p99": 219.5,
+        "ge200Fraction": 0.055169301327088215
+      },
+      {
+        "t": 70314311,
+        "requestT": 70314311,
+        "frame": 5129,
+        "seq": 49,
+        "filename": "shot-000049.png",
+        "mean": 64.9,
+        "p90": 162.6,
+        "p99": 219.6,
+        "ge200Fraction": 0.0554108118657299
+      },
+      {
+        "t": 70314328,
+        "requestT": 70314328,
+        "frame": 5130,
+        "seq": 50,
+        "filename": "shot-000050.png",
+        "mean": 64.9,
+        "p90": 163.6,
+        "p99": 219.7,
+        "ge200Fraction": 0.055718188914910226
+      },
+      {
+        "t": 70314344,
+        "requestT": 70314344,
+        "frame": 5131,
+        "seq": 51,
+        "filename": "shot-000051.png",
+        "mean": 64.9,
+        "p90": 164.6,
+        "p99": 219.9,
+        "ge200Fraction": 0.056059718969555035
+      },
+      {
+        "t": 70314361,
+        "requestT": 70314361,
+        "frame": 5132,
+        "seq": 52,
+        "filename": "shot-000052.png",
+        "mean": 64.9,
+        "p90": 164.8,
+        "p99": 220.3,
+        "ge200Fraction": 0.05575722092115535
+      },
+      {
+        "t": 70314378,
+        "requestT": 70314378,
+        "frame": 5133,
+        "seq": 53,
+        "filename": "shot-000053.png",
+        "mean": 64.8,
+        "p90": 165.4,
+        "p99": 220.4,
+        "ge200Fraction": 0.05466676424668228
+      },
+      {
+        "t": 70314394,
+        "requestT": 70314394,
+        "frame": 5134,
+        "seq": 54,
+        "filename": "shot-000054.png",
+        "mean": 64.6,
+        "p90": 157.6,
+        "p99": 220.4,
+        "ge200Fraction": 0.0514466237314598
+      },
+      {
+        "t": 70314411,
+        "requestT": 70314411,
+        "frame": 5135,
+        "seq": 55,
+        "filename": "shot-000055.png",
+        "mean": 64.4,
+        "p90": 156.6,
+        "p99": 220.4,
+        "ge200Fraction": 0.05139295472287275
+      },
+      {
+        "t": 70314429,
+        "requestT": 70314429,
+        "frame": 5136,
+        "seq": 56,
+        "filename": "shot-000056.png",
+        "mean": 63.9,
+        "p90": 149,
+        "p99": 220.4,
+        "ge200Fraction": 0.05225409836065574
+      },
+      {
+        "t": 70314445,
+        "requestT": 70314445,
+        "frame": 5137,
+        "seq": 57,
+        "filename": "shot-000057.png",
+        "mean": 63.1,
+        "p90": 136.7,
+        "p99": 220.5,
+        "ge200Fraction": 0.053371389539422324
+      },
+      {
+        "t": 70314462,
+        "requestT": 70314462,
+        "frame": 5138,
+        "seq": 58,
+        "filename": "shot-000058.png",
+        "mean": 62.6,
+        "p90": 133.4,
+        "p99": 220.5,
+        "ge200Fraction": 0.0540129781420765
+      },
+      {
+        "t": 70314480,
+        "requestT": 70314480,
+        "frame": 5139,
+        "seq": 59,
+        "filename": "shot-000059.png",
+        "mean": 62,
+        "p90": 133.1,
+        "p99": 220.5,
+        "ge200Fraction": 0.0546326112412178
+      },
+      {
+        "t": 70314495,
+        "requestT": 70314495,
+        "frame": 5140,
+        "seq": 60,
+        "filename": "shot-000060.png",
+        "mean": 61.4,
+        "p90": 132.2,
+        "p99": 220.5,
+        "ge200Fraction": 0.055225409836065574
+      },
+      {
+        "t": 70314512,
+        "requestT": 70314512,
+        "frame": 5141,
+        "seq": 61,
+        "filename": "shot-000061.png",
+        "mean": 61.2,
+        "p90": 131.9,
+        "p99": 220.5,
+        "ge200Fraction": 0.05546935987509758
+      },
+      {
+        "t": 70314530,
+        "requestT": 70314530,
+        "frame": 5142,
+        "seq": 62,
+        "filename": "shot-000062.png",
+        "mean": 61.2,
+        "p90": 131.2,
+        "p99": 220.5,
+        "ge200Fraction": 0.05575722092115535
+      },
+      {
+        "t": 70314546,
+        "requestT": 70314546,
+        "frame": 5143,
+        "seq": 63,
+        "filename": "shot-000063.png",
+        "mean": 61.1,
+        "p90": 130.2,
+        "p99": 220.5,
+        "ge200Fraction": 0.05612314597970336
+      },
+      {
+        "t": 70314562,
+        "requestT": 70314562,
+        "frame": 5144,
+        "seq": 64,
+        "filename": "shot-000064.png",
+        "mean": 61,
+        "p90": 129.6,
+        "p99": 220.5,
+        "ge200Fraction": 0.05631586651053864
+      },
+      {
+        "t": 70314581,
+        "requestT": 70314581,
+        "frame": 5145,
+        "seq": 65,
+        "filename": "shot-000065.png",
+        "mean": 61,
+        "p90": 128.6,
+        "p99": 220.5,
+        "ge200Fraction": 0.05657933255269321
+      },
+      {
+        "t": 70314597,
+        "requestT": 70314597,
+        "frame": 5146,
+        "seq": 66,
+        "filename": "shot-000066.png",
+        "mean": 60.8,
+        "p90": 127.7,
+        "p99": 220.5,
+        "ge200Fraction": 0.05670618657298985
+      },
+      {
+        "t": 70314614,
+        "requestT": 70314614,
+        "frame": 5147,
+        "seq": 67,
+        "filename": "shot-000067.png",
+        "mean": 60.8,
+        "p90": 127.1,
+        "p99": 220.5,
+        "ge200Fraction": 0.05660616705698673
+      },
+      {
+        "t": 70314631,
+        "requestT": 70314631,
+        "frame": 5148,
+        "seq": 68,
+        "filename": "shot-000068.png",
+        "mean": 60.7,
+        "p90": 126.1,
+        "p99": 220.5,
+        "ge200Fraction": 0.05644516003122561
+      },
+      {
+        "t": 70314647,
+        "requestT": 70314647,
+        "frame": 5149,
+        "seq": 69,
+        "filename": "shot-000069.png",
+        "mean": 60.5,
+        "p90": 126,
+        "p99": 220.5,
+        "ge200Fraction": 0.05604508196721311
+      },
+      {
+        "t": 70314664,
+        "requestT": 70314664,
+        "frame": 5150,
+        "seq": 70,
+        "filename": "shot-000070.png",
+        "mean": 60.4,
+        "p90": 126,
+        "p99": 220.4,
+        "ge200Fraction": 0.05577917642466823
+      },
+      {
+        "t": 70314681,
+        "requestT": 70314681,
+        "frame": 5151,
+        "seq": 71,
+        "filename": "shot-000071.png",
+        "mean": 60.3,
+        "p90": 125.9,
+        "p99": 220.4,
+        "ge200Fraction": 0.05536446135831382
+      },
+      {
+        "t": 70314698,
+        "requestT": 70314698,
+        "frame": 5152,
+        "seq": 72,
+        "filename": "shot-000072.png",
+        "mean": 60.1,
+        "p90": 123.9,
+        "p99": 220.4,
+        "ge200Fraction": 0.054835089773614364
+      },
+      {
+        "t": 70314715,
+        "requestT": 70314715,
+        "frame": 5153,
+        "seq": 73,
+        "filename": "shot-000073.png",
+        "mean": 60,
+        "p90": 122.5,
+        "p99": 220.4,
+        "ge200Fraction": 0.05448380171740828
+      },
+      {
+        "t": 70314732,
+        "requestT": 70314732,
+        "frame": 5154,
+        "seq": 74,
+        "filename": "shot-000074.png",
+        "mean": 59.8,
+        "p90": 121.2,
+        "p99": 220.4,
+        "ge200Fraction": 0.05421057767369243
+      },
+      {
+        "t": 70314748,
+        "requestT": 70314748,
+        "frame": 5155,
+        "seq": 75,
+        "filename": "shot-000075.png",
+        "mean": 59.6,
+        "p90": 118.7,
+        "p99": 220.3,
+        "ge200Fraction": 0.05355923106947697
+      },
+      {
+        "t": 70314766,
+        "requestT": 70314766,
+        "frame": 5156,
+        "seq": 76,
+        "filename": "shot-000076.png",
+        "mean": 59.4,
+        "p90": 117,
+        "p99": 219.9,
+        "ge200Fraction": 0.05298350897736143
+      },
+      {
+        "t": 70314783,
+        "requestT": 70314783,
+        "frame": 5157,
+        "seq": 77,
+        "filename": "shot-000077.png",
+        "mean": 59.2,
+        "p90": 115,
+        "p99": 219.9,
+        "ge200Fraction": 0.05228825136612022
+      },
+      {
+        "t": 70314799,
+        "requestT": 70314799,
+        "frame": 5158,
+        "seq": 78,
+        "filename": "shot-000078.png",
+        "mean": 58.9,
+        "p90": 111.3,
+        "p99": 219.7,
+        "ge200Fraction": 0.0515807962529274
+      },
+      {
+        "t": 70314816,
+        "requestT": 70314816,
+        "frame": 5159,
+        "seq": 79,
+        "filename": "shot-000079.png",
+        "mean": 58.8,
+        "p90": 108.7,
+        "p99": 219.7,
+        "ge200Fraction": 0.05118071818891491
+      },
+      {
+        "t": 70314834,
+        "requestT": 70314834,
+        "frame": 5160,
+        "seq": 80,
+        "filename": "shot-000080.png",
+        "mean": 58.5,
+        "p90": 105.4,
+        "p99": 219.7,
+        "ge200Fraction": 0.05061475409836066
+      },
+      {
+        "t": 70314850,
+        "requestT": 70314850,
+        "frame": 5161,
+        "seq": 81,
+        "filename": "shot-000081.png",
+        "mean": 58.2,
+        "p90": 100.9,
+        "p99": 219.7,
+        "ge200Fraction": 0.0497804449648712
+      },
+      {
+        "t": 70314869,
+        "requestT": 70314869,
+        "frame": 5162,
+        "seq": 82,
+        "filename": "shot-000082.png",
+        "mean": 58,
+        "p90": 98,
+        "p99": 219.6,
+        "ge200Fraction": 0.0493315768930523
+      },
+      {
+        "t": 70314887,
+        "requestT": 70314887,
+        "frame": 5163,
+        "seq": 83,
+        "filename": "shot-000083.png",
+        "mean": 57.7,
+        "p90": 94.5,
+        "p99": 219.6,
+        "ge200Fraction": 0.048697306791569084
+      },
+      {
+        "t": 70314919,
+        "requestT": 70314919,
+        "frame": 5165,
+        "seq": 84,
+        "filename": "shot-000084.png",
+        "mean": 56.9,
+        "p90": 90,
+        "p99": 219.5,
+        "ge200Fraction": 0.046545667447306795
+      },
+      {
+        "t": 70314937,
+        "requestT": 70314937,
+        "frame": 5166,
+        "seq": 85,
+        "filename": "shot-000085.png",
+        "mean": 56.4,
+        "p90": 85.4,
+        "p99": 219.5,
+        "ge200Fraction": 0.04569428181108509
+      },
+      {
+        "t": 70314969,
+        "requestT": 70314969,
+        "frame": 5168,
+        "seq": 86,
+        "filename": "shot-000086.png",
+        "mean": 55.5,
+        "p90": 82.4,
+        "p99": 219.3,
+        "ge200Fraction": 0.04352312646370023
+      },
+      {
+        "t": 70314986,
+        "requestT": 70314986,
+        "frame": 5169,
+        "seq": 87,
+        "filename": "shot-000087.png",
+        "mean": 55,
+        "p90": 81.6,
+        "p99": 218.7,
+        "ge200Fraction": 0.042313134270101485
+      },
+      {
+        "t": 70315002,
+        "requestT": 70315002,
+        "frame": 5170,
+        "seq": 88,
+        "filename": "shot-000088.png",
+        "mean": 54.5,
+        "p90": 80.6,
+        "p99": 218.7,
+        "ge200Fraction": 0.04115681108508978
+      },
+      {
+        "t": 70315018,
+        "requestT": 70315018,
+        "frame": 5171,
+        "seq": 89,
+        "filename": "shot-000089.png",
+        "mean": 54.2,
+        "p90": 80.4,
+        "p99": 218.6,
+        "ge200Fraction": 0.04064207650273224
+      },
+      {
+        "t": 70315038,
+        "requestT": 70315038,
+        "frame": 5172,
+        "seq": 90,
+        "filename": "shot-000090.png",
+        "mean": 53.9,
+        "p90": 79.4,
+        "p99": 218.6,
+        "ge200Fraction": 0.04015417642466823
+      },
+      {
+        "t": 70315068,
+        "requestT": 70315068,
+        "frame": 5174,
+        "seq": 91,
+        "filename": "shot-000091.png",
+        "mean": 53.3,
+        "p90": 78.4,
+        "p99": 218.5,
+        "ge200Fraction": 0.038763661202185794
+      },
+      {
+        "t": 70315085,
+        "requestT": 70315085,
+        "frame": 5175,
+        "seq": 92,
+        "filename": "shot-000092.png",
+        "mean": 53.1,
+        "p90": 77.7,
+        "p99": 218.5,
+        "ge200Fraction": 0.03801473458235753
+      },
+      {
+        "t": 70315101,
+        "requestT": 70315101,
+        "frame": 5176,
+        "seq": 93,
+        "filename": "shot-000093.png",
+        "mean": 52.8,
+        "p90": 77.4,
+        "p99": 218.4,
+        "ge200Fraction": 0.0367461943793911
+      },
+      {
+        "t": 70315118,
+        "requestT": 70315118,
+        "frame": 5177,
+        "seq": 94,
+        "filename": "shot-000094.png",
+        "mean": 52.6,
+        "p90": 76.7,
+        "p99": 218.2,
+        "ge200Fraction": 0.036175351288056205
+      },
+      {
+        "t": 70315136,
+        "requestT": 70315136,
+        "frame": 5178,
+        "seq": 95,
+        "filename": "shot-000095.png",
+        "mean": 52.4,
+        "p90": 76.4,
+        "p99": 217.7,
+        "ge200Fraction": 0.03548741217798595
+      },
+      {
+        "t": 70315151,
+        "requestT": 70315151,
+        "frame": 5179,
+        "seq": 96,
+        "filename": "shot-000096.png",
+        "mean": 52,
+        "p90": 76,
+        "p99": 217.6,
+        "ge200Fraction": 0.03431645199063232
+      },
+      {
+        "t": 70315168,
+        "requestT": 70315168,
+        "frame": 5180,
+        "seq": 97,
+        "filename": "shot-000097.png",
+        "mean": 51.9,
+        "p90": 75.5,
+        "p99": 217.6,
+        "ge200Fraction": 0.033538251366120216
+      },
+      {
+        "t": 70315186,
+        "requestT": 70315186,
+        "frame": 5181,
+        "seq": 98,
+        "filename": "shot-000098.png",
+        "mean": 51.6,
+        "p90": 75.4,
+        "p99": 217.5,
+        "ge200Fraction": 0.03244779469164715
+      },
+      {
+        "t": 70315201,
+        "requestT": 70315201,
+        "frame": 5182,
+        "seq": 99,
+        "filename": "shot-000099.png",
+        "mean": 51.3,
+        "p90": 74.4,
+        "p99": 217.5,
+        "ge200Fraction": 0.031010928961748632
+      },
+      {
+        "t": 70315218,
+        "requestT": 70315218,
+        "frame": 5183,
+        "seq": 100,
+        "filename": "shot-000100.png",
+        "mean": 51.1,
+        "p90": 74.4,
+        "p99": 217.4,
+        "ge200Fraction": 0.030235167837626854
+      },
+      {
+        "t": 70315237,
+        "requestT": 70315237,
+        "frame": 5184,
+        "seq": 101,
+        "filename": "shot-000101.png",
+        "mean": 51,
+        "p90": 73.6,
+        "p99": 217.4,
+        "ge200Fraction": 0.029910714285714287
+      },
+      {
+        "t": 70315269,
+        "requestT": 70315269,
+        "frame": 5186,
+        "seq": 102,
+        "filename": "shot-000102.png",
+        "mean": 49.9,
+        "p90": 71.5,
+        "p99": 216.6,
+        "ge200Fraction": 0.02463407494145199
+      },
+      {
+        "t": 70315287,
+        "requestT": 70315287,
+        "frame": 5187,
+        "seq": 103,
+        "filename": "shot-000103.png",
+        "mean": 49.1,
+        "p90": 70.3,
+        "p99": 216,
+        "ge200Fraction": 0.0203307962529274
+      },
+      {
+        "t": 70315320,
+        "requestT": 70315320,
+        "frame": 5189,
+        "seq": 104,
+        "filename": "shot-000104.png",
+        "mean": 43.9,
+        "p90": 52.9,
+        "p99": 103,
+        "ge200Fraction": 0.0017710772833723653
+      },
+      {
+        "t": 70315338,
+        "requestT": 70315338,
+        "frame": 5190,
+        "seq": 105,
+        "filename": "shot-000105.png",
+        "mean": 41.8,
+        "p90": 44.1,
+        "p99": 127.6,
+        "ge200Fraction": 0.00195403981264637
+      },
+      {
+        "t": 70315354,
+        "requestT": 70315354,
+        "frame": 5191,
+        "seq": 106,
+        "filename": "shot-000106.png",
+        "mean": 50.5,
+        "p90": 65.4,
+        "p99": 217.3,
+        "ge200Fraction": 0.038104996096799376
+      },
+      {
+        "t": 70315387,
+        "requestT": 70315387,
+        "frame": 5193,
+        "seq": 107,
+        "filename": "shot-000107.png",
+        "mean": 49.4,
+        "p90": 67.5,
+        "p99": 216.5,
+        "ge200Fraction": 0.02890807962529274
+      },
+      {
+        "t": 70315420,
+        "requestT": 70315420,
+        "frame": 5195,
+        "seq": 108,
+        "filename": "shot-000108.png",
+        "mean": 48.8,
+        "p90": 66.5,
+        "p99": 216.1,
+        "ge200Fraction": 0.02576112412177986
+      },
+      {
+        "t": 70315437,
+        "requestT": 70315437,
+        "frame": 5196,
+        "seq": 109,
+        "filename": "shot-000109.png",
+        "mean": 48.6,
+        "p90": 66,
+        "p99": 215.7,
+        "ge200Fraction": 0.02466090944574551
+      },
+      {
+        "t": 70315454,
+        "requestT": 70315454,
+        "frame": 5197,
+        "seq": 110,
+        "filename": "shot-000110.png",
+        "mean": 48.5,
+        "p90": 65.5,
+        "p99": 215.6,
+        "ge200Fraction": 0.024177888368462137
+      },
+      {
+        "t": 70315470,
+        "requestT": 70315470,
+        "frame": 5198,
+        "seq": 111,
+        "filename": "shot-000111.png",
+        "mean": 48.3,
+        "p90": 64.6,
+        "p99": 215.5,
+        "ge200Fraction": 0.02382172131147541
+      },
+      {
+        "t": 70315488,
+        "requestT": 70315488,
+        "frame": 5199,
+        "seq": 112,
+        "filename": "shot-000112.png",
+        "mean": 48.2,
+        "p90": 63.9,
+        "p99": 215.4,
+        "ge200Fraction": 0.0234801912568306
+      },
+      {
+        "t": 70315503,
+        "requestT": 70315503,
+        "frame": 5200,
+        "seq": 113,
+        "filename": "shot-000113.png",
+        "mean": 48.1,
+        "p90": 63.5,
+        "p99": 215.4,
+        "ge200Fraction": 0.023114266198282593
+      },
+      {
+        "t": 70315520,
+        "requestT": 70315520,
+        "frame": 5201,
+        "seq": 114,
+        "filename": "shot-000114.png",
+        "mean": 48,
+        "p90": 62.6,
+        "p99": 215.4,
+        "ge200Fraction": 0.02259953161592506
+      },
+      {
+        "t": 70315538,
+        "requestT": 70315538,
+        "frame": 5202,
+        "seq": 115,
+        "filename": "shot-000115.png",
+        "mean": 47.9,
+        "p90": 61.6,
+        "p99": 215.3,
+        "ge200Fraction": 0.022082357533177204
+      },
+      {
+        "t": 70315553,
+        "requestT": 70315553,
+        "frame": 5203,
+        "seq": 116,
+        "filename": "shot-000116.png",
+        "mean": 47.8,
+        "p90": 60.6,
+        "p99": 215.1,
+        "ge200Fraction": 0.02143588992974239
+      },
+      {
+        "t": 70315570,
+        "requestT": 70315570,
+        "frame": 5204,
+        "seq": 117,
+        "filename": "shot-000117.png",
+        "mean": 47.6,
+        "p90": 59.6,
+        "p99": 214.7,
+        "ge200Fraction": 0.020625975800156127
+      },
+      {
+        "t": 70315588,
+        "requestT": 70315588,
+        "frame": 5205,
+        "seq": 118,
+        "filename": "shot-000118.png",
+        "mean": 47.5,
+        "p90": 57.8,
+        "p99": 214.4,
+        "ge200Fraction": 0.01987460967993755
+      },
+      {
+        "t": 70315620,
+        "requestT": 70315620,
+        "frame": 5207,
+        "seq": 119,
+        "filename": "shot-000119.png",
+        "mean": 47.1,
+        "p90": 54.6,
+        "p99": 214.2,
+        "ge200Fraction": 0.018088895394223262
+      },
+      {
+        "t": 70315638,
+        "requestT": 70315638,
+        "frame": 5208,
+        "seq": 120,
+        "filename": "shot-000120.png",
+        "mean": 46.9,
+        "p90": 53.5,
+        "p99": 213.6,
+        "ge200Fraction": 0.01686182669789227
+      },
+      {
+        "t": 70315671,
+        "requestT": 70315671,
+        "frame": 5210,
+        "seq": 121,
+        "filename": "shot-000121.png",
+        "mean": 46.4,
+        "p90": 51.1,
+        "p99": 212.7,
+        "ge200Fraction": 0.014558938329430133
+      },
+      {
+        "t": 70315688,
+        "requestT": 70315688,
+        "frame": 5211,
+        "seq": 122,
+        "filename": "shot-000122.png",
+        "mean": 46.1,
+        "p90": 49.7,
+        "p99": 212.1,
+        "ge200Fraction": 0.013509953161592507
+      },
+      {
+        "t": 70315705,
+        "requestT": 70315705,
+        "frame": 5212,
+        "seq": 123,
+        "filename": "shot-000123.png",
+        "mean": 45.8,
+        "p90": 48.7,
+        "p99": 211.1,
+        "ge200Fraction": 0.012397540983606558
+      },
+      {
+        "t": 70315721,
+        "requestT": 70315721,
+        "frame": 5213,
+        "seq": 124,
+        "filename": "shot-000124.png",
+        "mean": 45.6,
+        "p90": 48.6,
+        "p99": 209.9,
+        "ge200Fraction": 0.011621779859484777
+      },
+      {
+        "t": 70315739,
+        "requestT": 70315739,
+        "frame": 5214,
+        "seq": 125,
+        "filename": "shot-000125.png",
+        "mean": 45.4,
+        "p90": 47.7,
+        "p99": 207.9,
+        "ge200Fraction": 0.010814305230288836
+      },
+      {
+        "t": 70315755,
+        "requestT": 70315755,
+        "frame": 5215,
+        "seq": 126,
+        "filename": "shot-000126.png",
+        "mean": 45.1,
+        "p90": 47.6,
+        "p99": 198.7,
+        "ge200Fraction": 0.009931206088992974
+      },
+      {
+        "t": 70315772,
+        "requestT": 70315772,
+        "frame": 5216,
+        "seq": 127,
+        "filename": "shot-000127.png",
+        "mean": 44.9,
+        "p90": 47,
+        "p99": 182.9,
+        "ge200Fraction": 0.009233508977361436
+      },
+      {
+        "t": 70315789,
+        "requestT": 70315789,
+        "frame": 5217,
+        "seq": 128,
+        "filename": "shot-000128.png",
+        "mean": 44.7,
+        "p90": 46.8,
+        "p99": 172.9,
+        "ge200Fraction": 0.00858704137392662
+      },
+      {
+        "t": 70315806,
+        "requestT": 70315806,
+        "frame": 5218,
+        "seq": 129,
+        "filename": "shot-000129.png",
+        "mean": 44.5,
+        "p90": 46.7,
+        "p99": 166,
+        "ge200Fraction": 0.007979605776736924
+      },
+      {
+        "t": 70315823,
+        "requestT": 70315823,
+        "frame": 5219,
+        "seq": 130,
+        "filename": "shot-000130.png",
+        "mean": 44.3,
+        "p90": 46.7,
+        "p99": 153.4,
+        "ge200Fraction": 0.007394125683060109
+      },
+      {
+        "t": 70315840,
+        "requestT": 70315840,
+        "frame": 5220,
+        "seq": 131,
+        "filename": "shot-000131.png",
+        "mean": 44.1,
+        "p90": 46.5,
+        "p99": 147,
+        "ge200Fraction": 0.006889149102263856
+      },
+      {
+        "t": 70315856,
+        "requestT": 70315856,
+        "frame": 5221,
+        "seq": 132,
+        "filename": "shot-000132.png",
+        "mean": 43.9,
+        "p90": 46.5,
+        "p99": 147,
+        "ge200Fraction": 0.006503708040593286
+      },
+      {
+        "t": 70315873,
+        "requestT": 70315873,
+        "frame": 5222,
+        "seq": 133,
+        "filename": "shot-000133.png",
+        "mean": 43.8,
+        "p90": 45.9,
+        "p99": 147,
+        "ge200Fraction": 0.006081674473067916
+      },
+      {
+        "t": 70315890,
+        "requestT": 70315890,
+        "frame": 5223,
+        "seq": 134,
+        "filename": "shot-000134.png",
+        "mean": 43.6,
+        "p90": 45.8,
+        "p99": 144.6,
+        "ge200Fraction": 0.005710870413739266
+      },
+      {
+        "t": 70315906,
+        "requestT": 70315906,
+        "frame": 5224,
+        "seq": 135,
+        "filename": "shot-000135.png",
+        "mean": 43.4,
+        "p90": 45.8,
+        "p99": 133.1,
+        "ge200Fraction": 0.005330308352849336
+      },
+      {
+        "t": 70315923,
+        "requestT": 70315923,
+        "frame": 5225,
+        "seq": 136,
+        "filename": "shot-000136.png",
+        "mean": 43.3,
+        "p90": 45.7,
+        "p99": 128,
+        "ge200Fraction": 0.004983899297423888
+      },
+      {
+        "t": 70315940,
+        "requestT": 70315940,
+        "frame": 5226,
+        "seq": 137,
+        "filename": "shot-000137.png",
+        "mean": 43.1,
+        "p90": 45.7,
+        "p99": 126,
+        "ge200Fraction": 0.004488680718188915
+      },
+      {
+        "t": 70315957,
+        "requestT": 70315957,
+        "frame": 5227,
+        "seq": 138,
+        "filename": "shot-000138.png",
+        "mean": 43,
+        "p90": 45.7,
+        "p99": 126,
+        "ge200Fraction": 0.003993462138953942
+      },
+      {
+        "t": 70315974,
+        "requestT": 70315974,
+        "frame": 5228,
+        "seq": 139,
+        "filename": "shot-000139.png",
+        "mean": 42.8,
+        "p90": 45.5,
+        "p99": 126,
+        "ge200Fraction": 0.003559231069476971
+      },
+      {
+        "t": 70315991,
+        "requestT": 70315991,
+        "frame": 5229,
+        "seq": 140,
+        "filename": "shot-000140.png",
+        "mean": 42.7,
+        "p90": 45.5,
+        "p99": 126,
+        "ge200Fraction": 0.0032567330210772835
+      },
+      {
+        "t": 70316007,
+        "requestT": 70316007,
+        "frame": 5230,
+        "seq": 141,
+        "filename": "shot-000141.png",
+        "mean": 42.5,
+        "p90": 45.2,
+        "p99": 125,
+        "ge200Fraction": 0.0028346994535519126
+      },
+      {
+        "t": 70316024,
+        "requestT": 70316024,
+        "frame": 5231,
+        "seq": 142,
+        "filename": "shot-000142.png",
+        "mean": 42.4,
+        "p90": 44.9,
+        "p99": 122,
+        "ge200Fraction": 0.002459016393442623
+      },
+      {
+        "t": 70316042,
+        "requestT": 70316042,
+        "frame": 5232,
+        "seq": 143,
+        "filename": "shot-000143.png",
+        "mean": 42.3,
+        "p90": 44.8,
+        "p99": 115,
+        "ge200Fraction": 0.0020784543325526933
+      },
+      {
+        "t": 70316058,
+        "requestT": 70316058,
+        "frame": 5233,
+        "seq": 144,
+        "filename": "shot-000144.png",
+        "mean": 42.1,
+        "p90": 44.8,
+        "p99": 112,
+        "ge200Fraction": 0.001717408274785324
+      },
+      {
+        "t": 70316075,
+        "requestT": 70316075,
+        "frame": 5234,
+        "seq": 145,
+        "filename": "shot-000145.png",
+        "mean": 42,
+        "p90": 44.8,
+        "p99": 108,
+        "ge200Fraction": 0.0014734582357533177
+      },
+      {
+        "t": 70316091,
+        "requestT": 70316091,
+        "frame": 5235,
+        "seq": 146,
+        "filename": "shot-000146.png",
+        "mean": 41.9,
+        "p90": 44.7,
+        "p99": 104.8,
+        "ge200Fraction": 0.0012734192037470726
+      },
+      {
+        "t": 70316108,
+        "requestT": 70316108,
+        "frame": 5236,
+        "seq": 147,
+        "filename": "shot-000147.png",
+        "mean": 41.8,
+        "p90": 44.7,
+        "p99": 103,
+        "ge200Fraction": 0.0012270686963309913
+      },
+      {
+        "t": 70316125,
+        "requestT": 70316125,
+        "frame": 5237,
+        "seq": 148,
+        "filename": "shot-000148.png",
+        "mean": 41.8,
+        "p90": 44.7,
+        "p99": 102,
+        "ge200Fraction": 0.001209992193598751
+      },
+      {
+        "t": 70316141,
+        "requestT": 70316141,
+        "frame": 5238,
+        "seq": 149,
+        "filename": "shot-000149.png",
+        "mean": 41.7,
+        "p90": 44.7,
+        "p99": 100.9,
+        "ge200Fraction": 0.0012173106947697113
+      },
+      {
+        "t": 70316158,
+        "requestT": 70316158,
+        "frame": 5239,
+        "seq": 150,
+        "filename": "shot-000150.png",
+        "mean": 41.7,
+        "p90": 44.7,
+        "p99": 98.6,
+        "ge200Fraction": 0.0012173106947697113
+      },
+      {
+        "t": 70316176,
+        "requestT": 70316176,
+        "frame": 5240,
+        "seq": 151,
+        "filename": "shot-000151.png",
+        "mean": 41.6,
+        "p90": 44.7,
+        "p99": 98.3,
+        "ge200Fraction": 0.0012197501951600313
+      },
+      {
+        "t": 70316192,
+        "requestT": 70316192,
+        "frame": 5241,
+        "seq": 152,
+        "filename": "shot-000152.png",
+        "mean": 41.6,
+        "p90": 44.7,
+        "p99": 98,
+        "ge200Fraction": 0.0012197501951600313
+      },
+      {
+        "t": 70316208,
+        "requestT": 70316208,
+        "frame": 5242,
+        "seq": 153,
+        "filename": "shot-000153.png",
+        "mean": 41.6,
+        "p90": 44.7,
+        "p99": 98,
+        "ge200Fraction": 0.001212431693989071
+      },
+      {
+        "t": 70316226,
+        "requestT": 70316226,
+        "frame": 5243,
+        "seq": 154,
+        "filename": "shot-000154.png",
+        "mean": 41.5,
+        "p90": 44.6,
+        "p99": 98,
+        "ge200Fraction": 0.0012295081967213116
+      },
+      {
+        "t": 70316242,
+        "requestT": 70316242,
+        "frame": 5244,
+        "seq": 155,
+        "filename": "shot-000155.png",
+        "mean": 41.5,
+        "p90": 44.6,
+        "p99": 98,
+        "ge200Fraction": 0.0012295081967213116
+      },
+      {
+        "t": 70316258,
+        "requestT": 70316258,
+        "frame": 5245,
+        "seq": 156,
+        "filename": "shot-000156.png",
+        "mean": 41.5,
+        "p90": 44.6,
+        "p99": 98,
+        "ge200Fraction": 0.0012221896955503513
+      },
+      {
+        "t": 70316276,
+        "requestT": 70316276,
+        "frame": 5246,
+        "seq": 157,
+        "filename": "shot-000157.png",
+        "mean": 41.4,
+        "p90": 44.5,
+        "p99": 98,
+        "ge200Fraction": 0.0012221896955503513
+      },
+      {
+        "t": 70316292,
+        "requestT": 70316292,
+        "frame": 5247,
+        "seq": 158,
+        "filename": "shot-000158.png",
+        "mean": 41.4,
+        "p90": 44.5,
+        "p99": 98,
+        "ge200Fraction": 0.0012221896955503513
+      },
+      {
+        "t": 70316309,
+        "requestT": 70316309,
+        "frame": 5248,
+        "seq": 159,
+        "filename": "shot-000159.png",
+        "mean": 41.4,
+        "p90": 44.5,
+        "p99": 98,
+        "ge200Fraction": 0.0012221896955503513
+      },
+      {
+        "t": 70316326,
+        "requestT": 70316326,
+        "frame": 5249,
+        "seq": 160,
+        "filename": "shot-000160.png",
+        "mean": 41.3,
+        "p90": 44.5,
+        "p99": 98,
+        "ge200Fraction": 0.0012173106947697113
+      },
+      {
+        "t": 70316342,
+        "requestT": 70316342,
+        "frame": 5250,
+        "seq": 161,
+        "filename": "shot-000161.png",
+        "mean": 41.3,
+        "p90": 44.5,
+        "p99": 98,
+        "ge200Fraction": 0.0012173106947697113
+      },
+      {
+        "t": 70316358,
+        "requestT": 70316358,
+        "frame": 5251,
+        "seq": 162,
+        "filename": "shot-000162.png",
+        "mean": 41.3,
+        "p90": 44.4,
+        "p99": 98,
+        "ge200Fraction": 0.0012173106947697113
+      },
+      {
+        "t": 70316376,
+        "requestT": 70316376,
+        "frame": 5252,
+        "seq": 163,
+        "filename": "shot-000163.png",
+        "mean": 41.3,
+        "p90": 44.4,
+        "p99": 98,
+        "ge200Fraction": 0.0012173106947697113
+      },
+      {
+        "t": 70316393,
+        "requestT": 70316393,
+        "frame": 5253,
+        "seq": 164,
+        "filename": "shot-000164.png",
+        "mean": 41.2,
+        "p90": 44.3,
+        "p99": 98,
+        "ge200Fraction": 0.0012173106947697113
+      },
+      {
+        "t": 70316410,
+        "requestT": 70316410,
+        "frame": 5254,
+        "seq": 165,
+        "filename": "shot-000165.png",
+        "mean": 41.2,
+        "p90": 44.2,
+        "p99": 98,
+        "ge200Fraction": 0.0012173106947697113
+      },
+      {
+        "t": 70316427,
+        "requestT": 70316427,
+        "frame": 5255,
+        "seq": 166,
+        "filename": "shot-000166.png",
+        "mean": 41.2,
+        "p90": 44.2,
+        "p99": 98,
+        "ge200Fraction": 0.001214871194379391
+      },
+      {
+        "t": 70316443,
+        "requestT": 70316443,
+        "frame": 5256,
+        "seq": 167,
+        "filename": "shot-000167.png",
+        "mean": 41.1,
+        "p90": 44.1,
+        "p99": 98,
+        "ge200Fraction": 0.001209992193598751
+      },
+      {
+        "t": 70316460,
+        "requestT": 70316460,
+        "frame": 5257,
+        "seq": 168,
+        "filename": "shot-000168.png",
+        "mean": 41.1,
+        "p90": 44,
+        "p99": 98,
+        "ge200Fraction": 0.001214871194379391
+      },
+      {
+        "t": 70316477,
+        "requestT": 70316477,
+        "frame": 5258,
+        "seq": 169,
+        "filename": "shot-000169.png",
+        "mean": 41.1,
+        "p90": 44,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      },
+      {
+        "t": 70316493,
+        "requestT": 70316493,
+        "frame": 5259,
+        "seq": 170,
+        "filename": "shot-000170.png",
+        "mean": 41.1,
+        "p90": 44,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      },
+      {
+        "t": 70316511,
+        "requestT": 70316511,
+        "frame": 5260,
+        "seq": 171,
+        "filename": "shot-000171.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      },
+      {
+        "t": 70316528,
+        "requestT": 70316528,
+        "frame": 5261,
+        "seq": 172,
+        "filename": "shot-000172.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      },
+      {
+        "t": 70316544,
+        "requestT": 70316544,
+        "frame": 5262,
+        "seq": 173,
+        "filename": "shot-000173.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      },
+      {
+        "t": 70316561,
+        "requestT": 70316561,
+        "frame": 5263,
+        "seq": 174,
+        "filename": "shot-000174.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      },
+      {
+        "t": 70316579,
+        "requestT": 70316579,
+        "frame": 5264,
+        "seq": 175,
+        "filename": "shot-000175.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      },
+      {
+        "t": 70316596,
+        "requestT": 70316596,
+        "frame": 5265,
+        "seq": 176,
+        "filename": "shot-000176.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      },
+      {
+        "t": 70316612,
+        "requestT": 70316612,
+        "frame": 5266,
+        "seq": 177,
+        "filename": "shot-000177.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      },
+      {
+        "t": 70316630,
+        "requestT": 70316630,
+        "frame": 5267,
+        "seq": 178,
+        "filename": "shot-000178.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      },
+      {
+        "t": 70316646,
+        "requestT": 70316646,
+        "frame": 5268,
+        "seq": 179,
+        "filename": "shot-000179.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      },
+      {
+        "t": 70316662,
+        "requestT": 70316662,
+        "frame": 5269,
+        "seq": 180,
+        "filename": "shot-000180.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      },
+      {
+        "t": 70316681,
+        "requestT": 70316681,
+        "frame": 5270,
+        "seq": 181,
+        "filename": "shot-000181.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      },
+      {
+        "t": 70316697,
+        "requestT": 70316697,
+        "frame": 5271,
+        "seq": 182,
+        "filename": "shot-000182.png",
+        "mean": 40.9,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      },
+      {
+        "t": 70316714,
+        "requestT": 70316714,
+        "frame": 5272,
+        "seq": 183,
+        "filename": "shot-000183.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      },
+      {
+        "t": 70316731,
+        "requestT": 70316731,
+        "frame": 5273,
+        "seq": 184,
+        "filename": "shot-000184.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      },
+      {
+        "t": 70316747,
+        "requestT": 70316747,
+        "frame": 5274,
+        "seq": 185,
+        "filename": "shot-000185.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      },
+      {
+        "t": 70316764,
+        "requestT": 70316764,
+        "frame": 5275,
+        "seq": 186,
+        "filename": "shot-000186.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      },
+      {
+        "t": 70316781,
+        "requestT": 70316781,
+        "frame": 5276,
+        "seq": 187,
+        "filename": "shot-000187.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      },
+      {
+        "t": 70316797,
+        "requestT": 70316797,
+        "frame": 5277,
+        "seq": 188,
+        "filename": "shot-000188.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      },
+      {
+        "t": 70316813,
+        "requestT": 70316813,
+        "frame": 5278,
+        "seq": 189,
+        "filename": "shot-000189.png",
+        "mean": 40.9,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      },
+      {
+        "t": 70316831,
+        "requestT": 70316831,
+        "frame": 5279,
+        "seq": 190,
+        "filename": "shot-000190.png",
+        "mean": 40.9,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      },
+      {
+        "t": 70316847,
+        "requestT": 70316847,
+        "frame": 5280,
+        "seq": 191,
+        "filename": "shot-000191.png",
+        "mean": 40.9,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      },
+      {
+        "t": 70316864,
+        "requestT": 70316864,
+        "frame": 5281,
+        "seq": 192,
+        "filename": "shot-000192.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      },
+      {
+        "t": 70316881,
+        "requestT": 70316881,
+        "frame": 5282,
+        "seq": 193,
+        "filename": "shot-000193.png",
+        "mean": 40.9,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      },
+      {
+        "t": 70316897,
+        "requestT": 70316897,
+        "frame": 5283,
+        "seq": 194,
+        "filename": "shot-000194.png",
+        "mean": 40.9,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      },
+      {
+        "t": 70316913,
+        "requestT": 70316913,
+        "frame": 5284,
+        "seq": 195,
+        "filename": "shot-000195.png",
+        "mean": 40.9,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      },
+      {
+        "t": 70316931,
+        "requestT": 70316931,
+        "frame": 5285,
+        "seq": 196,
+        "filename": "shot-000196.png",
+        "mean": 40.9,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      },
+      {
+        "t": 70316947,
+        "requestT": 70316947,
+        "frame": 5286,
+        "seq": 197,
+        "filename": "shot-000197.png",
+        "mean": 40.9,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      },
+      {
+        "t": 70316964,
+        "requestT": 70316964,
+        "frame": 5287,
+        "seq": 198,
+        "filename": "shot-000198.png",
+        "mean": 40.9,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      },
+      {
+        "t": 70316981,
+        "requestT": 70316981,
+        "frame": 5288,
+        "seq": 199,
+        "filename": "shot-000199.png",
+        "mean": 40.9,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0011977946916471506
+      },
+      {
+        "t": 70316997,
+        "requestT": 70316997,
+        "frame": 5289,
+        "seq": 200,
+        "filename": "shot-000200.png",
+        "mean": 40.9,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0011977946916471506
+      },
+      {
+        "t": 70317014,
+        "requestT": 70317014,
+        "frame": 5290,
+        "seq": 201,
+        "filename": "shot-000201.png",
+        "mean": 40.9,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0011977946916471506
+      },
+      {
+        "t": 70317032,
+        "requestT": 70317032,
+        "frame": 5291,
+        "seq": 202,
+        "filename": "shot-000202.png",
+        "mean": 40.9,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0011977946916471506
+      },
+      {
+        "t": 70317048,
+        "requestT": 70317048,
+        "frame": 5292,
+        "seq": 203,
+        "filename": "shot-000203.png",
+        "mean": 40.9,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0011977946916471506
+      },
+      {
+        "t": 70317065,
+        "requestT": 70317065,
+        "frame": 5293,
+        "seq": 204,
+        "filename": "shot-000204.png",
+        "mean": 40.9,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0011977946916471506
+      },
+      {
+        "t": 70317082,
+        "requestT": 70317082,
+        "frame": 5294,
+        "seq": 205,
+        "filename": "shot-000205.png",
+        "mean": 40.9,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0011977946916471506
+      },
+      {
+        "t": 70317097,
+        "requestT": 70317097,
+        "frame": 5295,
+        "seq": 206,
+        "filename": "shot-000206.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0011977946916471506
+      },
+      {
+        "t": 70317114,
+        "requestT": 70317114,
+        "frame": 5296,
+        "seq": 207,
+        "filename": "shot-000207.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0011977946916471506
+      },
+      {
+        "t": 70317131,
+        "requestT": 70317131,
+        "frame": 5297,
+        "seq": 208,
+        "filename": "shot-000208.png",
+        "mean": 40.9,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0011977946916471506
+      },
+      {
+        "t": 70317148,
+        "requestT": 70317148,
+        "frame": 5298,
+        "seq": 209,
+        "filename": "shot-000209.png",
+        "mean": 40.9,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0011977946916471506
+      },
+      {
+        "t": 70317164,
+        "requestT": 70317164,
+        "frame": 5299,
+        "seq": 210,
+        "filename": "shot-000210.png",
+        "mean": 40.9,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0011977946916471506
+      },
+      {
+        "t": 70317182,
+        "requestT": 70317182,
+        "frame": 5300,
+        "seq": 211,
+        "filename": "shot-000211.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0011977946916471506
+      },
+      {
+        "t": 70317198,
+        "requestT": 70317198,
+        "frame": 5301,
+        "seq": 212,
+        "filename": "shot-000212.png",
+        "mean": 40.9,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0011977946916471506
+      },
+      {
+        "t": 70317214,
+        "requestT": 70317214,
+        "frame": 5302,
+        "seq": 213,
+        "filename": "shot-000213.png",
+        "mean": 40.9,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0011977946916471506
+      },
+      {
+        "t": 70317232,
+        "requestT": 70317232,
+        "frame": 5303,
+        "seq": 214,
+        "filename": "shot-000214.png",
+        "mean": 40.9,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0011977946916471506
+      },
+      {
+        "t": 70317249,
+        "requestT": 70317249,
+        "frame": 5304,
+        "seq": 215,
+        "filename": "shot-000215.png",
+        "mean": 40.9,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0011977946916471506
+      },
+      {
+        "t": 70317265,
+        "requestT": 70317265,
+        "frame": 5305,
+        "seq": 216,
+        "filename": "shot-000216.png",
+        "mean": 40.9,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0011977946916471506
+      },
+      {
+        "t": 70317283,
+        "requestT": 70317283,
+        "frame": 5306,
+        "seq": 217,
+        "filename": "shot-000217.png",
+        "mean": 40.9,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0011977946916471506
+      },
+      {
+        "t": 70317299,
+        "requestT": 70317299,
+        "frame": 5307,
+        "seq": 218,
+        "filename": "shot-000218.png",
+        "mean": 40.9,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0011977946916471506
+      },
+      {
+        "t": 70317316,
+        "requestT": 70317316,
+        "frame": 5308,
+        "seq": 219,
+        "filename": "shot-000219.png",
+        "mean": 40.9,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0011977946916471506
+      },
+      {
+        "t": 70317334,
+        "requestT": 70317334,
+        "frame": 5309,
+        "seq": 220,
+        "filename": "shot-000220.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0011977946916471506
+      },
+      {
+        "t": 70317350,
+        "requestT": 70317350,
+        "frame": 5310,
+        "seq": 221,
+        "filename": "shot-000221.png",
+        "mean": 40.9,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0011977946916471506
+      },
+      {
+        "t": 70317366,
+        "requestT": 70317366,
+        "frame": 5311,
+        "seq": 222,
+        "filename": "shot-000222.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0011977946916471506
+      },
+      {
+        "t": 70317383,
+        "requestT": 70317383,
+        "frame": 5312,
+        "seq": 223,
+        "filename": "shot-000223.png",
+        "mean": 40.9,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0011977946916471506
+      },
+      {
+        "t": 70317400,
+        "requestT": 70317400,
+        "frame": 5313,
+        "seq": 224,
+        "filename": "shot-000224.png",
+        "mean": 40.9,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0011977946916471506
+      },
+      {
+        "t": 70317416,
+        "requestT": 70317416,
+        "frame": 5314,
+        "seq": 225,
+        "filename": "shot-000225.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0011977946916471506
+      },
+      {
+        "t": 70317434,
+        "requestT": 70317434,
+        "frame": 5315,
+        "seq": 226,
+        "filename": "shot-000226.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0011977946916471506
+      },
+      {
+        "t": 70317450,
+        "requestT": 70317450,
+        "frame": 5316,
+        "seq": 227,
+        "filename": "shot-000227.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0011977946916471506
+      },
+      {
+        "t": 70317466,
+        "requestT": 70317466,
+        "frame": 5317,
+        "seq": 228,
+        "filename": "shot-000228.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0011977946916471506
+      },
+      {
+        "t": 70317484,
+        "requestT": 70317484,
+        "frame": 5318,
+        "seq": 229,
+        "filename": "shot-000229.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.001209992193598751
+      },
+      {
+        "t": 70317500,
+        "requestT": 70317500,
+        "frame": 5319,
+        "seq": 230,
+        "filename": "shot-000230.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.001209992193598751
+      },
+      {
+        "t": 70317517,
+        "requestT": 70317517,
+        "frame": 5320,
+        "seq": 231,
+        "filename": "shot-000231.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.001209992193598751
+      },
+      {
+        "t": 70317534,
+        "requestT": 70317534,
+        "frame": 5321,
+        "seq": 232,
+        "filename": "shot-000232.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.001209992193598751
+      },
+      {
+        "t": 70317550,
+        "requestT": 70317550,
+        "frame": 5322,
+        "seq": 233,
+        "filename": "shot-000233.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.001209992193598751
+      },
+      {
+        "t": 70317567,
+        "requestT": 70317567,
+        "frame": 5323,
+        "seq": 234,
+        "filename": "shot-000234.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.001209992193598751
+      },
+      {
+        "t": 70317584,
+        "requestT": 70317584,
+        "frame": 5324,
+        "seq": 235,
+        "filename": "shot-000235.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.001209992193598751
+      },
+      {
+        "t": 70317600,
+        "requestT": 70317600,
+        "frame": 5325,
+        "seq": 236,
+        "filename": "shot-000236.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.001209992193598751
+      },
+      {
+        "t": 70317617,
+        "requestT": 70317617,
+        "frame": 5326,
+        "seq": 237,
+        "filename": "shot-000237.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.001209992193598751
+      },
+      {
+        "t": 70317634,
+        "requestT": 70317634,
+        "frame": 5327,
+        "seq": 238,
+        "filename": "shot-000238.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.001209992193598751
+      },
+      {
+        "t": 70317650,
+        "requestT": 70317650,
+        "frame": 5328,
+        "seq": 239,
+        "filename": "shot-000239.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.001209992193598751
+      },
+      {
+        "t": 70317667,
+        "requestT": 70317667,
+        "frame": 5329,
+        "seq": 240,
+        "filename": "shot-000240.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.001209992193598751
+      },
+      {
+        "t": 70317684,
+        "requestT": 70317684,
+        "frame": 5330,
+        "seq": 241,
+        "filename": "shot-000241.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.001209992193598751
+      },
+      {
+        "t": 70317700,
+        "requestT": 70317700,
+        "frame": 5331,
+        "seq": 242,
+        "filename": "shot-000242.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.001209992193598751
+      },
+      {
+        "t": 70317717,
+        "requestT": 70317717,
+        "frame": 5332,
+        "seq": 243,
+        "filename": "shot-000243.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.001209992193598751
+      },
+      {
+        "t": 70317734,
+        "requestT": 70317734,
+        "frame": 5333,
+        "seq": 244,
+        "filename": "shot-000244.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      },
+      {
+        "t": 70317750,
+        "requestT": 70317750,
+        "frame": 5334,
+        "seq": 245,
+        "filename": "shot-000245.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      },
+      {
+        "t": 70317767,
+        "requestT": 70317767,
+        "frame": 5335,
+        "seq": 246,
+        "filename": "shot-000246.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      },
+      {
+        "t": 70317784,
+        "requestT": 70317784,
+        "frame": 5336,
+        "seq": 247,
+        "filename": "shot-000247.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      },
+      {
+        "t": 70317800,
+        "requestT": 70317800,
+        "frame": 5337,
+        "seq": 248,
+        "filename": "shot-000248.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      },
+      {
+        "t": 70317817,
+        "requestT": 70317817,
+        "frame": 5338,
+        "seq": 249,
+        "filename": "shot-000249.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      },
+      {
+        "t": 70317834,
+        "requestT": 70317834,
+        "frame": 5339,
+        "seq": 250,
+        "filename": "shot-000250.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      },
+      {
+        "t": 70317850,
+        "requestT": 70317850,
+        "frame": 5340,
+        "seq": 251,
+        "filename": "shot-000251.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      },
+      {
+        "t": 70317867,
+        "requestT": 70317867,
+        "frame": 5341,
+        "seq": 252,
+        "filename": "shot-000252.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      },
+      {
+        "t": 70317885,
+        "requestT": 70317885,
+        "frame": 5342,
+        "seq": 253,
+        "filename": "shot-000253.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      },
+      {
+        "t": 70317900,
+        "requestT": 70317900,
+        "frame": 5343,
+        "seq": 254,
+        "filename": "shot-000254.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      },
+      {
+        "t": 70317917,
+        "requestT": 70317917,
+        "frame": 5344,
+        "seq": 255,
+        "filename": "shot-000255.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      },
+      {
+        "t": 70317934,
+        "requestT": 70317934,
+        "frame": 5345,
+        "seq": 256,
+        "filename": "shot-000256.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      },
+      {
+        "t": 70317950,
+        "requestT": 70317950,
+        "frame": 5346,
+        "seq": 257,
+        "filename": "shot-000257.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      },
+      {
+        "t": 70317967,
+        "requestT": 70317967,
+        "frame": 5347,
+        "seq": 258,
+        "filename": "shot-000258.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      },
+      {
+        "t": 70317984,
+        "requestT": 70317984,
+        "frame": 5348,
+        "seq": 259,
+        "filename": "shot-000259.png",
+        "mean": 41,
+        "p90": 43.9,
+        "p99": 98,
+        "ge200Fraction": 0.0012002341920374707
+      }
+    ]
+  },
+  "timeLagCorrelations": {
+    "lagRangeMs": [
+      -120,
+      120
+    ],
+    "lagStepMs": 1,
+    "convention": "corr(visual(t), vanillaBobDriver(t + lagMs)); samples outside C time range are omitted, never clamped",
+    "metrics": {
+      "mean": null,
+      "p90": null,
+      "p99": null,
+      "ge200Fraction": null
+    }
+  }
+}

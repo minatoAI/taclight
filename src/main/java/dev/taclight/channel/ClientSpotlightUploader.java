@@ -245,6 +245,7 @@ public final class ClientSpotlightUploader {
         float weight;
         TpLightResolver.Referent ref;
         long lastNanos = System.nanoTime();
+        long lastCaptureNanos;
     }
 
     /** DIAG-TP 摘要(每持枪远程玩家一行,单帧覆盖;诊断从上传器读单一真源)。 */
@@ -318,27 +319,28 @@ public final class ClientSpotlightUploader {
                 // 疾跑臂姿等)下的真实枪口,零新增网络包。矩阵来自 level 渲染 PoseStack
                 // (相机空间,含实体平移),世界 = 捕获时刻 camEye + Q_cam·Ry(180°)·v
                 // —— 与第一人称坑60 同构(YP180 翻转源自 level 渲染栈)。
-                // 屏外连续性(2026-09-02,用户报告跳变):TpLightResolver 三级解析 ——
-                // fresh(在渲染)精确;hold(屏外但持灯者 referent 未动)沿用捕获世界位
-                // (映射绑定捕获时刻相机,观察者转视角/走动不破坏);referent 变→blend
-                // 连续滑回眼位近似(出 400ms/入 200ms slew 限速)。
-                // !tpfb hard=旧二元跳变(A/B 对照);!tproe row=坑68 读数复现(变异)。
+                // 屏外连续性 + 入场跳变根治(2026-09-02 两轮用户实机报告):TpLightResolver
+                // 局部偏移重构跟随 —— 捕获给出"枪口−眼位"局部偏移,绕实时偏航旋转加到实时
+                // psnap 眼位 = 灯在任何平移(步行/坠落/传送)下精确跟随,与视锥无关。
+                // fresh(在渲染)锚=捕获精确世界位,200ms 爬升只桥接摆动级小差;姿态 referent
+                // (偏航/俯仰/瞄准/手持)未变=hold,变了=blend(仍跟随,可信度降级)。
+                // 位置不再作稳态门禁(旧版步行即破 hold→滑落眼位0.45近似→入场0.75格差量
+                // 分帧兑现=卡顿跳变)。!tpfb hard=二元切换对照;!tproe row=坑68 读数复现(变异)。
                 SpotlightData gun;
                 var entry = dev.taclight.client.MuzzlePoseCapture.peekThirdPerson(p.getId());
                 long nowNano = System.nanoTime();
-                var liveRef = tpReferent(p);
+                var liveRef = tpReferent(p, eye, yHead + extYaw, xRot + extPitch);
                 TpLightResolver.CaptureView capView = entry == null ? null
                         : new TpLightResolver.CaptureView(entry.pose(), entry.nanos(),
                                 entry.camRot(), entry.camEye());
                 TpBlendState st = TP_BLENDS.computeIfAbsent(p.getId(), k -> new TpBlendState());
-                if (capView != null && entry.ageNanos(nowNano) <= TpLightResolver.FRESH_NANOS) {
-                    st.ref = liveRef; // fresh 帧刷新稳态快照(屏外 hold 的判定基准)
+                if (capView != null && entry.nanos() != st.lastCaptureNanos) {
+                    st.ref = liveRef; // 捕获落地帧刷新稳态快照/自校准基准(过期窗口不刷新,保同帧 basis)
+                    st.lastCaptureNanos = entry.nanos();
                 }
                 long dt = Math.min(Math.max(nowNano - st.lastNanos, 0L), TpLightResolver.MAX_STEP_NANOS);
                 st.lastNanos = nowNano;
-                Vec3 fbPos = eye.add(look.scale(0.45));
                 var res = TpLightResolver.resolve(capView, st.ref, liveRef,
-                        new org.joml.Vector3d(fbPos.x, fbPos.y, fbPos.z),
                         new org.joml.Vector3d(look.x, look.y, look.z),
                         st.weight, nowNano, dt, dev.taclight.client.TpFallbackControl.blended());
                 st.weight = res.weight();
@@ -359,16 +361,20 @@ public final class ClientSpotlightUploader {
         TP_PROBE.keySet().retainAll(tpSeen);
     }
 
-    /** 持灯者活体 referent(稳态判定输入):位置 + 头偏航 + 俯仰 + 瞄准态 + 手持物品。 */
-    private static TpLightResolver.Referent tpReferent(net.minecraft.client.player.AbstractClientPlayer p) {
+    /**
+     * 持灯者活体 referent(稳态判定+重构锚输入):眼位(psnap 平滑基)+ 平滑头偏航/俯仰
+     * (与 look 同源,bsnap/外推后)+ 瞄准态 + 手持物品。位置只作锚不作门禁。
+     */
+    private static TpLightResolver.Referent tpReferent(net.minecraft.client.player.AbstractClientPlayer p,
+                                                       Vec3 eye, float yaw, float pitch) {
         boolean aiming;
         try {
             aiming = com.tacz.guns.api.entity.IGunOperator.fromLivingEntity(p).getSynIsAiming();
         } catch (Throwable t) {
             aiming = false;
         }
-        return new TpLightResolver.Referent(p.getX(), p.getY(), p.getZ(),
-                p.yHeadRot, p.getXRot(), aiming, p.getMainHandItem().getItem().hashCode());
+        return new TpLightResolver.Referent(eye.x, eye.y, eye.z,
+                yaw, pitch, aiming, p.getMainHandItem().getItem().hashCode());
     }
 
     /** G 打桩行 + DIAG 摘要:TP 链逐级中间值(与 C 行同帧同 t,离线逐级相关性分析)。 */

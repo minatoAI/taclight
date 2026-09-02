@@ -1,4 +1,9 @@
 ﻿# drive.ps1 — 程序化调试驱动(移植自 mc-tarkov-like-shader-dev/qa/run-dev/t0-automation/t0-drive.ps1,本机已验证;红线:只发单击键,组合键注入不可行)
+#
+# ⚠ 后台纪律(2026-09-02 用户明令,坑72):自动化只允许用不碰前台的通道 ——
+#   postkey / holdkey / postf3r / postchars / postchat / shot / find(纯 PostMessage 或屏幕拷贝)。
+#   present / press / chat / f3r / rawkey / rawkey2 / quit 会动真实鼠标并 SetForegroundWindow
+#   抢焦点 —— 仅限操作者明确要求"把窗口提到前台"时手工使用,自动化禁用。
 param(
   [Parameter(Mandatory=$true)][string]$Action,
   [string]$Text = "",
@@ -204,78 +209,64 @@ switch ($Action) {
     Write-Output 'F3R_SENT'
   }
   'postkey' {
+    # 纯后台键盘通道(2026-09-02 用户明令:禁止抢鼠标/抢焦点)——
+    # 旧实现真实点击标题栏抢焦点 + 合成 WM_ACTIVATE,会动用户鼠标并顶飞前台窗口(坑72)。
+    # 现与 postkey-walk.ps1 同构:仅 PostMessage WM_KEYDOWN/UP,lParam 带 scancode
+    # (坑46:后台可靠通道),KEYUP 带 bit30|bit31(坑23:否则 GLFW 视为 repeat 键粘滞)。
     $h = Find-McWindow
     if ($h -eq [IntPtr]::Zero) { Write-Output 'WINDOW_NOT_FOUND'; break }
-    # 先真实点击标题栏(不触碰游戏内容)以获得窗口焦点
-    $rx = New-Object T0Win+RECT
-    [T0Win]::GetWindowRect($h, [ref]$rx) | Out-Null
-    [T0Win]::SetCursorPos(($rx.L + 650), ($rx.T + 18)) | Out-Null
-    Start-Sleep -Milliseconds 120
-    [T0Win]::mouse_event(2, 0, 0, 0, [UIntPtr]::Zero)
-    Start-Sleep -Milliseconds 60
-    [T0Win]::mouse_event(4, 0, 0, 0, [UIntPtr]::Zero)
-    Start-Sleep -Milliseconds 350
-    # WM_ACTIVATE(0x0006, WA_ACTIVE=1) + WM_SETFOCUS(0x0007) 再唤醒WM焦点
-    [T0Win]::PostMessageW($h, 0x0006, [IntPtr]1, [IntPtr]::Zero) | Out-Null
-    [T0Win]::PostMessageW($h, 0x0007, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
-    Start-Sleep -Milliseconds 100
-    $vk = [int]0
-    $map10 = @{ 'F3'=0x72; 'F2'=0x71; 'F4'=0x73; 'F5'=0x74; 'ENTER'=0x0D; 'ESC'=0x1B; 'R'=0x52; 'T'=0x54; 'W'=0x57; 'A'=0x41; 'S'=0x53; 'D'=0x44; 'J'=0x4A; 'N'=0x4E; 'B'=0x42; 'K'=0x4B; 'L'=0x4C; '/'=0xBF; 'BACK'=0x08; '1'=0x31; '2'=0x32; '3'=0x33; '4'=0x34; '5'=0x35; '6'=0x36; '7'=0x37; '8'=0x38; '9'=0x39 }
-    if ($map10.ContainsKey($Text)) { $vk = $map10[$Text] } else { Write-Output 'UNSUPPORTED'; break }
-    [T0Win]::PostMessageW($h, 0x0100, [IntPtr]$vk, [IntPtr]::Zero) | Out-Null
+    $map10 = @{ 'F3'=@(0x72,0x3D); 'F2'=@(0x71,0x3C); 'F4'=@(0x73,0x3E); 'F5'=@(0x74,0x3F);
+                'ENTER'=@(0x0D,0x1C); 'ESC'=@(0x1B,0x01); 'BACK'=@(0x08,0x0E);
+                'R'=@(0x52,0x13); 'T'=@(0x54,0x14); 'W'=@(0x57,0x11); 'A'=@(0x41,0x1E);
+                'S'=@(0x53,0x1F); 'D'=@(0x44,0x20); 'J'=@(0x4A,0x24); 'N'=@(0x4E,0x31);
+                'B'=@(0x42,0x30); 'K'=@(0x4B,0x25); 'L'=@(0x4C,0x26); '/'=@(0xBF,0x35);
+                '1'=@(0x31,0x02); '2'=@(0x32,0x03); '3'=@(0x33,0x04); '4'=@(0x34,0x05);
+                '5'=@(0x35,0x06); '6'=@(0x36,0x07); '7'=@(0x37,0x08); '8'=@(0x38,0x09); '9'=@(0x39,0x0A) }
+    if (-not $map10.ContainsKey($Text)) { Write-Output 'UNSUPPORTED'; break }
+    $vk = [int]$map10[$Text][0]; $scan = [int]$map10[$Text][1]
+    $downL = [long]1 -bor ([long]$scan -shl 16)
+    $upL = [long]3221225472 -bor ([long]$scan -shl 16) -bor [long]1
+    [T0Win]::PostMessageW($h, 0x0100, [IntPtr]$vk, [IntPtr]$downL) | Out-Null
     Start-Sleep -Milliseconds 50
-    # 坑 23(2026-08-30):WM_KEYUP 的 lParam 必须带 bit30|bit31(0xC0000000),
-    # 否则 GLFW 按"重复按下"处理 → 移动键永久粘滞(玩家顶着墙走,传送后
-    # 1s 内又走回墙根,连拍全程静止画面)。F5 等切换键不受 repeat 影响,
-    # 故 postkey 一直"看似正常"。
-    [T0Win]::PostMessageW($h, 0x0101, [IntPtr]$vk, [IntPtr]3221225472) | Out-Null
+    [T0Win]::PostMessageW($h, 0x0101, [IntPtr]$vk, [IntPtr]$upL) | Out-Null
     Write-Output ('POSTED ' + $Text)
   }
   'holdkey' {
     # 持键通道(2026-08-30 移动光源调试):WM_KEYDOWN 持住 $Dur 毫秒再 WM_KEYUP。
-    # postkey 已证实 PostMessage 键盘通道对 GLFW 有效(F5/聊天可用);持键让玩家
-    # 连续移动,用于"移动中连续抓帧"。仅支持单键,勿组合。
+    # 2026-09-02 改纯后台:去掉合成 WM_ACTIVATE/WM_SETFOCUS(假焦点诱发 GLFW 光标态翻转,
+    # 坑72),lParam 带 scancode(坑46);与 postkey-walk.ps1 同构。仅支持单键,勿组合。
     $h = Find-McWindow
     if ($h -eq [IntPtr]::Zero) { Write-Output 'WINDOW_NOT_FOUND'; break }
-    [T0Win]::PostMessageW($h, 0x0006, [IntPtr]1, [IntPtr]::Zero) | Out-Null
-    [T0Win]::PostMessageW($h, 0x0007, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
-    Start-Sleep -Milliseconds 100
-    $map10 = @{ 'W'=0x57; 'A'=0x41; 'S'=0x53; 'D'=0x44 }
+    $map10 = @{ 'W'=@(0x57,0x11); 'A'=@(0x41,0x1E); 'S'=@(0x53,0x1F); 'D'=@(0x44,0x20) }
     if (-not $map10.ContainsKey($Text)) { Write-Output 'UNSUPPORTED'; break }
-    $vk = $map10[$Text]
-    [T0Win]::PostMessageW($h, 0x0100, [IntPtr]$vk, [IntPtr]::Zero) | Out-Null   # down(lParam=0: 首次按下)
+    $vk = [int]$map10[$Text][0]; $scan = [int]$map10[$Text][1]
+    $downL = [long]1 -bor ([long]$scan -shl 16)
+    $upL = [long]3221225472 -bor ([long]$scan -shl 16) -bor [long]1
+    [T0Win]::PostMessageW($h, 0x0100, [IntPtr]$vk, [IntPtr]$downL) | Out-Null   # down
     Start-Sleep -Milliseconds $Dur
-    # 坑 23:KEYUP lParam 必须 bit30|bit31(0xC0000000),否则 GLFW 视为 repeat → 键粘滞
-    [T0Win]::PostMessageW($h, 0x0101, [IntPtr]$vk, [IntPtr]3221225472) | Out-Null   # up
+    [T0Win]::PostMessageW($h, 0x0101, [IntPtr]$vk, [IntPtr]$upL) | Out-Null     # up(坑23)
     Write-Output ('HELD ' + $Text + ' ' + $Dur + 'ms')
   }
   'postf3r' {
-    # PostMessage lane: F3 down -> R down/up -> F3 up (each 250ms apart; window-rel title click first for real focus)
+    # PostMessage lane: F3 down -> R down/up -> F3 up。2026-09-02 改纯后台:去掉真实点击
+    # 标题栏抢焦点(坑72),lParam 带 scancode(坑46)。
     $h = Find-McWindow
     if ($h -eq [IntPtr]::Zero) { Write-Output 'WINDOW_NOT_FOUND'; break }
-    $rx = New-Object T0Win+RECT
-    [T0Win]::GetWindowRect($h, [ref]$rx) | Out-Null
-    [T0Win]::SetCursorPos(($rx.L + 650), ($rx.T + 18)) | Out-Null
-    Start-Sleep -Milliseconds 120
-    [T0Win]::mouse_event(2, 0, 0, 0, [UIntPtr]::Zero)
-    Start-Sleep -Milliseconds 60
-    [T0Win]::mouse_event(4, 0, 0, 0, [UIntPtr]::Zero)
-    Start-Sleep -Milliseconds 400
-    [T0Win]::PostMessageW($h, 0x0100, [IntPtr]0x72, [IntPtr]::Zero) | Out-Null   # F3 down
+    $f3d = [long]1 -bor (0x3D -shl 16); $f3u = [long]3221225472 -bor (0x3D -shl 16) -bor 1
+    $rd  = [long]1 -bor (0x13 -shl 16); $ru  = [long]3221225472 -bor (0x13 -shl 16) -bor 1
+    [T0Win]::PostMessageW($h, 0x0100, [IntPtr]0x72, [IntPtr]$f3d) | Out-Null   # F3 down
     Start-Sleep -Milliseconds 250
-    [T0Win]::PostMessageW($h, 0x0100, [IntPtr]0x52, [IntPtr]::Zero) | Out-Null   # R down
+    [T0Win]::PostMessageW($h, 0x0100, [IntPtr]0x52, [IntPtr]$rd) | Out-Null    # R down
     Start-Sleep -Milliseconds 250
-    [T0Win]::PostMessageW($h, 0x0101, [IntPtr]0x52, [IntPtr]::Zero) | Out-Null   # R up
+    [T0Win]::PostMessageW($h, 0x0101, [IntPtr]0x52, [IntPtr]$ru) | Out-Null    # R up
     Start-Sleep -Milliseconds 250
-    [T0Win]::PostMessageW($h, 0x0101, [IntPtr]0x72, [IntPtr]::Zero) | Out-Null   # F3 up
+    [T0Win]::PostMessageW($h, 0x0101, [IntPtr]0x72, [IntPtr]$f3u) | Out-Null   # F3 up
     Write-Output 'POSTF3R_SENT'
   }
   'postchars' {
+    # 2026-09-02:去掉合成 WM_ACTIVATE/WM_SETFOCUS(假焦点,坑72);WM_CHAR 本身与焦点无关。
     $h = Find-McWindow
     if ($h -eq [IntPtr]::Zero) { Write-Output 'WINDOW_NOT_FOUND'; break }
-    [T0Win]::PostMessageW($h, 0x0006, [IntPtr]1, [IntPtr]::Zero) | Out-Null
-    [T0Win]::PostMessageW($h, 0x0007, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
-    Start-Sleep -Milliseconds 100
     foreach ($ch in $Text.ToCharArray()) {
       [T0Win]::PostMessageW($h, 0x0102, [IntPtr]([int][char]$ch), [IntPtr]::Zero) | Out-Null
       Start-Sleep -Milliseconds 20
