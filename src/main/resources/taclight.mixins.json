@@ -10,7 +10,8 @@
   "client": [
     "BeamRendererMixin",
     "GunItemLightProviderMixin",
-    "LivingEntityLerpAccess"
+    "LivingEntityLerpAccess",
+    "oculus.TransformPatcherMixin"
   ],
   "injectors": {
     "defaultRequire": 1

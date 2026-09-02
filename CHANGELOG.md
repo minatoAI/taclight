@@ -1,5 +1,30 @@
 # TacLight Changelog
 
+## 09-03 03:1x · 里程碑2(方案C 运行时注入引擎)实机全链闭环,验收 1-7 全 PASS
+
+- **引擎上线实机**:mixin 挂 Oculus(oculus-1.8.0)`TransformPatcher.patchComposite`
+  4 个 String 入参 → `RuntimePackInjector.patchSource`(指纹=包名+关键文件哈希 →
+  模板 JSON(路线 P 格式:replaceFirst/insertBeforeLine/insertAfterLine+`<INLINE_CORE>`)
+  → iterationT 3.2.0 注入成功 `+20852 chars`,管线编译零报错。冻结午夜 smoke:
+  off=全黑夜景 / on=锥形光池,imgdiff meanDiff=36.43 maxDiff=242 changed=45.0%
+  (首轮 wj 对 37.30/40.8% 同量级互证)。验收 1-7 全 PASS:补丁包零静默禁用 /
+  injected 日志 / 灯开关像素差 / 视觉正确 / 本家包回归(原生链照常+零注入)/
+  未知包安全(零注入+一次性提示不刷屏)/ 幂等(连续两次 !reload 每次管线重建
+  注入恰一次,字节数恒定)。证据 `docs/evidence/2026-09-03-interop-runtime-inject/`
+  (README 判定表+timeline+composite-dump 运行时文本取证+manifest.sha256)。
+- **契约**:新增 65 项(TemplateLibrary/InlineCore 16/PatchExecutor 20/RuntimePackInjector/
+  PackFingerprint 等),探针清理后复跑 `AllContracts: ALL PASS`。
+- **新坑 4 条(坑位册 53-56)**:坑82 mixin 门控禁 Class.forName 目标类(prepare 期
+  抢先加载→零 mixin 缓存静默失效;字符串 targets 自守卫);坑83 patchComposite 输入=
+  jcpp 预处理文本(锚按运行时实测文本写/注入文本指令全解析+零 uniform/注入点在宿主
+  uniform 声明后);坑84 一次性亮帧异常归因存档(不可复现不阻塞,再遇先查首建灯态);
+  坑85 CHM 禁 null value+宿主管线回调必须 fail-safe(异常=原文返回零注入)。
+- **工具**:interop 三脚本(interop-session/stop/interop-smoke)落盘可复跑;
+  零重启模板迭代法(per-packName RESOLVED 缓存+手写 build/resources 模板+sed
+  oculus.properties+!reload)本轮 5 次 A/B 消融零重启完成。
+- **待用户**:体感验收 iterationT 注入观感(灯色/强度/tonemap 二次调色与离线派生包
+  时代的差异);下一步候选 = Complementary 族模板(需用户拍板优先级)。
+
 ## 09-02 23:x · 里程碑2 批准开工;计划文档落定;系统维护暂停待就绪信号
 
 - 用户批准开工,并指明"多参考 Iris 官方 DH 兼容的已验证实现"。实施蓝图 =

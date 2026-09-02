@@ -106,7 +106,17 @@ dependencies {
     compileOnly 'org.spongepowered:mixin:0.8.5'
 }
 
+// interop 注入引擎(方案C 里程碑2):pack/shaders/lib 两文件拷入 resources,
+// 单一真源 = pack/shaders/lib(InlineCoreContract 以 SHA-256 对账防两份漂移)
+tasks.register('copyInlineCore', Copy) {
+    from file('pack/shaders/lib/taclight_math.glsl')
+    from file('pack/shaders/lib/taclight_core.glsl')
+    into file("$buildDir/generated/resources-extra/shader_patches/inline")
+}
+sourceSets.main.resources.srcDir file("$buildDir/generated/resources-extra")
+
 tasks.named('processResources', ProcessResources).configure {
+    dependsOn tasks.named('copyInlineCore')
     var replaceProperties = [
             minecraft_version: minecraft_version, minecraft_version_range: minecraft_version_range,
             forge_version: forge_version, forge_version_range: forge_version_range,
