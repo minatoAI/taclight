@@ -30,14 +30,15 @@ function makeRows(options = {}) {
   const signalLagMs = options.signalLagMs ?? 0;
   const shotOrder = options.shotOrder || Array.from({ length: n }, (_, i) => i + 1);
   const droppedCounts = options.droppedCounts || [];
-  const lines = ['# TacLight rec s0001 run=fixture targetFps=50 rows=C/L/R/P/S/F/D'];
+  const lines = ['# TacLight rec s0001 run=fixture targetFps=50 rows=C/L/R/G/P/S/F/D'];
   for (let i = 0; i < n; i++) {
     const t = startT + i * stepMs;
     // One complete cycle per 400ms. Visual at t follows driver at t + signalLagMs.
     const walkDist = (t - startT) / 400 * 2;
-    lines.push(`C,${t},${100 + i},0,64,0,0,0,0,63,0,0,64,0,${walkDist.toFixed(6)},${walkDist.toFixed(6)},1,1,1`);
+    lines.push(`C,${t},${100 + i},0,64,0,${(options.baseYaw ?? 0) + (options.yawPerFrame ?? 0) * i},${(options.basePitch ?? 0) + (options.pitchPerFrame ?? 0) * i},0,63,0,0,64,0,${walkDist.toFixed(6)},${walkDist.toFixed(6)},1,1,1`);
     lines.push(`L,${t},${100 + i},0,1,2,3,0,0,-1,56,6,0.8480,0.9511`);
     lines.push(`R,${t},${100 + i},7,0.5,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22`);
+    if (options.gunFor) lines.push(options.gunFor(i, t));
   }
   for (const seq of shotOrder) {
     const index = seq - 1;
@@ -50,7 +51,7 @@ function makeRows(options = {}) {
   droppedCounts.forEach((count, index) => {
     lines.push(`D,${startT + n * stepMs + index},${100 + n + index},${count},deadline`);
   });
-  const dataRows = n * 3 + n * 2 + droppedCounts.length;
+  const dataRows = n * (3 + (options.gunFor ? 1 : 0)) + n * 2 + droppedCounts.length;
   const dropped = droppedCounts.reduce((sum, count) => sum + count, 0);
   lines.push(`# END rows=${dataRows} requested=${n} succeeded=${n} failed=0 dropped=${dropped} closeReason=still`);
   return { lines, n, startT, stepMs, signalLagMs };
@@ -197,6 +198,70 @@ try {
     const file = path.join(dir, 'frames.csv');
     fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replace('requested=12', 'requested=11'));
     expectFailure(dir, /footer requested/);
+  }
+
+  // ---- TP 枪灯链打桩判定(2026-09-02):G 行 34 列;不变性/连续性判定 ----
+  // G 列序: G,t,frame,id,state,weight,tpfb,tproe, rawF(3), capYaw,capPitch, quat(4),
+  //          eye(3), pos(3), dir(3), refPos(3), refYaw,refPitch, aim,item,hold
+  function gunLine(t, frame, fields = {}) {
+    const f = Object.assign({
+      id: 7, state: 'fresh', weight: '1.000', tpfb: 'blend', tproe: 'col',
+      raw: [0.05, 0.02, 0.9], cap: ['0', '0'], quat: ['0', '0', '0', '1'],
+      eye: ['10', '64', '10'], pos: ['1', '64', '9'], dir: [0.05, 0.02, 0.9],
+      refPos: ['1', '64', '1'], refAng: ['90', '0'], aim: '0', item: '7', hold: '1',
+    }, fields);
+    const d = typeof f.dir === 'function' ? null : f.dir;
+    const parts = ['G', t, frame, f.id, f.state, f.weight, f.tpfb, f.tproe,
+      ...f.raw, ...f.cap, ...f.quat, ...f.eye, ...f.pos,
+      ...(d ? d : f.dir(frame)).map(v => Number(v).toFixed(5)),
+      ...f.refPos, ...f.refAng, f.aim, f.item, f.hold];
+    return parts.join(',');
+  }
+
+  // 10) Green: frozen target, constant world dir, camera sweeping 1.2°/frame -> both PASS.
+  {
+    const dir = [0.05, 0.02, 0.9];
+    const gunFor = (i, t) => gunLine(t, 100 + i, { dir });
+    const s = expectSuccess(createSession('tp-green', { n: 120, yawPerFrame: 1.2, gunFor }));
+    check(s.tp && s.tp.entities.length === 1, 'tp block emitted');
+    const e = s.tp.entities[0];
+    check(e.invariance.verdict === 'PASS', `invariance PASS: ${JSON.stringify(e.invariance)}`);
+    check(e.continuity.verdict === 'PASS', `continuity PASS: ${JSON.stringify(e.continuity)}`);
+    check(e.invariance.cameraTravelDeg > 140 && e.invariance.maxDirDevDeg < 1e-6, 'travel counted from C rows; dir frozen');
+  }
+
+  // 11) Red mutation (坑68 signature): world dir rotates with camera -> TP-INVARIANCE FAIL.
+  {
+    const gunFor = (i, t) => gunLine(t, 100 + i, {
+      dir: frame => {
+        const yawRad = (-60 + frame * 1.2) * Math.PI / 180;
+        return [Math.cos(yawRad) * 0.9, 0.02, Math.sin(yawRad) * 0.9];
+      },
+    });
+    expectFailure(createSession('tp-rot', { n: 120, yawPerFrame: 1.2, gunFor }), /TP-INVARIANCE FAIL/);
+  }
+
+  // 12) Red continuity: 0.5-block step at fresh->fallback transition -> TP-CONTINUITY FAIL.
+  {
+    const gunFor = (i, t) => gunLine(t, 100 + i, i < 60
+      ? { state: 'fresh', pos: ['1', '64', '9'] }
+      : { state: 'fallback', weight: '0.000', hold: '0', pos: ['1', '64', '9.5'] });
+    expectFailure(createSession('tp-step', { n: 120, gunFor }), /TP-CONTINUITY FAIL/);
+  }
+
+  // 13) Hard mode: same big step is REPORT-ONLY (legacy baseline), no continuity failure.
+  {
+    const gunFor = (i, t) => gunLine(t, 100 + i, i < 60
+      ? { state: 'fresh', tpfb: 'hard', pos: ['1', '64', '9'] }
+      : { state: 'fallback', tpfb: 'hard', weight: '0.000', hold: '0', pos: ['1', '64', '9.5'] });
+    const s = expectSuccess(createSession('tp-hard', { n: 120, gunFor }));
+    check(s.tp.entities[0].continuity.verdict === 'REPORT-ONLY', 'hard mode continuity report-only');
+  }
+
+  // 14) G validation: unknown state string is a hard failure.
+  {
+    const gunFor = (i, t) => gunLine(t, 100 + i, { state: 'frozen' });
+    expectFailure(createSession('tp-bad-state', { n: 12, gunFor }), /G\.state unknown/);
   }
 
   console.log(`REC-ANALYZE-TEST PASS (${checks} checks)`);

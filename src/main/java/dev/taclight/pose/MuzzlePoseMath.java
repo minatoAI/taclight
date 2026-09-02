@@ -82,7 +82,22 @@ public final class MuzzlePoseMath {
         if (tip == null) {
             return null;
         }
+        if (tpRowReadDebug) {
+            // 调试:坑68 旧读数(第2行=转置像),供打桩工具变异验证(!tproe row)
+            return normalizeBeamDelta(tip.m02(), tip.m12(), tip.m22());
+        }
         return normalizeBeamDelta(tip.m20(), tip.m21(), tip.m22());
+    }
+
+    /** 调试开关:TP 束轴改读"第2行"(坑68 复现,变异测试用)。默认 false=正确列读。 */
+    private static volatile boolean tpRowReadDebug;
+
+    public static void setTpRowReadDebug(boolean on) {
+        tpRowReadDebug = on;
+    }
+
+    public static boolean isTpRowReadDebug() {
+        return tpRowReadDebug;
     }
 
     /**

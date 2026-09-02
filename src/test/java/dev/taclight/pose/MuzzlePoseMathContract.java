@@ -117,7 +117,16 @@ public class MuzzlePoseMathContract {
         var expect = new org.joml.Vector3f(0, 0, 1).rotate(entRot);
         check(close(dA.x(), expect.x()) && close(dA.y(), expect.y()) && close(dA.z(), expect.z()),
                 "坑68:世界方向 = 实体枪姿旋转·(+Z)");
-        System.out.println("MuzzlePoseMathContract: ALL PASS (35 checks)");
+        // ---- 调试行读模式(打桩工具:!tproe row,复现坑68 供变异测试) ----
+        // joml rotationY(θ) 把 +Z 轴映到 (sinθ,0,cosθ):rotY90 列像=(1,0,0),第2行像=(−sin,0,cos)=(−1,0,0)
+        MuzzlePoseMath.setTpRowReadDebug(true);
+        float[] rowImg = MuzzlePoseMath.extractTpBeamAxis(rotY90);
+        check(rowImg != null && rowImg[0] < -0.99f && close(rowImg[2], truth.z()),
+                "调试行读模式:返回第2行像(坑68 复现)");
+        MuzzlePoseMath.setTpRowReadDebug(false);
+        float[] colRestored = MuzzlePoseMath.extractTpBeamAxis(rotY90);
+        check(colRestored != null && colRestored[0] > 0.99f, "默认列读:模式复位恢复 +Z 列像");
+        System.out.println("MuzzlePoseMathContract: ALL PASS (38 checks)");
     }
 
     private static boolean close(float a, float b) { return Math.abs(a - b) < 1e-5f; }

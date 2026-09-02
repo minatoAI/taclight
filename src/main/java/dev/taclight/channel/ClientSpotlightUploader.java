@@ -1,6 +1,7 @@
 package dev.taclight.channel;
 
 import dev.taclight.client.ClientLightState;
+import dev.taclight.pose.TpLightResolver;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.phys.Vec3;
@@ -67,6 +68,7 @@ public final class ClientSpotlightUploader {
             LightBuffer.upload(List.of());
             return;
         }
+        dev.taclight.client.CameraSweep.tick(mc.player);
         LightParams cfg = LightParams.load();
         List<SpotlightData> lights = new ArrayList<>(2);
         Camera cam = mc.gameRenderer.getMainCamera();
@@ -113,7 +115,7 @@ public final class ClientSpotlightUploader {
                 lights.add(selfCapped(gun, playerEye));
             }
         }
-        collectRemoteLights(mc, eye, cam.rotation(), cfg, lights);
+        collectRemoteLights(mc, eye, cfg, lights);
         int extraFlags = ClientLightState.debugMode() ? SpotlightBufferLayout.FLAG_DEBUG : 0;
         // 体素遮挡栅格(09-01 深夜④ DDA):墙后漏光立项,与灯数据同缓冲上传;
         // 禁用/无灯 → null,GLSL 逐光线回退屏幕空间 SSO。
@@ -236,10 +238,22 @@ public final class ClientSpotlightUploader {
     /** SSBO 硬上限(LightBuffer/GLSL 两侧同值 8;自身灯优先,远程补足余量)。 */
     private static final int MAX_LIGHTS = 8;
 
+    /** TP 枪灯解析状态(每远程实体):slew 权重 + fresh 时的 referent 快照 + 上次推进时刻。 */
+    private static final java.util.Map<Integer, TpBlendState> TP_BLENDS = new java.util.HashMap<>();
+
+    private static final class TpBlendState {
+        float weight;
+        TpLightResolver.Referent ref;
+        long lastNanos = System.nanoTime();
+    }
+
+    /** DIAG-TP 摘要(每持枪远程玩家一行,单帧覆盖;诊断从上传器读单一真源)。 */
+    public static final java.util.Map<Integer, String> TP_PROBE = new java.util.HashMap<>();
+
     /** M5 远程玩家灯收集:实体数据开关 → 距离剔除/就近上限 → 第三人称锚定数学复用。 */
-    private static void collectRemoteLights(Minecraft mc, Vec3 camEye, org.joml.Quaternionf camRot,
-                                            LightParams cfg, List<SpotlightData> out) {
+    private static void collectRemoteLights(Minecraft mc, Vec3 camEye, LightParams cfg, List<SpotlightData> out) {
         if (out.size() >= MAX_LIGHTS) return;
+        var tpSeen = new java.util.HashSet<Integer>();
         var remotes = new ArrayList<net.minecraft.client.player.AbstractClientPlayer>();
         var cands = new ArrayList<MultiLightCollector.Candidate>();
         for (var p : mc.level.players()) {
@@ -302,32 +316,95 @@ public final class ClientSpotlightUploader {
             if (sel.gun() && out.size() < MAX_LIGHTS) {
                 // 里程碑②(2026-09-02):第三人称渲染捕获 = 该玩家当前渲染枪姿(瞄准/
                 // 疾跑臂姿等)下的真实枪口,零新增网络包。矩阵来自 level 渲染 PoseStack
-                // (相机空间,含实体平移),世界 = camEye + Q_cam·Ry(180°)·v —— 与第一
-                // 人称坑60 同构:YP180 翻转源自 level 渲染栈("TP 无翻转"假设已被
-                // DIAG-TP 实测推翻,Q·v 偏 16.9 格,tools/tp-space-solve.js)。未捕获
-                // (出视锥/LOD 模型无激光骨/未渲染)回退眼位近似(旁观方案 §4.5)。
+                // (相机空间,含实体平移),世界 = 捕获时刻 camEye + Q_cam·Ry(180°)·v
+                // —— 与第一人称坑60 同构(YP180 翻转源自 level 渲染栈)。
+                // 屏外连续性(2026-09-02,用户报告跳变):TpLightResolver 三级解析 ——
+                // fresh(在渲染)精确;hold(屏外但持灯者 referent 未动)沿用捕获世界位
+                // (映射绑定捕获时刻相机,观察者转视角/走动不破坏);referent 变→blend
+                // 连续滑回眼位近似(出 400ms/入 200ms slew 限速)。
+                // !tpfb hard=旧二元跳变(A/B 对照);!tproe row=坑68 读数复现(变异)。
                 SpotlightData gun;
-                var mp = dev.taclight.client.MuzzlePoseCapture.consumeFreshThirdPerson(p.getId());
-                if (mp != null) {
-                    org.joml.Vector3f off = dev.taclight.pose.MuzzlePoseMath.muzzleViewDirToWorldTP(
-                            mp.ox(), mp.oy(), mp.oz(), camRot);
-                    org.joml.Vector3f fwdW = dev.taclight.pose.MuzzlePoseMath.muzzleViewDirToWorldTP(
-                            mp.fx(), mp.fy(), mp.fz(), camRot);
-                    Vec3 pos = new Vec3(camEye.x + off.x(), camEye.y + off.y(), camEye.z + off.z());
-                    // 束方向离体校正(09-02 实机:远程步行动画状态下捕获 +Z 列偶发反平行
-                    // 翻转,灯照持枪者本人;物理不变式 dot(fwd, 枪口−眼睛) ≥ 0)。
-                    float[] fwdA = dev.taclight.pose.MuzzlePoseMath.alignBeamAway(
-                            fwdW.x(), fwdW.y(), fwdW.z(),
-                            (float) (pos.x - eye.x), (float) (pos.y - eye.y), (float) (pos.z - eye.z));
-                    gun = toSpot(pos, new Vec3(fwdA[0], fwdA[1], fwdA[2]), cfg,
-                            dev.taclight.config.TacLightConfig.GUN_MULTIPLIER.get().floatValue());
-                } else {
-                    gun = toSpot(eye.add(look.scale(0.45)), look, cfg,
-                            dev.taclight.config.TacLightConfig.GUN_MULTIPLIER.get().floatValue());
+                var entry = dev.taclight.client.MuzzlePoseCapture.peekThirdPerson(p.getId());
+                long nowNano = System.nanoTime();
+                var liveRef = tpReferent(p);
+                TpLightResolver.CaptureView capView = entry == null ? null
+                        : new TpLightResolver.CaptureView(entry.pose(), entry.nanos(),
+                                entry.camRot(), entry.camEye());
+                TpBlendState st = TP_BLENDS.computeIfAbsent(p.getId(), k -> new TpBlendState());
+                if (capView != null && entry.ageNanos(nowNano) <= TpLightResolver.FRESH_NANOS) {
+                    st.ref = liveRef; // fresh 帧刷新稳态快照(屏外 hold 的判定基准)
                 }
+                long dt = Math.min(Math.max(nowNano - st.lastNanos, 0L), TpLightResolver.MAX_STEP_NANOS);
+                st.lastNanos = nowNano;
+                Vec3 fbPos = eye.add(look.scale(0.45));
+                var res = TpLightResolver.resolve(capView, st.ref, liveRef,
+                        new org.joml.Vector3d(fbPos.x, fbPos.y, fbPos.z),
+                        new org.joml.Vector3d(look.x, look.y, look.z),
+                        st.weight, nowNano, dt, dev.taclight.client.TpFallbackControl.blended());
+                st.weight = res.weight();
+                // 束方向离体校正(09-02 实机:捕获 +Z 列偶发反平行翻转,灯照持枪者本人;
+                // 物理不变式 dot(fwd, 枪口−眼睛) ≥ 0)。
+                float[] fwdA = dev.taclight.pose.MuzzlePoseMath.alignBeamAway(
+                        (float) res.dir().x, (float) res.dir().y, (float) res.dir().z,
+                        (float) (res.pos().x - eye.x), (float) (res.pos().y - eye.y), (float) (res.pos().z - eye.z));
+                gun = toSpot(new Vec3(res.pos().x, res.pos().y, res.pos().z),
+                        new Vec3(fwdA[0], fwdA[1], fwdA[2]), cfg,
+                        dev.taclight.config.TacLightConfig.GUN_MULTIPLIER.get().floatValue());
+                recordTpProbe(p, entry, res, liveRef);
+                tpSeen.add(p.getId());
                 out.add(selfCapped(gun, eye));
             }
         }
+        TP_BLENDS.keySet().retainAll(tpSeen);
+        TP_PROBE.keySet().retainAll(tpSeen);
+    }
+
+    /** 持灯者活体 referent(稳态判定输入):位置 + 头偏航 + 俯仰 + 瞄准态 + 手持物品。 */
+    private static TpLightResolver.Referent tpReferent(net.minecraft.client.player.AbstractClientPlayer p) {
+        boolean aiming;
+        try {
+            aiming = com.tacz.guns.api.entity.IGunOperator.fromLivingEntity(p).getSynIsAiming();
+        } catch (Throwable t) {
+            aiming = false;
+        }
+        return new TpLightResolver.Referent(p.getX(), p.getY(), p.getZ(),
+                p.yHeadRot, p.getXRot(), aiming, p.getMainHandItem().getItem().hashCode());
+    }
+
+    /** G 打桩行 + DIAG 摘要:TP 链逐级中间值(与 C 行同帧同 t,离线逐级相关性分析)。 */
+    private static void recordTpProbe(net.minecraft.client.player.AbstractClientPlayer p,
+                                      dev.taclight.pose.MuzzlePoseStore.Entry entry,
+                                      TpLightResolver.Resolved res,
+                                      TpLightResolver.Referent liveRef) {
+        String mode = dev.taclight.client.TpFallbackControl.blended() ? "blend" : "hard";
+        String roe = dev.taclight.pose.MuzzlePoseMath.isTpRowReadDebug() ? "row" : "col";
+        long tMs = System.nanoTime() / 1_000_000L;
+        float rfx = entry == null ? 0f : entry.pose().fx();
+        float rfy = entry == null ? 0f : entry.pose().fy();
+        float rfz = entry == null ? 0f : entry.pose().fz();
+        TP_PROBE.put(p.getId(), String.format(
+                "state=%s w=%.3f age=%.0fms fb=%s roe=%s raw=(%.3f,%.3f,%.3f) pos=(%.2f,%.2f,%.2f) dir=(%.3f,%.3f,%.3f)",
+                res.state(), res.weight(),
+                entry == null ? -1.0 : entry.ageNanos(System.nanoTime()) / 1e6,
+                mode, roe, rfx, rfy, rfz,
+                res.pos().x(), res.pos().y(), res.pos().z(),
+                res.dir().x(), res.dir().y(), res.dir().z()));
+        if (!FrameRecorder.active()) {
+            return;
+        }
+        FrameRecorder.append(FrameRecorder.gunRow(tMs, recFrame, p.getId(),
+                res.state(), res.weight(), mode, roe,
+                rfx, rfy, rfz,
+                entry == null ? 0f : entry.camYaw(), entry == null ? 0f : entry.camPitch(),
+                entry == null ? 0f : entry.camRot().x, entry == null ? 0f : entry.camRot().y,
+                entry == null ? 0f : entry.camRot().z, entry == null ? 0f : entry.camRot().w,
+                entry == null ? 0 : entry.camEye().x, entry == null ? 0 : entry.camEye().y,
+                entry == null ? 0 : entry.camEye().z,
+                res.pos().x(), res.pos().y(), res.pos().z(),
+                res.dir().x(), res.dir().y(), res.dir().z(),
+                liveRef.x(), liveRef.y(), liveRef.z(), liveRef.yaw(), liveRef.pitch(),
+                liveRef.aiming(), liveRef.itemHash(),
+                res.state().equals("fresh") || res.state().equals("hold")));
     }
 
     // ---- F2 自体胶囊常量(GLSL 侧消费,竖直半高 TACLIGHT_SELF_CAP_HALF=1.05)----

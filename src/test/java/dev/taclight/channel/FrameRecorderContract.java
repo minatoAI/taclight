@@ -126,6 +126,16 @@ public final class FrameRecorderContract {
             String summary = Files.readString(integration.resolve("summary.json"), StandardCharsets.UTF_8);
             check(summary.contains("\"dropped\": 3") && summary.contains("\"S\": 2"),
                     "跨语言集成保留 shot frame/seq 与 ΣD.count");
+
+            // G 行(2026-09-02 TP 捕获链打桩):34 列,字符串字段原样,逗号消毒
+            String g = FrameRecorder.gunRow(3000, 200, 42, "hold", 1.0f, "blend", "col",
+                    0.1f, 0.2f, 0.3f, 90f, 5f, 0f, 0f, 0f, 1f,
+                    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 91f, 2f, true, 77, true);
+            check(g.startsWith("G,3000,200,42,hold,1.000,blend,col,"), "G 行:前缀/状态/权重/模式");
+            check(g.split(",").length >= 34, "G 行:34 列(打桩全链字段)");
+            check(FrameRecorder.gunRow(1, 1, 1, "bl,end", 0f, "blend", "col",
+                    0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, false, 0, false)
+                    .contains("bl;end"), "G 行:state 逗号消毒");
         } finally {
             FrameRecorder.resetForTest();
             try (var walk = Files.walk(tmp)) {

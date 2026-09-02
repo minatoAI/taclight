@@ -239,7 +239,7 @@ public final class FrameRecorder {
     public static String header(String label, String runLabel, double targetFps) {
         return "# TacLight rec " + label + " run=" + runLabel
                 + " targetFps=" + formatFps(targetFps)
-                + " rows=C(camera/player/walk-bob) L(light) R(remote-chain) P(pending) S(success) F(fail) D(dropped) t=monotonic-ms frame=render-frame";
+                + " rows=C(camera/player/walk-bob) L(light) R(remote-chain) G(tp-gun-capture-chain) P(pending) S(success) F(fail) D(dropped) t=monotonic-ms frame=render-frame";
     }
 
     private static String footer(Session s) {
@@ -291,6 +291,35 @@ public final class FrameRecorder {
                 + "," + f5(xC) + "," + f5(yC) + "," + f5(zC)
                 + "," + f5(tX) + "," + f5(tY) + "," + f5(tZ)
                 + "," + f5(dX) + "," + f5(dY) + "," + f5(dZ);
+    }
+
+    /**
+     * G 行(2026-09-02 TP 捕获链打桩):TP 枪灯每帧全链中间值 ——
+     * 状态/权重/模式 → 视空间束轴原样读数(mixin 打桩点,变异模式下即错误读数)
+     * → 捕获时刻相机(yaw/pitch/四元数/眼位,映射基准)→ 映射后世界锚/向(混合前)
+     * → 活体 referent(稳态判定输入)。与 C 行同帧同 t,离线逐级相关性分析。
+     */
+    public static String gunRow(long tMs, long frame, int entityId, String state, float weight,
+                                String tpfb, String tproe,
+                                float rfx, float rfy, float rfz,
+                                float capYaw, float capPitch,
+                                float qx, float qy, float qz, float qw,
+                                double ex, double ey, double ez,
+                                double px, double py, double pz,
+                                double dx, double dy, double dz,
+                                double refX, double refY, double refZ, float refYaw, float refPitch,
+                                boolean aim, int refItem, boolean hold) {
+        return "G," + tMs + "," + frame + "," + entityId
+                + "," + sanitize(state) + "," + f3(weight) + "," + sanitize(tpfb) + "," + sanitize(tproe)
+                + "," + f5(rfx) + "," + f5(rfy) + "," + f5(rfz)
+                + "," + f3(capYaw) + "," + f3(capPitch)
+                + "," + f5(qx) + "," + f5(qy) + "," + f5(qz) + "," + f5(qw)
+                + "," + f5(ex) + "," + f5(ey) + "," + f5(ez)
+                + "," + f5(px) + "," + f5(py) + "," + f5(pz)
+                + "," + f5(dx) + "," + f5(dy) + "," + f5(dz)
+                + "," + f5(refX) + "," + f5(refY) + "," + f5(refZ)
+                + "," + f3(refYaw) + "," + f3(refPitch)
+                + "," + (aim ? 1 : 0) + "," + refItem + "," + (hold ? 1 : 0);
     }
 
     private static String pendingRow(ShotToken t) {

@@ -1,0 +1,33 @@
+=== s0001-hard-frozen (=s0001)
+REC-ANALYZE PASS session=s0001 C=411 shots=393 duration=6.851s actualFps=59.845
+TP-PROBE entity=1 states={"fresh":160,"fallback":251} tpfb=hard tproe=col camTravel=148.7deg heldSamples=160 maxDirDev=0.5567deg corr=-0.002 -> TP-INVARIANCE PASS | transStep=0.7297 -> TP-CONTINUITY REPORT-ONLY
+summary -> E:\dshHome\mc-mod-spotlight-attachment\taclight\run-observer\mcap\run-20260902-153433-006-p1644\s0001\summary.json
+(exit=0)
+=== s0002-blend-reacquire-only (=s0002)
+REC-ANALYZE PASS session=s0002 C=410 shots=410 duration=6.846s actualFps=59.743
+TP-PROBE entity=1 states={"fallback":213,"fresh":197} tpfb=blend tproe=col camTravel=149.2deg heldSamples=186 maxDirDev=0.6005deg corr=0.130 -> TP-INVARIANCE PASS | transStep=0.0634 -> TP-CONTINUITY PASS
+summary -> E:\dshHome\mc-mod-spotlight-attachment\taclight\run-observer\mcap\run-20260902-153433-006-p1644\s0002\summary.json
+(exit=0)
+=== s0003-blend-frozen-hold (=s0003)
+REC-ANALYZE PASS session=s0003 C=405 shots=403 duration=6.754s actualFps=59.816
+TP-PROBE entity=1 states={"fresh":155,"hold":250} tpfb=blend tproe=col camTravel=146.7deg heldSamples=405 maxDirDev=0.6419deg corr=0.218 -> TP-INVARIANCE PASS | transStep=0 -> TP-CONTINUITY PASS
+summary -> E:\dshHome\mc-mod-spotlight-attachment\taclight\run-observer\mcap\run-20260902-153433-006-p1644\s0003\summary.json
+(exit=0)
+=== s0005-blend-walk-blocked-negative-control (=s0005)
+REC-ANALYZE PASS session=s0005 C=410 shots=407 duration=6.834s actualFps=59.848
+TP-PROBE entity=1 states={"fresh":160,"hold":250} tpfb=blend tproe=col camTravel=148.8deg heldSamples=410 maxDirDev=0.6457deg corr=0.221 -> TP-INVARIANCE PASS | transStep=0 -> TP-CONTINUITY PASS
+summary -> E:\dshHome\mc-mod-spotlight-attachment\taclight\run-observer\mcap\run-20260902-153433-006-p1644\s0005\summary.json
+(exit=0)
+=== s0007-blend-tpmove-blendout (=s0007)
+REC-ANALYZE PASS session=s0007 C=408 shots=408 duration=6.800s actualFps=59.853
+TP-PROBE entity=1 states={"fresh":160,"hold":89,"blend":23,"fallback":136} tpfb=blend tproe=col camTravel=148.8deg heldSamples=249 maxDirDev=0.7854deg corr=-0.044 -> TP-INVARIANCE PASS | transStep=0.0924 -> TP-CONTINUITY PASS
+summary -> E:\dshHome\mc-mod-spotlight-attachment\taclight\run-observer\mcap\run-20260902-153433-006-p1644\s0007\summary.json
+(exit=0)
+=== s0009-mutation-row-FAIL (=s0009)
+REC-ANALYZE FAIL: TP-INVARIANCE FAIL entity=1 maxDirDevDeg=52.3381 corr=0.32148530478223525 (冻结目标下束向随相机旋转)
+(exit=1)
+=== s0011-col-restore (=s0011)
+REC-ANALYZE PASS session=s0011 C=410 shots=408 duration=6.833s actualFps=59.857
+TP-PROBE entity=1 states={"fresh":187,"hold":223} tpfb=blend tproe=col camTravel=149.2deg heldSamples=410 maxDirDev=0.8265deg corr=0.222 -> TP-INVARIANCE PASS | transStep=0 -> TP-CONTINUITY PASS
+summary -> E:\dshHome\mc-mod-spotlight-attachment\taclight\run-observer\mcap\run-20260902-153433-006-p1644\s0011\summary.json
+(exit=0)

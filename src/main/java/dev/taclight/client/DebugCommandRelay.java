@@ -168,6 +168,33 @@ public final class DebugCommandRelay {
             TacLightMod.LOGGER.info("[TacLight] RELAY voxel -> {}", VoxelGrid.configure(arg));
             return;
         }
+        if (line.startsWith("!sweep")) {
+            // 程序化视角扫掠(2026-09-02 打桩激励):冻结目标+相机扫掠不变性测试用
+            String arg = line.length() > 6 ? line.substring(6).trim() : "";
+            TacLightMod.LOGGER.info("[TacLight] RELAY sweep -> {}", CameraSweep.configure(arg));
+            return;
+        }
+        if (line.startsWith("!tpfb")) {
+            // TP 枪灯回退模式 A/B(2026-09-02 屏外连续性):blend=hold+连续混合(默认)/hard=旧二元回退
+            String arg = line.length() > 5 ? line.substring(5).trim() : "";
+            TacLightMod.LOGGER.info("[TacLight] RELAY tpfb -> {}", TpFallbackControl.configureFallback(arg));
+            return;
+        }
+        if (line.startsWith("!tproe")) {
+            // TP 束轴读数模式(打桩变异:!tproe row 复现坑68,验证 TP-INVARIANCE 能抓到)
+            String arg = line.length() > 6 ? line.substring(6).trim() : "";
+            String res;
+            if (arg.isEmpty()) {
+                res = "tpRowRead=" + (dev.taclight.pose.MuzzlePoseMath.isTpRowReadDebug() ? "row(坑68 复现)" : "col(正确)");
+            } else if (arg.equals("row") || arg.equals("col")) {
+                dev.taclight.pose.MuzzlePoseMath.setTpRowReadDebug(arg.equals("row"));
+                res = "tpRowRead->" + arg;
+            } else {
+                res = "无法解析 '" + arg + "' (用法: !tproe <col|row>)";
+            }
+            TacLightMod.LOGGER.info("[TacLight] RELAY tproe -> {}", res);
+            return;
+        }
         if (line.startsWith("/")) {
             if (mc.getConnection() != null) {
                 mc.getConnection().sendCommand(line.substring(1));

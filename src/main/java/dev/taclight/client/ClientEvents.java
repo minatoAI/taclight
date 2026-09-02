@@ -143,36 +143,19 @@ public class ClientEvents {
                         dev.taclight.sync.PlayerLightAccess.flashlight(pl),
                         dev.taclight.sync.PlayerLightAccess.gunLight(pl),
                         String.format("%.1f,%.1f,%.1f", pl.getX(), pl.getY(), pl.getZ()));
-                // 里程碑②:第三人称枪口捕获状态(标定/取证用,一行一持枪远程玩家)
+                // 里程碑②:第三人称枪口捕获状态;09-02 屏外连续性:直接读上传器解析
+                // 摘要(单一真源,含 state/weight/age/模式/原样读数;诊断只读不消费)。
                 if (pl != mc.player && dev.taclight.sync.PlayerLightAccess.gunLight(pl)) {
-                    var mp = dev.taclight.client.MuzzlePoseCapture.consumeFreshThirdPerson(pl.getId());
-                    if (mp != null) {
-                        var rot = cam.rotation();
-                        var cp = cam.getPosition();
-                        var off = dev.taclight.pose.MuzzlePoseMath.muzzleViewDirToWorldTP(
-                                mp.ox(), mp.oy(), mp.oz(), rot);
-                        var fwd = dev.taclight.pose.MuzzlePoseMath.muzzleViewDirToWorldTP(
-                                mp.fx(), mp.fy(), mp.fz(), rot);
-                        // 与上传器同一路离体校正(灯的真实朝向);翻转前的原始值看 raw= 字段
-                        float[] fwdAl = dev.taclight.pose.MuzzlePoseMath.alignBeamAway(
-                                fwd.x(), fwd.y(), fwd.z(),
-                                (float) (cp.x + off.x() - pl.getX()),
-                                (float) (cp.y + off.y() - pl.getEyeY()),
-                                (float) (cp.z + off.z() - pl.getZ()));
-                        fwd = new org.joml.Vector3f(fwdAl[0], fwdAl[1], fwdAl[2]);
-                        var plLook = pl.getLookAngle();
-                        TacLightMod.LOGGER.info(
-                                "[TacLight] DIAG-TP player={} raw=({}) mpos=({}) mdir=({}) look=({}) tpCount={} camQ=({}) offRaw=({})",
+                    var plLook = pl.getLookAngle();
+                    String probe = dev.taclight.channel.ClientSpotlightUploader.TP_PROBE.get(pl.getId());
+                    if (probe != null) {
+                        TacLightMod.LOGGER.info("[TacLight] DIAG-TP player={} look=({}) {} tpCount={}",
                                 pl.getGameProfile().getName(),
-                                String.format("%.3f,%.3f,%.3f", mp.fx(), mp.fy(), mp.fz()),
-                                String.format("%.2f,%.2f,%.2f", cp.x + off.x(), cp.y + off.y(), cp.z + off.z()),
-                                String.format("%.3f,%.3f,%.3f", fwd.x(), fwd.y(), fwd.z()),
                                 String.format("%.3f,%.3f,%.3f", plLook.x, plLook.y, plLook.z),
-                                dev.taclight.client.MuzzlePoseCapture.tpCapturedCount(),
-                                String.format("%.3f,%.3f,%.3f,%.3f", rot.x, rot.y, rot.z, rot.w),
-                                String.format("%.2f,%.2f,%.2f", mp.ox(), mp.oy(), mp.oz()));
+                                probe,
+                                dev.taclight.client.MuzzlePoseCapture.tpCapturedCount());
                     } else {
-                        TacLightMod.LOGGER.info("[TacLight] DIAG-TP player={} capture=none tpCount={}",
+                        TacLightMod.LOGGER.info("[TacLight] DIAG-TP player={} capture=never tpCount={}",
                                 pl.getGameProfile().getName(),
                                 dev.taclight.client.MuzzlePoseCapture.tpCapturedCount());
                     }

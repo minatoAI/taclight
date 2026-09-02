@@ -99,14 +99,23 @@ public abstract class BeamRendererMixin {
             // 符号由离体校正负责)。旧实现读 (m02,m12,m22) = 第2行(joml mXY=列X行Y,
             // 行=转置像)→ 相机旋转被"再施加"而非消掉,世界方向随旁观者相机转动
             // (坑68,双机位 mdir 差 56° 实机钉死)。extractTpBeamAxis 契约钉死。
+            // 捕获时刻相机捆绑(2026-09-02 屏外连续性):TP 姿态是视空间量,必须与采集帧
+            // 相机成对存储;上传侧用该相机映射 → 世界锚在捕获帧固定,屏外 hold/快扫掠
+            // 都不再受"当前相机"污染(fresh 窗口内跨帧映射同样漏进相机旋转,坑68 家族)。
             var tip = poseStack.last().pose();
             float[] dir = dev.taclight.pose.MuzzlePoseMath.extractTpBeamAxis(tip);
             if (dir == null) {
                 return;
             }
+            var cam = net.minecraft.client.Minecraft.getInstance().gameRenderer.getMainCamera();
+            var camRot = cam == null ? new org.joml.Quaternionf() : new org.joml.Quaternionf(cam.rotation());
+            var camEye = cam == null ? new org.joml.Vector3d()
+                    : new org.joml.Vector3d(cam.getPosition().x, cam.getPosition().y, cam.getPosition().z());
+            float camYaw = cam == null ? 0f : cam.getYRot();
+            float camPitch = cam == null ? 0f : cam.getXRot();
             MuzzlePoseCapture.captureTp(ours, node,
                     tip.m30(), tip.m31(), tip.m32(),
-                    dir[0], dir[1], dir[2], entityId);
+                    dir[0], dir[1], dir[2], entityId, camRot, camEye, camYaw, camPitch);
             return;
         }
         MuzzlePoseCapture.capture(ours, node, poseStack.last().pose(), fp, entityId);

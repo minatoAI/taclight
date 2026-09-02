@@ -11,7 +11,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const { TextDecoder } = require('util');
 
-const ROW_TYPES = ['C', 'L', 'R', 'P', 'S', 'F', 'D'];
+const ROW_TYPES = ['C', 'L', 'R', 'G', 'P', 'S', 'F', 'D'];
 const LUMA_BATCH_SIZE = 50;
 
 function fail(message) {
@@ -193,6 +193,18 @@ function validateRows(rows) {
     if (row.length < 27) fail(`R row ${row.lineNumber} has ${row.length} columns; expected at least 27`);
     finite(row[1], 'R.t'); integer(row[2], 'R.frame'); integer(row[3], 'R.id');
     for (let i = 4; i <= 26; i++) finite(row[i], `R[${i}] line ${row.lineNumber}`);
+  }
+  for (const row of rows.G) {
+    if (row.length < 34) fail(`G row ${row.lineNumber} has ${row.length} columns; expected at least 34`);
+    finite(row[1], 'G.t'); integer(row[2], 'G.frame'); integer(row[3], 'G.entityId');
+    if (!['fresh', 'hold', 'blend', 'fallback'].includes(row[4])) {
+      fail(`G.state unknown '${row[4]}' at line ${row.lineNumber}`);
+    }
+    finite(row[5], 'G.weight');
+    if (!['blend', 'hard'].includes(row[6])) fail(`G.tpfb unknown '${row[6]}' at line ${row.lineNumber}`);
+    if (!['col', 'row'].includes(row[7])) fail(`G.tproe unknown '${row[7]}' at line ${row.lineNumber}`);
+    for (let i = 8; i <= 30; i++) finite(row[i], `G[${i}] line ${row.lineNumber}`);
+    integer(row[31], 'G.aim'); integer(row[32], 'G.refItem'); integer(row[33], 'G.hold');
   }
   for (const row of rows.D) {
     if (row.length < 5) fail(`D row ${row.lineNumber} has ${row.length} columns; expected D,t,frame,count,reason`);
@@ -474,6 +486,134 @@ function invarianceSummary(rows) {
   return { lights, remote };
 }
 
+// ---- TP 枪灯链打桩判定(2026-09-02):不变性(冻结目标×相机扫掠)+ 连续性(屏外过渡) ----
+const TP_THRESHOLDS = {
+  MIN_SAMPLES: 100,        // 不变性最少有效帧
+  MIN_TRAVEL_DEG: 30,      // 最少相机行程(保证有激励)
+  MAX_DIR_DEV_DEG: 3.0,    // 冻结目标下束向世界方向最大漂移
+  MAX_CORR: 0.5,           // |Δdir| 与 |Δcam| 的 Pearson 上限(坑68 特征≈0.9+)
+  MAX_POS_STEP: 0.15,      // blend 模式状态过渡锚点最大步进(格)
+  MAX_DIR_STEP_DEG: 8.0,   // blend 模式状态过渡方向最大步进
+};
+
+function wrapDeg(d) {
+  return ((d + 180) % 360 + 360) % 360 - 180;
+}
+
+function v3(row, i) {
+  return [Number(row[i]), Number(row[i + 1]), Number(row[i + 2])];
+}
+
+function dist3(a, b) {
+  return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+}
+
+function angleDeg(a, b) {
+  const la = Math.hypot(a[0], a[1], a[2]);
+  const lb = Math.hypot(b[0], b[1], b[2]);
+  if (la < 1e-9 || lb < 1e-9) return 0;
+  let c = (a[0] * b[0] + a[1] * b[1] + a[2] * b[2]) / (la * lb);
+  c = Math.max(-1, Math.min(1, c));
+  return Math.acos(c) * 180 / Math.PI;
+}
+
+function tpCheck(rows, C) {
+  if (!rows.G.length) return null;
+  const camByFrame = new Map(C.map(r => [r[2], r]));
+  const groups = new Map();
+  for (const row of rows.G) {
+    const key = row[3];
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(row);
+  }
+  const entities = [];
+  for (const [id, group] of groups) {
+    const states = {};
+    for (const row of group) states[row[4]] = (states[row[4]] || 0) + 1;
+    const modes = {
+      tpfb: [...new Set(group.map(r => r[6]))],
+      tproe: [...new Set(group.map(r => r[7]))],
+    };
+    let cameraTravelDeg = 0;
+    for (let i = 1; i < C.length; i++) {
+      cameraTravelDeg += Math.abs(wrapDeg(Number(C[i][6]) - Number(C[i - 1][6])))
+        + Math.abs(Number(C[i][7]) - Number(C[i - 1][7]));
+    }
+    // 不变性:有效帧(hold=1 且权重满)束向世界方向应与相机解耦(冻结目标)。
+    // 逐级定位:G 行 raw=(mixin 读数)→ pos/dir=(映射+混合)→ L 行=SSBO 终值。
+    const held = group.filter(r => r[33] === '1' && Number(r[5]) >= 0.999);
+    const dirs = held.map(r => v3(r, 23));
+    const mean = [0, 0, 0];
+    for (const d of dirs) {
+      mean[0] += d[0]; mean[1] += d[1]; mean[2] += d[2];
+    }
+    const meanLen = Math.hypot(mean[0], mean[1], mean[2]);
+    if (meanLen > 1e-9) {
+      mean[0] /= meanLen; mean[1] /= meanLen; mean[2] /= meanLen;
+    }
+    const maxDirDevDeg = devsMax(dirs, mean);
+    const pairs = [];
+    for (let i = 1; i < held.length; i++) {
+      const c0 = camByFrame.get(held[i - 1][2]);
+      const c1 = camByFrame.get(held[i][2]);
+      if (!c0 || !c1) continue;
+      const dc = Math.abs(wrapDeg(Number(c1[6]) - Number(c0[6]))) + Math.abs(Number(c1[7]) - Number(c0[7]));
+      pairs.push([dc, angleDeg(dirs[i], dirs[i - 1])]);
+    }
+    let corr = 0;
+    if (pairs.length >= 8 && pairs.some(p => p[0] > 1e-9) && pairs.some(p => p[1] > 1e-9)) {
+      const r = pearson(pairs);
+      if (r !== null && Number.isFinite(r)) corr = r;
+    }
+    const invariance = { samples: held.length, cameraTravelDeg, maxDirDevDeg, corr, verdict: null };
+    if (held.length < TP_THRESHOLDS.MIN_SAMPLES || cameraTravelDeg < TP_THRESHOLDS.MIN_TRAVEL_DEG) {
+      invariance.verdict = 'INSUFFICIENT-SIGNAL';
+    } else {
+      invariance.verdict = (maxDirDevDeg <= TP_THRESHOLDS.MAX_DIR_DEV_DEG && Math.abs(corr) <= TP_THRESHOLDS.MAX_CORR)
+        ? 'PASS' : 'FAIL';
+    }
+    // 连续性:状态过渡帧的锚点步进(合法运动=逐帧小步;缺陷=过渡瞬间大步)。
+    const transitions = [];
+    let maxTransPosStep = 0;
+    let maxTransDirStep = 0;
+    let maxAllPosStep = 0;
+    for (let i = 1; i < group.length; i++) {
+      const a = group[i - 1];
+      const b = group[i];
+      const step = dist3(v3(a, 20), v3(b, 20));
+      maxAllPosStep = Math.max(maxAllPosStep, step);
+      if (a[4] !== b[4]) {
+        const dstep = angleDeg(v3(a, 23), v3(b, 23));
+        maxTransPosStep = Math.max(maxTransPosStep, step);
+        maxTransDirStep = Math.max(maxTransDirStep, dstep);
+        transitions.push({ from: a[4], to: b[4], posStep: Number(step.toFixed(4)), dirStep: Number(dstep.toFixed(3)) });
+      }
+    }
+    const continuity = {
+      maxTransitionPosStep: Number(maxTransPosStep.toFixed(4)),
+      maxTransitionDirStepDeg: Number(maxTransDirStep.toFixed(3)),
+      maxAllFramesPosStep: Number(maxAllPosStep.toFixed(4)),
+      transitions,
+      verdict: null,
+    };
+    const blendRows = group.filter(r => r[6] === 'blend');
+    if (blendRows.length >= 2) {
+      continuity.verdict = (maxTransPosStep <= TP_THRESHOLDS.MAX_POS_STEP
+        && maxTransDirStep <= TP_THRESHOLDS.MAX_DIR_STEP_DEG) ? 'PASS' : 'FAIL';
+    } else {
+      continuity.verdict = 'REPORT-ONLY'; // hard 模式:跳变数字留档,不判 PASS/FAIL
+    }
+    entities.push({ id, samples: group.length, states, modes, invariance, continuity });
+  }
+  return { thresholds: TP_THRESHOLDS, entities };
+}
+
+function devsMax(dirs, mean) {
+  let max = 0;
+  for (const d of dirs) max = Math.max(max, angleDeg(d, mean));
+  return Number(max.toFixed(4));
+}
+
 function analyze(dir, bbox) {
   const summaryPath = path.join(dir, 'summary.json');
   fs.rmSync(summaryPath, { force: true }); // Never leave a stale success artifact after a hard failure.
@@ -502,6 +642,7 @@ function analyze(dir, bbox) {
   };
 
   const counts = Object.fromEntries(ROW_TYPES.map(type => [type, parsed.rows[type].length]));
+  const tp = tpCheck(parsed.rows, C);
   const summary = {
     session: path.basename(path.resolve(dir)),
     integrity: {
@@ -530,6 +671,7 @@ function analyze(dir, bbox) {
     durationMs,
     durationS: durationMs / 1000,
     invariance: invarianceSummary(parsed.rows),
+    tp,
     cameraEyeDelta,
     vanillaBobDriver: {
       definition: 'bobEnabled ? sin(pi * linearlyInterpolatedWalkDist) * linearlyInterpolatedBob : 0',
@@ -552,6 +694,17 @@ function analyze(dir, bbox) {
     },
   };
 
+  if (tp) {
+    for (const e of tp.entities) {
+      if (e.invariance.verdict === 'FAIL') {
+        fail(`TP-INVARIANCE FAIL entity=${e.id} maxDirDevDeg=${e.invariance.maxDirDevDeg} corr=${e.invariance.corr} (冻结目标下束向随相机旋转)`);
+      }
+      if (e.continuity.verdict === 'FAIL') {
+        fail(`TP-CONTINUITY FAIL entity=${e.id} transitionPosStep=${e.continuity.maxTransitionPosStep} transitions=${JSON.stringify(e.continuity.transitions)}`);
+      }
+    }
+  }
+
   fs.writeFileSync(summaryPath, JSON.stringify(summary, null, 2) + '\n', 'utf8');
   return { summary, summaryPath };
 }
@@ -570,6 +723,15 @@ function main() {
     const bbox = parseBbox(argv.slice(1));
     const { summary, summaryPath } = analyze(dir, bbox);
     console.log(`REC-ANALYZE PASS session=${summary.session} C=${summary.input.counts.C} shots=${summary.input.counts.S} duration=${summary.durationS.toFixed(3)}s actualFps=${summary.actualFps.toFixed(3)}`);
+    if (summary.tp) {
+      for (const e of summary.tp.entities) {
+        console.log(`TP-PROBE entity=${e.id} states=${JSON.stringify(e.states)} tpfb=${e.modes.tpfb.join('|')} tproe=${e.modes.tproe.join('|')}`
+          + ` camTravel=${e.invariance.cameraTravelDeg.toFixed(1)}deg heldSamples=${e.invariance.samples}`
+          + ` maxDirDev=${e.invariance.maxDirDevDeg}deg corr=${Number(e.invariance.corr).toFixed(3)}`
+          + ` -> TP-INVARIANCE ${e.invariance.verdict}`
+          + ` | transStep=${e.continuity.maxTransitionPosStep} -> TP-CONTINUITY ${e.continuity.verdict}`);
+      }
+    }
     console.log(`summary -> ${summaryPath}`);
   } catch (error) {
     console.error(`REC-ANALYZE FAIL: ${error.message}`);
