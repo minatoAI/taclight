@@ -71,6 +71,21 @@ public final class MuzzlePoseMath {
     }
 
     /**
+     * TP 束轴提取(2026-09-02 修复坑68):束骨矩阵 +Z 轴在视图空间的像。
+     * joml mXY() 语义 = 第X列第Y行(transformPosition 布局:x'=m00x+m10y+m20z+m30),
+     * 故轴像 = (m20,m21,m22),平移 = (m30,m31,m32);真值等价
+     * matrix.transformDirection(0,0,1)。旧实现误读 (m02,m12,m22) = 第2行 =
+     * 转置像(逆旋),相机旋转被"再施加"而非消掉 → 世界方向随旁观者相机转动。
+     * 非有限/长度退化 → null(放弃捕获,灯回退近似锚点)。
+     */
+    public static float[] extractTpBeamAxis(org.joml.Matrix4f tip) {
+        if (tip == null) {
+            return null;
+        }
+        return normalizeBeamDelta(tip.m20(), tip.m21(), tip.m22());
+    }
+
+    /**
      * 束向量成对捕获的方向归一(2026-09-02 TP 标定):renderLaserBeam 外层 HEAD 与深处
      * (束骨遍历后)两次矩阵平移之差 = 视空间束方向向量(模长=束长)。非有限或长度
      * 退化(<1e-3 视空间)→ null,调用方放弃本次捕获(灯回退近似锚点)。

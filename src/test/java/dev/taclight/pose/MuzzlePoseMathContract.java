@@ -95,12 +95,46 @@ public class MuzzlePoseMathContract {
         // 实机复现场景:翻转束 (−0.629,0.507,0.589),枪口−眼 (0.7,−0.39,−0.6) → 取反
         float[] a5 = MuzzlePoseMath.alignBeamAway(-0.629f, 0.507f, 0.589f, 0.7f, -0.39f, -0.6f);
         check(a5[0] > 0 && a5[1] < 0 && a5[2] < 0, "离体校正:09-02 实机翻转样本取正");
-        System.out.println("MuzzlePoseMathContract: ALL PASS (31 checks)");
+
+        // ---- 坑68(2026-09-02):TP 束轴提取 = +Z 轴列像,世界方向相机不变 ----
+        // joml mXY() = 第X列第Y行(transformPosition:x'=m00x+m10y+m20z+m30)。
+        // 旧实现读 (m02,m12,m22) = 第2行 = 转置像(逆旋)→ 相机旋转被"再施加",
+        // 世界方向随旁观者相机转动(实机:双机位 mdir 差 56°,光池随视角转)。
+        var rotY90 = new org.joml.Matrix4f().rotationY((float) Math.toRadians(90));
+        var truth = rotY90.transformDirection(new org.joml.Vector3f(0, 0, 1));
+        float[] ex1 = MuzzlePoseMath.extractTpBeamAxis(rotY90);
+        check(ex1 != null && close(ex1[0], truth.x()) && close(ex1[1], truth.y()) && close(ex1[2], truth.z()),
+                "束轴提取:+Z 轴列像 = transformDirection(0,0,1) 语义");
+        check(MuzzlePoseMath.extractTpBeamAxis(null) == null, "束轴提取:null 矩阵 → null");
+        // 相机不变性:同一实体枪姿,两个不同相机 → 世界方向恒等,且 = 实体旋转·+Z
+        var entRot = new org.joml.Quaternionf().rotationYXZ(0.4f, -0.25f, 0.13f);
+        var camA = new org.joml.Quaternionf().rotationYXZ(-2.1f, 0.15f, 0f);
+        var camB = new org.joml.Quaternionf().rotationYXZ(-0.6f, -0.3f, 0f);
+        var dA = tpBeamAxisWorld(entRot, camA);
+        var dB = tpBeamAxisWorld(entRot, camB);
+        check(close(dA.x(), dB.x()) && close(dA.y(), dB.y()) && close(dA.z(), dB.z()),
+                "坑68:束向世界方向相机不变(双机位恒等)");
+        var expect = new org.joml.Vector3f(0, 0, 1).rotate(entRot);
+        check(close(dA.x(), expect.x()) && close(dA.y(), expect.y()) && close(dA.z(), expect.z()),
+                "坑68:世界方向 = 实体枪姿旋转·(+Z)");
+        System.out.println("MuzzlePoseMathContract: ALL PASS (35 checks)");
     }
 
     private static boolean close(float a, float b) { return Math.abs(a - b) < 1e-5f; }
     /** 实测样本钉死用:日志值 3 位舍入,容差放宽到 1e-3。 */
     private static boolean close3(float a, float b) { return Math.abs(a - b) < 1e-3f; }
+
+    /** 坑68 契约辅助:模拟捕获→上传全链。tip = (Q_cam·Ry180)⁻¹ · E_ent(level 渲染栈
+     *  组合,后乘);提取束轴 → muzzleViewDirToWorldTP 映回世界。 */
+    private static org.joml.Vector3f tpBeamAxisWorld(org.joml.Quaternionf ent, org.joml.Quaternionf cam) {
+        var camMap = new org.joml.Quaternionf(cam)
+                .mul(new org.joml.Quaternionf().rotationY((float) Math.PI));
+        var tip = new org.joml.Matrix4f().rotation(new org.joml.Quaternionf(camMap).invert())
+                .rotate(new org.joml.Quaternionf(ent));
+        float[] ax = MuzzlePoseMath.extractTpBeamAxis(tip);
+        return MuzzlePoseMath.muzzleViewDirToWorldTP(ax[0], ax[1], ax[2], cam);
+    }
+
     private static void check(boolean cond, String what) {
         if (!cond) throw new AssertionError("FAIL " + what);
         System.out.println("  PASS " + what);

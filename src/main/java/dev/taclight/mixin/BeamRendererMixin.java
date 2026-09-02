@@ -94,13 +94,13 @@ public abstract class BeamRendererMixin {
             entityId = holderEntity.getId();
         }
         if (!fp) {
-            // TP 直接捕获(2026-09-02 标定):深处矩阵平移 = 束起点(枪口,视空间);
-            // 束向 = 该矩阵 +Z 列归一(束沿骨局部 +Z 拉伸,字节码 stringVertex z=0..length)。
-            // 早期成对差值法退役:激光模块侧轨安装,根→束起点向量不沿枪管(实测与
-            // look 夹角 73°,+Z 列 28.8°)。
+            // TP 直接捕获(2026-09-02 标定):深处矩阵平移 = 束起点(枪口,视空间,m30/31/32);
+            // 束向 = +Z 轴列像(m20/21/22,束沿骨局部 ±Z 拉伸,stringVertex z=0..length,
+            // 符号由离体校正负责)。旧实现读 (m02,m12,m22) = 第2行(joml mXY=列X行Y,
+            // 行=转置像)→ 相机旋转被"再施加"而非消掉,世界方向随旁观者相机转动
+            // (坑68,双机位 mdir 差 56° 实机钉死)。extractTpBeamAxis 契约钉死。
             var tip = poseStack.last().pose();
-            float[] dir = dev.taclight.pose.MuzzlePoseMath.normalizeBeamDelta(
-                    tip.m02(), tip.m12(), tip.m22());
+            float[] dir = dev.taclight.pose.MuzzlePoseMath.extractTpBeamAxis(tip);
             if (dir == null) {
                 return;
             }

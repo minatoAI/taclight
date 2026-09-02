@@ -1,5 +1,30 @@
 # TacLight Changelog
 
+## 09-02 14:0x · 坑68 修复:TP 束轴误读 joml 矩阵"第2行"——旁观者转视角灯晕跟着转(用户实机报告闭环)
+
+- **用户实机报告两个症状**:①"激光指示器指墙、照明光晕却在地面,灯没跟枪口";
+  ②"旁观者转动视角,Dev 的灯光光晕跟着移动、大小角度也变"。实机复现+冻结对照
+  定位单一根因:**BeamRendererMixin TP 捕获读 (m02,m12,m22) 把 joml 矩阵第 2 行
+  当成 +Z 轴的像**。joml mXY() = 第X列第Y行(transformPosition 布局),+Z 轴像
+  = (m20,m21,m22),第 2 行 = 转置像(逆旋)→ 相机旋转被"再施加"而非消掉。
+  **铁证(Dev 姿态冻结,仅动机位):mdir 双机位差 56.1°(位置链 mpos 逐位稳定)**
+  ——位置一直对、方向随相机转,是行/列读数错误的唯一指纹。
+- **修复(TDD)**:`MuzzlePoseMath.extractTpBeamAxis` 读 m20/21/22(真值=
+  transformDirection(0,0,1));`MuzzlePoseMathContract` 新增 4 项含**相机不变性**
+  (同实体枪姿 × 两相机 → 世界方向恒等;单一位置向量定不死旋转,空间标定必须配
+  方向不变性契约)。红:临时旧读数 FAIL;绿:`AllContracts: ALL PASS`(35 项)。
+- **实机验证(双端重启后)**:mdir-look 夹角 0.2°~0.5°(四样本)、双机位 mdir 差
+  0.3°;主判定图 `after-money-shot-convergence.png` 激光点串一路汇聚进光池,
+  换机位光池仍钉在点串上。证据 `docs/evidence/2026-09-02-tp-beam-axis-row-col/`。
+- **诚实更正**:此前"26-32° 下垂=真实腰射枪姿"、"步行束向反平行翻转"、
+  ③"mdir 与 look 前向一致"均为本读数误差的假象(alignBeamAway 一直在给症状
+  打补丁,保留作符号保险);③证据包 README 结论 3 与其自带 diag 样本矛盾,以
+  本包为准。坑68 已入册(附 joml mXY 速查与"别裸写 mXY 访问器"守则)。
+- 附注:快速转视角时枪模出视锥→捕获 300ms 过期→回退眼位+look·0.45,光晕仍有
+  一次跳变(设计内降级);修复后稳态方向与回退方向接近,跳变幅度大幅缩小。
+- 快捷:`/tp <player> <pos> facing <pos>` 的俯仰以**脚底**为原点(实测),瞄
+  下俯视角要按脚底算目标 y。
+
 ## 09-02 11:5x · 里程碑③闭环:playerAnimator 引入,远程疾跑姿差异实锤,灯枪一致保持
 
 - **playerAnimation-lib-forge 1.0.2-rc1+1.20 接入 dev 运行时**(build.gradle
