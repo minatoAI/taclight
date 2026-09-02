@@ -1,5 +1,18 @@
 # TacLight Changelog
 
+## 09-02 23:x · 里程碑2 批准开工;计划文档落定;系统维护暂停待就绪信号
+
+- 用户批准开工,并指明"多参考 Iris 官方 DH 兼容的已验证实现"。实施蓝图 =
+  `docs/方案C-运行时注入引擎计划.md`(架构/模板格式 v2/契约清单/实机验收 7 项/
+  风险 8 项/包升级跟版 SOP)。写文档阶段追加钉死的事实:patchComposite 调用方
+  字节码实锤 = CompositeRenderer(composite/deferred)+ FinalPassRenderer(final),
+  签名 (String×4, TextureStage, map);taclight_surface_lighting 签名
+  (fragView, albedo, n, roughness, metal, f0);外包 prelude 必须定义
+  TACLIGHT_LIGHT_GAIN(core 无兜底),TACLIGHT_OCCLUSION_AT 不定义=core 默认 1.0
+  保守(遮挡主路径=体素 DDA,包无关);内联文本 = math+core 拼接去 include 行。
+- **暂停**:电脑维护,不起实例/不跑构建;就绪信号后按计划 §9 顺序开工(契约红→引擎→
+  mixin→iterationT 冒烟→三重回归→证据包)。
+
 ## 09-02 22:3x · 里程碑2(运行时注入引擎)调研收网,提案待批
 
 - **调研结论(网络案例+本地 jar 取证)**:①Iris 官方 DH 兼容就是"per-family GLSL 补丁"先例
