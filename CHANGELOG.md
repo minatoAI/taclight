@@ -1,5 +1,26 @@
 # TacLight Changelog
 
+## 09-02 22:3x · 里程碑2(运行时注入引擎)调研收网,提案待批
+
+- **调研结论(网络案例+本地 jar 取证)**:①Iris 官方 DH 兼容就是"per-family GLSL 补丁"先例
+  (补丁文本按 dhTerrainVsh/Fsh 命名进 ShaderProperties,DH_SHADER 指令守门=未声明的包零改动;
+  坑:旧 OptiFine 式 option 指令曾让补丁判定反转失效,Iris PR #2493);②Euphoria Patches
+  (Complementary 补丁层)证明 per-family 维护可行但每包升级要跟,版本必须配对;③本项目
+  路线 P 的 PackPatcherTool(git 0a98400)已有成熟补丁格式:JSON+锚点唯一+marker 幂等+
+  addFiles/insertBefore/insertAfter/replace,当年实机在 Oculus 下加载成功。
+- **关键本地事实**:实例依赖实际是 **oculus-1.8.0**(Iris 1.7.x 移植,非传言的 1.7.0);
+  jar 里 `TransformPatcher.patchComposite` 为 public static=deferred/composite/final 统一
+  转换入口,即理想注入钩子(gbuffers 走 patchVanilla/patchSodium,不碰);DH 补丁机制
+  (iris/compat/dh/DHCompat)同在;glsl-transformer 在 classpath。自家包= `#version 430 core`
+  + `layout(std430, binding=7)` 源内直声明,实机已验证可行。
+- **提案(待用户批准,未动工)**:mixin patchComposite(Inject RETURN 改写返回 map)+
+  指纹(shaderPack 名+关键文件哈希)→ 模板库(路线 P JSON 格式复活,taclight_core 文本
+  内联免 #include);未知包=零注入+一次性提示(设计即安全,坏指纹自动降级)。
+  首目标=Complementary 族(冒烟可先复活 iterationT 旧模板)。代价:引擎~1天,
+  每族模板 0.5-1 天且包升级需跟。风险:patchComposite 调用路径需冒烟实证、#version
+  升级个别包不兼容(该族标不支持)、注入后 Iris 静默禁包(注入后预校验)、tonemap
+  位置错=二次调色(像素判定防)、Oculus 升级需重验(混入面仅 1 类 1 方法)。
+
 ## 09-02 21:2x · interop 实机回归闭环(像素恒等)+ 独立实例与程序化测试通道
 
 - **实机回归(上一条目的待办,已闭环)**:独立实例 run-interop 上,基线包
