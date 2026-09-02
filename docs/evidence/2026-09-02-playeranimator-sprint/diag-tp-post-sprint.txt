@@ -1,0 +1,2 @@
+[029月2026 11:51:24.361] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] DIAG-TP player=Dev raw=(-0.484,0.871,0.082) mpos=(2006.48,122.19,5.64) mdir=(0.484,-0.782,0.392) look=(0.985,-0.171,0.000) tpCount=1 camQ=(0.000,0.961,-0.276,0.000) offRaw=(-0.52,-0.76,-6.21)
+[029月2026 11:40:01.608] [main/INFO] [mixin/]: Remapping refMap player-animation-lib-minecraft_common-refmap.json using E:\dshHome\mc-mod-spotlight-attachment\taclight/build/createSrgToMcp/output.srg

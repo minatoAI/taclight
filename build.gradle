@@ -86,6 +86,9 @@ dependencies {
     runtimeOnly fg.deobf("blank:tacz:1.1.8-hotfix")
     runtimeOnly fg.deobf("blank:oculus:1.8.0")
     runtimeOnly fg.deobf("blank:embeddium:0.3.31")
+    // playerAnimator(里程碑③,第三方库,libs/*.jar 不入库):TaCZ 第三人称动画消费方,
+    // 本模组零代码引用,纯运行时伴生
+    runtimeOnly fg.deobf("blank:player-animation-lib-forge:1.0.2-rc1+1.20")
     // mixin 注解(运行时由 FML 提供,仅编译期引用)
     compileOnly 'org.spongepowered:mixin:0.8.5'
 }
