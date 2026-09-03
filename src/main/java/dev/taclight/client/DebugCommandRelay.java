@@ -115,14 +115,32 @@ public final class DebugCommandRelay {
             return;
         }
         if (line.startsWith("!gun")) {
-            ClientLightState.setGunLight(!ClientLightState.gunLightOn());
-            TacLightMod.LOGGER.info("[TacLight] RELAY gunLight -> {}", ClientLightState.gunLightOn());
+            boolean next = !ClientLightState.gunLightOn();
+            ClientLightState.setGunLightManual(next);
+            // 手动覆写必须同步服务端真源,否则本端 SSBO 有光而对端(同步读)永远看不见
+            // —— 这正是"Dev 视角切开关无变化 + B 看不见 Dev 灯"的另一半根因。
+            dev.taclight.network.TacLightNetwork.sendSetLight(ClientLightState.isOn(), next);
+            TacLightMod.LOGGER.info("[TacLight] RELAY gunLight -> {} (manual)", next);
             return;
         }
         if (line.startsWith("!selflight")) {
-            // 自身灯总闸运行时翻转(2026-09-03 用户需求:枪灯测试单变量观察)
-            boolean on = ClientLightState.toggleSelfLight();
-            TacLightMod.LOGGER.info("[TacLight] RELAY selfLight -> {}", on);
+            String arg = line.length() > 10 ? line.substring(10).trim() : "";
+            // 无参=回显当前值(与 !rec 无参只回显同规);on/off=显式设定;空参沿用翻转。
+            if (arg.equals("on") || arg.equals("off")) {
+                boolean on = arg.equals("on");
+                // 显式设定即清运行时覆写回到配置语义:通过 toggle 两次语义太绕,直接清覆写
+                // 再按需翻转一次 —— 简单起见走 toggle-until-match(最多 1 次)。
+                if (ClientLightState.selfLightEnabled() != on) {
+                    ClientLightState.toggleSelfLight();
+                }
+                TacLightMod.LOGGER.info("[TacLight] RELAY selfLight -> {} (set)", ClientLightState.selfLightEnabled());
+            } else if (arg.isEmpty()) {
+                TacLightMod.LOGGER.info("[TacLight] RELAY selfLight = {} (usage: !selflight <on|off>)",
+                        ClientLightState.selfLightEnabled());
+            } else {
+                boolean on = ClientLightState.toggleSelfLight();
+                TacLightMod.LOGGER.info("[TacLight] RELAY selfLight -> {}", on);
+            }
             return;
         }
         if (line.startsWith("!extrap")) {

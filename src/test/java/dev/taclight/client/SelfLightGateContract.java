@@ -16,7 +16,23 @@ public class SelfLightGateContract {
         // 再翻转开 → 恢复
         check(ClientLightState.toggleSelfLight(), "toggle 开 → selfLightEnabled=true");
         check(ClientLightState.selfLightEnabled(), "覆写开保持");
-        // 复位覆写,免污染后续契约/运行
+        // 枪灯手动覆写(2026-09-03 小问题修复:tick 探针/S2C 回显不再覆盖 !gun 手动):
+        // 默认非手动 → setGunLight(探针写)生效
+        ClientLightState.clearGunManual();
+        ClientLightState.setGunLight(true);
+        check(ClientLightState.gunLightOn(), "非手动时探针写 true 生效");
+        // 手动 on 后探针写 false 不得覆盖
+        ClientLightState.setGunLightManual(true);
+        ClientLightState.setGunLight(false);
+        check(ClientLightState.gunLightOn(), "手动 on 后探针写 false 不覆盖");
+        check(ClientLightState.gunManual(), "手动旗置位");
+        // 清手动后探针恢复跟随
+        ClientLightState.clearGunManual();
+        ClientLightState.setGunLight(false);
+        check(!ClientLightState.gunLightOn(), "清手动后探针写 false 生效");
+        // 复位枪灯态,免污染后续契约/运行
+        ClientLightState.setGunLight(false);
+        ClientLightState.clearGunManual();
         try {
             var f = ClientLightState.class.getDeclaredField("selfLightOverride");
             f.setAccessible(true);
@@ -25,7 +41,7 @@ public class SelfLightGateContract {
             throw new AssertionError("FAIL 覆写复位 reflection: " + t);
         }
         check(ClientLightState.selfLightEnabled(), "覆写复位后跟随配置=开");
-        System.out.println("SelfLightGateContract: ALL PASS (6 checks)");
+        System.out.println("SelfLightGateContract: ALL PASS (11 checks)");
     }
 
     private static void check(boolean cond, String what) {

@@ -1,4 +1,18 @@
-# TacLight Changelog
+
+## 09-03 19:5x · 小问题修复:枪灯手动开关"无效"(tick 探针+S2C 双覆盖)+ !selflight 显式设定(用户实机反馈)
+
+- **用户反馈**:Dev 视角看不到灯,开关切换无变化,无法验证 Dev 看 B 持枪奔跑。
+- **根因**(双覆盖):①每 tick TaCZ 探针无枪即 setGunLight(false),!gun 手动 on 当
+  tick 被覆盖回 off;② !gun 未同步服务端真源 + S2C 回显再覆盖 —— 本端 SSBO 无光
+  (叠加 selflight=false 更全黑),对端同步读也恒 false,B 永远看不见 Dev 灯。
+- **修复**:手动旗 gunManual —— !gun 走 setGunLightManual(置旗+上报新值到服务端,
+  对端立即可见)+ 探针 setGunLight / S2C 回显手动后不再覆盖枪灯位;!selflight 补
+  on/off 显式设定与无参回显(用法 RELAY 回显)。自证:SelfLightGateContract 6→11
+  checks,AllContracts ALL PASS,BUILD SUCCESSFUL。
+- **待用户**(需重启新代码才生效,现实例仍旧代码):两端 !selflight on 恢复自身灯;
+  Dev 端 !gun 开枪灯 → Dev 自己先看到锥池 → B 端应看到 Dev 枪灯;证据待新一轮
+  实机截图/日志。
+- 坑85 入册(调试环境搭建计划.md §6)。
 
 ## 09-03 18:3x · v3 屏外不剔除渲染 + 自身灯总闸 + mp-session STALE-KILL(用户批准 v3 开工)
 

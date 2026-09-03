@@ -4,6 +4,8 @@ package dev.taclight.client;
 public final class ClientLightState {
     private static boolean handheldOn = true;
     private static boolean gunLightOn = false;
+    /** 手动覆写(调试开关):true=人工通过 !gun 显式设定,此后 tick 探针不再覆盖。 */
+    private static volatile boolean gunManual = false;
     private static boolean debugMode = false;
     /** 自身灯运行时覆写(null=跟随配置 SELF_LIGHT_ENABLED;!selflight 可翻转)。 */
     private static volatile Boolean selfLightOverride = null;
@@ -18,8 +20,20 @@ public final class ClientLightState {
     /** 服务端真源回写(S2C SyncLightS2C;命令改灯时本人客户端跟随)。 */
     public static void setHandheld(boolean on) { handheldOn = on; }
 
-    /** 枪挂灯状态(TaCZ 附件探针写入) */
-    public static void setGunLight(boolean on) { gunLightOn = on; }
+    /** 枪挂灯状态(TaCZ 附件探针写入;手动 !gun 覆写后探针不再覆盖,见 setGunLightManual) */
+    public static void setGunLight(boolean on) {
+        if (!gunManual) {
+            gunLightOn = on;
+        }
+    }
+    /** !gun 手动设定:写入状态 + 立手动覆写旗(探针/服务端回显不再覆盖)。 */
+    public static void setGunLightManual(boolean on) {
+        gunManual = true;
+        gunLightOn = on;
+    }
+    /** 清手动覆写(恢复探针跟随;调试用,暂无中继入口)。 */
+    public static void clearGunManual() { gunManual = false; }
+    public static boolean gunManual() { return gunManual; }
     public static boolean gunLightOn() { return gunLightOn; }
 
     /** 是否有任一设备激活供渲染层消费 */
