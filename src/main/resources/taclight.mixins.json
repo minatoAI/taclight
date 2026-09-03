@@ -12,7 +12,8 @@
     "GunItemLightProviderMixin",
     "GunModelRenderProbeMixin",
     "LivingEntityLerpAccess",
-    "LivingEntityRenderEntityMixin"
+    "LivingEntityRenderEntityMixin",
+    "TpOffscreenRenderMixin"
   ],
   "injectors": {
     "defaultRequire": 1

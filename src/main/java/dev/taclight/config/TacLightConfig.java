@@ -16,6 +16,7 @@ public final class TacLightConfig {
     public static final ForgeConfigSpec.ConfigValue<Double> GUN_MULTIPLIER;
     public static final ForgeConfigSpec.ConfigValue<Double> REMOTE_LIGHT_MAX_DIST;
     public static final ForgeConfigSpec.ConfigValue<Integer> REMOTE_LIGHT_MAX_COUNT;
+    public static final ForgeConfigSpec.ConfigValue<Boolean> SELF_LIGHT_ENABLED;
 
     static {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
@@ -33,6 +34,10 @@ public final class TacLightConfig {
         // M5 多人:远程玩家灯的收集护栏(旁观视角与多人调试方案.md §4.3)
         REMOTE_LIGHT_MAX_DIST = builder.comment("max distance (blocks) to render other players' lights").defineInRange("remoteLightMaxDist", 48.0, 8.0, 128.0);
         REMOTE_LIGHT_MAX_COUNT = builder.comment("max number of remote lights (nearest kept; SSBO hard cap 8)").defineInRange("remoteLightMaxCount", 8, 1, 8);
+        // 自身灯总闸(2026-09-03 用户需求:枪灯测试时自身手电/枪灯干扰观察):
+        // false = 本客户端不上传自身两盏灯(远程灯照常),单变量看远程枪灯效果。
+        // 默认 true(零行为变化);中继 !selflight 可运行时翻转,供测试对照。
+        SELF_LIGHT_ENABLED = builder.comment("upload own handheld+gun lights (false = observe remote lights only)").define("selfLightEnabled", true);
         builder.pop();
         SPEC = builder.build();
     }

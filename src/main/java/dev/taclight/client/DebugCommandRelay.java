@@ -119,6 +119,12 @@ public final class DebugCommandRelay {
             TacLightMod.LOGGER.info("[TacLight] RELAY gunLight -> {}", ClientLightState.gunLightOn());
             return;
         }
+        if (line.startsWith("!selflight")) {
+            // 自身灯总闸运行时翻转(2026-09-03 用户需求:枪灯测试单变量观察)
+            boolean on = ClientLightState.toggleSelfLight();
+            TacLightMod.LOGGER.info("[TacLight] RELAY selfLight -> {}", on);
+            return;
+        }
         if (line.startsWith("!extrap")) {
             // 方案A 调参旋钮(客户端本地;/taclight 会发到服务端,管不到本客户端预测状态)
             String arg = line.length() > 7 ? line.substring(7).trim() : "";

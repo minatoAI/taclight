@@ -1,5 +1,24 @@
 # TacLight Changelog
 
+## 09-03 18:3x · v3 屏外不剔除渲染 + 自身灯总闸 + mp-session STALE-KILL(用户批准 v3 开工)
+
+- **v3(屏外不剔除渲染)**:EntityRenderDispatcher.shouldRender mixin,对"距离内+
+  开枪灯的远程玩家"强制 true —— 真实渲染链(TaCZ 枪模动画+捕获钩子)在屏外照跑,
+  屏外捕获不断,入场无交接差。门禁纯逻辑 TpOffscreenRenderGate(契约 10 项):
+  本人/枪灯关/超距/NaN/总开关 off 一律放行零变化。实机自检(证据
+  evidence/2026-09-03-v3-offscreen-nocull/):B 扫掠 120° 段 410 帧全 fresh,
+  世界方向步进 max 0.267°/p99 0.228°;传送入场段 55 帧全 fresh。待用户体感:
+  屏外疾跑光晕是否跟真枪、入视野有无转动。
+- **自身灯总闸(用户需求:枪灯测试单变量)**:配置 SELF_LIGHT_ENABLED(默认 true
+  零变化)+ 上传侧门禁(关时自身两盏不进 SSBO,远程灯照常)+ 中继 `!selflight`
+  运行时翻转;契约 SelfLightGateContract 6 项。注意:本轮双端 18:10 启动时该
+  功能尚未合入,用户看到的双灯叠加属实;`!selflight` 双端已关(false 回显齐)。
+- **mp-session STALE-KILL(用户报 LAN 连接超时)**:残留旧实例占过期端口致 B
+  "无法连接至服务器 连接超时";只杀超 10 分钟的本项目 runClient,排除
+  wt-interop 并行任务(坑82)。另坑83(MSYS2 路径转换吞 `/` 开头中继)/坑84
+  (ps1 首行 `//` 注释害死 param 绑定)入册。
+- **契约**:AllContracts ALL PASS(新增 Gate 10 + 自身闸 6)+ TOOLS-SELFTEST PASS。
+
 ## 09-03 02:3x · 方案B姿态模型上线后两症状根治:模型俯仰约定反相 + 捕获束向反180°穿零扫动(用户实机报告,G 行实证)
 
 - **用户报告**:①屏外光晕转向与视角相反("往上看,光晕在下面照地面");②

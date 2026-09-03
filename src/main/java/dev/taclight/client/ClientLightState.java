@@ -5,6 +5,8 @@ public final class ClientLightState {
     private static boolean handheldOn = true;
     private static boolean gunLightOn = false;
     private static boolean debugMode = false;
+    /** 自身灯运行时覆写(null=跟随配置 SELF_LIGHT_ENABLED;!selflight 可翻转)。 */
+    private static volatile Boolean selfLightOverride = null;
 
     private ClientLightState() {}
 
@@ -22,6 +24,30 @@ public final class ClientLightState {
 
     /** 是否有任一设备激活供渲染层消费 */
     public static boolean anyDeviceOn() { return handheldOn || gunLightOn; }
+
+    /**
+     * 自身灯是否允许上传(2026-09-03 用户需求:枪灯测试单变量观察)。
+     * 配置 SELF_LIGHT_ENABLED=false 即关闭自身两盏灯的上传(远程灯不受影响);
+     * 运行时 !selflight 可覆写翻转,覆写 null=跟随配置。
+     */
+    public static boolean selfLightEnabled() {
+        Boolean o = selfLightOverride;
+        if (o != null) {
+            return o;
+        }
+        try {
+            return dev.taclight.config.TacLightConfig.SELF_LIGHT_ENABLED.get();
+        } catch (Throwable t) {
+            return true;
+        }
+    }
+
+    /** 运行时翻转自身灯总闸(返回翻转后状态,供中继回显)。 */
+    public static boolean toggleSelfLight() {
+        boolean next = !selfLightEnabled();
+        selfLightOverride = next;
+        return next;
+    }
 
     /** 霓虹调试模式(K 键):GLSL 输出纯色锥形光,与内置手电一眼区分。 */
     public static boolean debugMode() { return debugMode; }

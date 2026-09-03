@@ -40,6 +40,22 @@ $prepCommand = ('"{0}" -p "{1}" taclightMpSetup > "{2}" 2>&1' -f $Gradle, $Proje
 if ($LASTEXITCODE -ne 0) { throw ('taclightMpSetup failed: see ' + $PrepLog) }
 Step 'PREP done'
 
+# 0b. 陈旧游戏进程清场(2026-09-03 LAN 连接超时根因):残留 runClient 实例 =
+# 旧 LAN 服占着过期端口 + B 连上去超时("无法连接至服务器 连接超时"),兼多开抢资源。
+# 只杀本项目 runClient(含 Observer);排除并行任务实例(wt-interop/run-interop/
+# Interop 用户名)——纪律:互不相干,drive.ps1 亦已排除其窗口。
+# 安全阀:只杀启动超过 10 分钟的(用户手工刚启动的实例不受影响,此前 17:54 全杀
+# 曾可能误伤用户手工测试,教训入坑位册)。
+$staleCutoff = (Get-Date).AddMinutes(-10)
+$stale = Get-CimInstance Win32_Process -Filter "name='java.exe' or name='javaw.exe'" | Where-Object {
+  $_.CommandLine -match 'runClient' -and $_.CommandLine -notmatch 'wt-interop|run-interop|Interop' -and $_.CreationDate -lt $staleCutoff
+}
+foreach ($s in $stale) {
+  Stop-Process -Id $s.ProcessId -Force -ErrorAction SilentlyContinue
+  Step ('STALE-KILL pid=' + $s.ProcessId)
+}
+if ($stale) { Start-Sleep -Seconds 5 }
+
 # 1. 玩家 A:复用 session.ps1(preflight/options/QuickPlay/READY 全套)
 Step 'PLAYER-A launching via session.ps1 ...'
 & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Tools 'session.ps1') -World $World

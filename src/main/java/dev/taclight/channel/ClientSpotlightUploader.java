@@ -81,7 +81,10 @@ public final class ClientSpotlightUploader {
         boolean fp = mc.options.getCameraType().isFirstPerson() && cam.getEntity() == mc.player;
         // F2 自体胶囊基准为玩家眼位；相机眼只表示本帧相机位置，不能当作 bob 信号。
         Vec3 playerEye = mc.player.getEyePosition(mc.getPartialTick());
-        if (ClientLightState.isOn()) {
+        // 自身灯总闸(2026-09-03 用户需求:枪灯测试单变量观察):SELF_LIGHT_ENABLED=false
+        // 时本客户端不上传自身两盏灯(手持+枪),远程灯照常收集上传。
+        boolean selfOn = ClientLightState.selfLightEnabled();
+        if (selfOn && ClientLightState.isOn()) {
             // 世界空间锚定:手持灯锚取玩家眼位，视线仍取实际观察相机(所见即所照)；
             // 这保证第一/第三人称与 Freecam 的灯源归属语义一致。vanilla view-bob 位于
             // projection，不写 Java Camera.position；不能把本锚点规则解释成 bob 根治。
@@ -90,7 +93,7 @@ public final class ClientSpotlightUploader {
             SpotlightData hand = toSpot(anchor.add(handheldOffset(lookDir)), lookDir, cfg, 0.9f);
             lights.add(selfCapped(hand, playerEye));
         }
-        if (ClientLightState.gunLightOn()) {
+        if (selfOn && ClientLightState.gunLightOn()) {
             dev.taclight.pose.MuzzlePoseMath.Pose muzzle = dev.taclight.client.MuzzlePoseCapture.consumeFresh();
             if (muzzle != null && fp) {
                 // 枪渲染空间 → 世界(2026-09-02 坑60):捕获矩阵是 GL 视图空间(-Z 前),
