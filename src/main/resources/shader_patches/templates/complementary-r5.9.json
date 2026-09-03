@@ -7,12 +7,17 @@
   "files": [
     {
       "file": "shaders/program/gbuffers_terrain.glsl",
-      "selector": "lmCoord  = GetLightMapCoordinates();",
+      "selector": "centerShadowBias, subsurfaceMode, smoothnessG, highlightMult, emission);",
       "selectorCount": 1,
       "ops": [
         {
           "op": "insertAfterLine",
-          "anchor": "lmCoord  = GetLightMapCoordinates();",
+          "anchor": "#version  130",
+          "content": "#extension GL_ARB_shader_storage_buffer_object : enable"
+        },
+        {
+          "op": "insertBeforeLine",
+          "anchor": "void DoLighting(",
           "content": "/* TACLIGHT_PATCH_BEGIN ComplementaryReimagined runtime (injected by TacLight interop) */\n<INLINE_CORE>\n/* TACLIGHT_PATCH_END ComplementaryReimagined runtime */"
         },
         {

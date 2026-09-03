@@ -1,6 +1,25 @@
 # TacLight Changelog
 
-## 09-04 · Complementary r5.9 前向注入(用户问 iterationT 自适应曝光影响,试注入 alter 包)
+## 09-04 · Complementary r5.9 前向注入命中+锥池可见(用户问 iterationT 自适应曝光影响)
+
+- **状态=正结果**:`interop injected family=complementary (+4543 chars)` ×2(两份片元
+  半体:terrain 271068 + translucent 285528 变体),零崩溃,灯开后草地+土墙见柔和锥池
+  (近亮远暗),灯关即消失。证据 `docs/evidence/2026-09-04-complementary-inject/`
+  (README+comp_v2_off/on+log-excerpt-v2+manifest.sha256;旧 comp_off/on 留作零注入 AB 对照)。
+- **判定数字**(grass_low,hotspot bbox 280,190,560,340):off mean 21.2/p90 33.9/ge200 68;
+  on mean 89.8(×4.2)/p90 182.8/ge128 68→14185;全图 meanDiff 30.63/changed 228224/409920。
+- **本轮根因=单规则双锚点跨半体注定 miss**:patchSodium 6 入参按顶点/片元分半到达
+  (顶点半体 175k/246k 有顶点锚无 DoLighting;片元半体 271k/285k 有定义+调用点无顶点锚),
+  旧模板双锚点绑一条规则=恒一锚缺席=all-or-nothing 全 miss。修=片元单规则
+  (extension 开 SSBO + DoLighting 定义前文件域内联 + 调用后加性锥光)。
+- **版本定案**:SSBO 用 `#extension GL_ARB_shader_storage_buffer_object`(宿主同式),
+  不抬升 130→430(430 杀宿主 texture2D/varying 兼容路径);旧"注释锚被剥离"结论有误
+  (落盘两半体皆含 //Program//),坑91 已修正。
+- 契约 `AllContracts: ALL PASS`;新坑 **93**(版本抬升杀兼容路径)入册;坑91 结论修正。
+- 待用户体感:Complementary 下锥池是否自然、有无 AE 回压感;下一步候选=冻结回主线或
+  继续 entities/hand 钩子(地形锥池已闭环,按需再挂,保持混入面最小)。
+
+## 09-04 · Complementary r5.9 前向注入首轮(负结果,已超驰:见上条正结果)
 
 - **状态=负结果**:零崩溃、零注入——`interop injected` 日志从缺,off/on 截图逐位一致
   (hotspot mean 21.9→32.7 系手持模型位移噪声,ge200 恒 68),SSBO handheld=true 有数但

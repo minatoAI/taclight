@@ -101,22 +101,37 @@ public class TemplateLibraryContract {
                 "packHash 含 gbuffers_terrain.glsl 的 16 位 sha256 前缀");
         check(t.files.size() == 1
                         && "shaders/program/gbuffers_terrain.glsl".equals(t.files.get(0).file),
-                "Complementary 模板只动 program/gbuffers_terrain.glsl(前向注入,deferred1 不动)");
-        TemplateLibrary.FileRule rule = t.files.get(0);
+                "Complementary 模板只动 program/gbuffers_terrain.glsl(前向注入,片元半体单规则;"
+                        + "运行时 patchSodium 6 入参按顶点/片元分半到达,顶点半体无调用点则跳过)");
+        TemplateLibrary.FileRule fRule = t.files.get(0);
+        // 片元半体:版本行后 extension 开 SSBO + DoLighting 定义前文件域内联 + 调用点后加性锥光。
+        // 2026-09-04 落盘取证:patchSodium 输入 #version 130 双空格 + DoLighting 定义在
+        // main 之前(2960 行)、调用点在 main 内(9601 行);SSBO 用 extension(宿主同式),
+        // 不抬升版本(430 会杀掉宿主 texture2D/varying 兼容路径)。core 放文件域词法前序。
+        check(fRule.selector != null
+                        && fRule.selector.contains("smoothnessG, highlightMult, emission);")
+                        && fRule.selectorCount != null && fRule.selectorCount == 1,
+                "片元规则 selector = DoLighting 调用尾行且唯一(地形变体全尾,block 等变体尾不同)");
+        check(fRule.ops.size() == 3
+                        && "insertAfterLine".equals(fRule.ops.get(0).op)
+                        && "insertBeforeLine".equals(fRule.ops.get(1).op)
+                        && "insertAfterLine".equals(fRule.ops.get(2).op),
+                "片元规则算子 = 版本行后 extension → DoLighting 定义前文件域内联 → 调用后加性锥光");
+        check(fRule.ops.get(0).anchor.equals("#version  130")
+                        && fRule.ops.get(0).content.contains("GL_ARB_shader_storage_buffer_object"),
+                "extension 算子锚 = 运行时实测形态(#version 双空格,宿主 SSBO 同式)");
+        check(fRule.ops.get(1).anchor.equals("void DoLighting("),
+                "片元内联锚 = void DoLighting( 定义行(运行时片元半体 2960 行实测)");
         // 2026-09-03 晚:内联核心从"DoLighting 函数体内"搬到"顶点 main 体内
         // GetLightMapCoordinates 行后"(实机三连 missing ';' at '{':函数体内声明 +
         // 宿主 #ifdef/#endif 包裹下的 AST 声明解析失败;顶点 main 体是持续编译的
         // 真分支,//Program// 锚在 patchSodium 输入侧是注释行,文本不存在=Iris
         // jcpp/合并阶段已剥离注释,selector 零命中=零注入无崩溃)。片元 DoLighting
         // FRAGMENT main 不动,调用点仍在其体内(逐片元执行)。
-        check(rule.selector != null && rule.selector.contains("GetLightMapCoordinates();")
-                        && rule.selectorCount != null && rule.selectorCount == 1,
-                "selector = 顶点 main 体 GetLightMapCoordinates 行且唯一");
-        check(rule.ops.size() == 2
-                        && "insertAfterLine".equals(rule.ops.get(0).op)
-                        && "insertAfterLine".equals(rule.ops.get(1).op),
-                "算子序列 = 顶点 main 体内联注入 → DoLighting 调用后加性锥光(无版本抬升,#version 130 保持)");
-        String callOp = rule.ops.get(1).content;
+        // 2026-09-04 落盘取证修正://Program// 在运行时输入侧真实存在(顶点半体
+        // 实测),旧判断("注释被剥离")有误;真正 root cause = 顶点/片元分半到达,
+        // 单规则双锚点跨半体注定 miss。现拆两条规则,core 放文件域(词法前序)。
+        String callOp = fRule.ops.get(2).content;
         check(callOp.contains("taclight_shoulder3(TACLIGHT_LIGHT_GAIN * taclight_surface_lighting(viewPos, color.rgb, normalize(normalM)")
                         && callOp.contains("0.55") && callOp.contains("0.15"),
                 "调用点 = DoLighting 后 color.rgb(已照亮)×GAIN×shoulder3(本家同参,无 2048 除法)");
