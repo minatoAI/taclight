@@ -1,3 +1,11 @@
+## 09-03 21:1x · 身体灯(手持)远程链判真伪:链路通,无 bug(用户批准开工)
+
+- **判定**(构建 8019aca,LAN 63057):A 端 `/taclight light on Dev` →
+  服务端 LIGHT-SYNC handheld=true;B 端 DIAG-REMOTE Dev flash=false→true,
+  SSBO count=1→2(L0 远程手持灯正常展开)。写侧→读侧→SSBO 三段全通,不修代码。
+- 历史疑似(04:1x 轮 4449 帧无 handheld 灯)未复现,关闭;判后已 light off 恢复。
+- 证据 docs/evidence/2026-09-03-handheld-remote-check/(README+manifest)。
+
 ## 09-03 21:0x · v3 收尾:用户体感通过 + 双向开关修复验证通过(构建 8019aca,LAN 63057)
 
 - **v3 体感通过**:Dev 屏外奔跑,B 视角无出入跳变;屏外灯照侧面(跟真枪不跟头)。
