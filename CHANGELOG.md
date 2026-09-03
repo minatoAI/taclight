@@ -1,3 +1,17 @@
+## 09-04 02:0x · 生产 jar 离线验收通过(新 jar 含 refmap,forge 实机 Done)
+
+- **验收**(C:/Users/20506/AppData/Local/Temp/prodtest,Forge47.1.3+online-mode=false,无 Mojang):Done(1.411s)!0 mixin 报错;[TacLight]loading/NET channel/CMDS 全绿,只缺 TaCZ/Oculus 降级提示正常。证明 jar 可用。
+- **根因**:jar 缺 refmap → 生产 SRG 环境找不到 defineSynchedData 崩;AP 路径已证伪(FG6 下 -AinMapFileName/-AreobfSrgFile 不生效,MappingProviderSrg 只读 SRG 前缀格式,不读 tsrg2)。修复=build.gradle generateRefmap(Task,build/createSrgToMcp/output.srg 转 TaCZ 格式)+taclight.mixins.json 增 refmap 键;源码保持 mojmap 写法。契约 AllContracts ALL PASS。
+- **注意**:本轮验的是 jar 加载可用性;双账号远端灯同步仍需双正版(run* dev 环境仍可用于同步验证)。新坑 86 入坑位册。
+
+## 09-04 00:3x · 生产 jar 双账号验收:产物就绪,待用户双正版账号执行(需用户拍板)
+
+- **产物**(刚构建,未提交):build/libs/taclight-0.10.0.jar(225KB,含 v3+坑85,混淆后 TpOffscreenRenderMixin 在列)+ build/distributions/taclight-shaders-0.10.0.zip(85KB,刚重打,源码无漂移)。契约 AllContracts ALL PASS+BUILD SUCCESSFUL。
+- **生产安全审计**:DevLanAuthHook 有属性门控(生产无 -D 属性=原版验证行为);tacz/oculus/embeddium 全 optional+acceptMissingOr,缺包可降级;红线:iterationT fork 在仓库外,勿随包分发。
+- **为什么必须双账号**:本机 dev 双端靠 disableLanAuth 绕过 Mojang 会话验证;生产集成服 online-mode=true 硬编码,离线/单账号第二端会被 Invalid session 踢,远程灯同步测不到。
+- **待用户执行**(约 20 分钟,两个正版账号):两台启动器装同版本 Forge47.1.3+TaCZ1.1.8+Oculus1.8.0+Embeddium0.3.31+本 jar+本 shader zip;A 开 LAN,B 加入;验收清单 docs/03-实机验收清单.md A-D+双向对看(本轮 v3/坑85/handheld 三项)。
+- **回答用户问**:不等于完工。最初目标(v0.10 自研包+M5 同步)已达成并超额(v3 屏外不剔除等);但开放项仍有 Complementary 模板、延迟补偿三档体感、interop 正式合并三项待拍板。
+
 ## 09-03 21:1x · 身体灯(手持)远程链判真伪:链路通,无 bug(用户批准开工)
 
 - **判定**(构建 8019aca,LAN 63057):A 端 `/taclight light on Dev` →

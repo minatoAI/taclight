@@ -89,8 +89,87 @@ dependencies {
     // playerAnimator(里程碑③,第三方库,libs/*.jar 不入库):TaCZ 第三人称动画消费方,
     // 本模组零代码引用,纯运行时伴生
     runtimeOnly fg.deobf("blank:player-animation-lib-forge:1.0.2-rc1+1.20")
-    // mixin 注解(运行时由 FML 提供,仅编译期引用)
+    // mixin refmap:生产服 SRG 环境靠 taclight.refmap.json 重映射;没有它 dev
+    // 能跑(开发映射),生产服必崩 No refMap loaded(实机抓获 2026-09-04)。
+    // 生成方式:不走 mixin 注解处理器(试过,AP 在 FG6 下认不出官方映射——
+    // inMap 试过 SRG/TSRG 两个方向+多种参数名,reobfSrgFile 能读文件但仍
+    // Unable to locate obfuscation mapping;详见坑86)—— 改由本构建脚本
+    // generateRefmap 任务直接从 build/createSrgToMcp/output.srg 提取精确行
+    // 生成,与源码 descriptor 逐字节对账,零猜测。
     compileOnly 'org.spongepowered:mixin:0.8.5'
+}
+
+// 坑86(2026-09-04,生产服 jar 验证):mixin 注解处理器在 FG6 下配不出 refmap。
+// 本任务替代 AP:从 FG 自带的 output.srg(SRG→MCP/official)提取本模组 4 个
+// 原版目标(其余 3 个是 TaCZ 类,remap=false 不查表),按 refmap v1 格式写出,
+// jar 任务依赖它,产物打进 jar 根。SRG 行证据见任务内注释。
+tasks.register('generateRefmap') {
+    group = 'taclight'
+    def srg = file('build/createSrgToMcp/output.srg')
+    def out = file("$buildDir/generated/refmap/taclight.refmap.json")
+    inputs.file srg
+    outputs.file out
+    doLast {
+        def lines = srg.readLines('UTF-8')
+        // 精确行(2026-09-04 实证,含 descriptor,防重载错配):
+        // Player/m_8097_ ()V defineSynchedData
+        // EntityRenderDispatcher/m_114397_ (L...Entity;L...Frustum;DDD)Z shouldRender
+        // LivingEntityRenderer/m_7392_ (L...LivingEntity;FFL...PoseStack;L...MultiBufferSource;I)V render
+        // LivingEntity/f_20904_/f_20905_/f_20906_ lerpX/Y/Z
+        def findMd = { String owner, String srgName, String desc ->
+            // SRG 行形如: MD: <owner>/<srg> <desc> <owner>/<mojmap> <desc>
+            // 第 2 段的尾部即 searge 真名(与传入 srgName 一致,此处做存在性校验)。
+            def prefix = 'MD: ' + owner + '/' + srgName + ' ' + desc + ' ' + owner + '/'
+            def hit = lines.find { it.startsWith(prefix) }
+            if (hit == null) throw new GradleException("[TacLight] SRG 缺目标: ${owner}/${srgName} ${desc}")
+            return srgName
+        }
+        def findFd = { String owner, String srgName ->
+            // FD 行形如: FD: <owner>/<srg> <owner>/<mojmap> —— 同理返回 searge 名。
+            def prefix = 'FD: ' + owner + '/' + srgName + ' ' + owner + '/'
+            def hit = lines.find { it.startsWith(prefix) }
+            if (hit == null) throw new GradleException("[TacLight] SRG 缺字段: ${owner}/${srgName}")
+            return srgName
+        }
+        def playerOwner = 'net/minecraft/world/entity/player/Player'
+        def dispOwner = 'net/minecraft/client/renderer/entity/EntityRenderDispatcher'
+        def livingRdrOwner = 'net/minecraft/client/renderer/entity/LivingEntityRenderer'
+        def livingOwner = 'net/minecraft/world/entity/LivingEntity'
+        def dispDesc = '(Lnet/minecraft/world/entity/Entity;Lnet/minecraft/client/renderer/culling/Frustum;DDD)Z'
+        def renderDesc = '(Lnet/minecraft/world/entity/LivingEntity;FFLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;I)V'
+        // 方法查表键 = owner + mojmap 名 + descriptor(与源码 @Inject 写法逐字节一致)
+        def mDefine = 'L' + playerOwner + ';defineSynchedData()V'
+        def mShould = 'L' + dispOwner + ';shouldRender' + dispDesc
+        def mRender = 'L' + livingRdrOwner + ';render' + renderDesc
+        def seargeDefine = findMd(playerOwner, 'm_8097_', '()V')
+        def seargeShould = findMd(dispOwner, 'm_114397_', dispDesc)
+        def seargeRender = findMd(livingRdrOwner, 'm_7392_', renderDesc)
+        def seargeLerpX = findFd(livingOwner, 'f_20904_')
+        def seargeLerpY = findFd(livingOwner, 'f_20905_')
+        def seargeLerpZ = findFd(livingOwner, 'f_20906_')
+        // refmap 格式终解(2026-09-04,TaCZ tacz.refmap.json 实物对照):
+        // mappings 直挂 mixin 类短路径(无 SEARGE 嵌套!之前套 SEARGE 层被生产服
+        // Invalid REFMAP JSON/查表 miss 两连拒,四轮实机试错)。类键 = mixin 类
+        // 全路径斜杠式(对应 mixins.json package+name);方法键 = 纯 mojmap 名
+        // (@Inject method 的写法);值 = Lowner;SRG名+desc(与 TaCZ 同形)。
+        // @Accessor 三字段同理(键=mojmap 名,值=Lowner;SRG 名)。此格式与
+        // RemappingReferenceMapper(顶层直查+回退 data 上下文)一致。
+        def clsPlayer = 'dev/taclight/mixin/PlayerSynchedDataMixin'
+        def clsDisp = 'dev/taclight/mixin/TpOffscreenRenderMixin'
+        def clsRender = 'dev/taclight/mixin/LivingEntityRenderEntityMixin'
+        def clsLerp = 'dev/taclight/mixin/LivingEntityLerpAccess'
+        def mappings = new groovy.json.JsonBuilder([
+            (clsPlayer): ['defineSynchedData': 'L' + playerOwner + ';' + seargeDefine + '()V'],
+            (clsDisp): ['shouldRender': 'L' + dispOwner + ';' + seargeShould + dispDesc],
+            (clsRender): [('render' + renderDesc): 'L' + livingRdrOwner + ';' + seargeRender + renderDesc],
+            (clsLerp): ['lerpX': 'L' + livingOwner + ';' + seargeLerpX,
+                        'lerpY': 'L' + livingOwner + ';' + seargeLerpY,
+                        'lerpZ': 'L' + livingOwner + ';' + seargeLerpZ]
+        ])
+        out.parentFile.mkdirs()
+        out.text = '{\n  "mappings": ' + mappings.toString().replace('{"SEARGE":', '{\n    "SEARGE":') + ',\n  "data": {}\n}\n'
+        logger.lifecycle("[TacLight] refmap written: ${out} (define=${seargeDefine} should=${seargeShould} render=${seargeRender} lerp=${seargeLerpX},${seargeLerpY},${seargeLerpZ})")
+    }
 }
 
 tasks.named('processResources', ProcessResources).configure {
@@ -106,6 +185,8 @@ tasks.named('processResources', ProcessResources).configure {
 }
 
 tasks.named('jar', Jar).configure {
+    dependsOn 'generateRefmap'
+    from("$buildDir/generated/refmap") { include 'taclight.refmap.json' }
     manifest {
         attributes([
                 'Specification-Title': mod_id,

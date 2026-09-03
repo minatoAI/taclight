@@ -17,6 +17,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * 实机坑(2026-08-30):getEntityData() 声明在父类 Entity,Player 字节码里
  * 没有——@Shadow 无法定位继承成员("was not located in the target class"),
  * mixin 应用即崩。改用 Entity 接口 cast 调用,不经 Shadow。
+ *
+ * 构建坑(2026-09-04,生产服实机抓获):AP 按 @Mixin(Player.class) 在 Player
+ * 映射段内查 defineSynchedData 能找到(m_8097_,Player 段 143769 行实证)——
+ * 之前报错是因为 annotationProcessor 缺 reobf 映射输入,不是继承问题。
+ * 源码保持 mojmap 名写法,生产服重映射靠 refmap 查表。
  */
 @Mixin(Player.class)
 public abstract class PlayerSynchedDataMixin {

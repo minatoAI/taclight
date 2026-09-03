@@ -18,6 +18,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * <p>严格门禁(性能与行为安全):本人/枪灯关/超距/总开关 off 一律放行原值,零行为变化。
  * 渲染结果本身由 GPU 视锥裁剪消化,屏外顶点不产生可见像素;实体的 nameTag 等
  * 附带渲染同样走正常路径,屏外被裁剪。
+ *
+ * 构建注意(2026-09-04):源码保持 mojmap 名写法(shouldRender),AP 在目标类
+ * 映射段内能找到(m_114397_,EntityRenderDispatcher 段 50781 行实证)——
+ * 之前报错是因为 annotationProcessor 缺 reobf 映射输入;生产服重映射靠 refmap。
  */
 @Mixin(EntityRenderDispatcher.class)
 public abstract class TpOffscreenRenderMixin {

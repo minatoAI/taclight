@@ -18,6 +18,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * 之前注入 render(Entity;...) 桥接方法,但实体渲染的实际路径是
  * "子类桥 → 子类 render(具体类型) → super.render → 基础方法",基础方法的
  * 桥被整体绕过,push/pop 从不执行(实机 BEAM-HEAD entity=none 实锤)。
+ *
+ * 构建注意(2026-09-04):descriptor 保持 mojmap 描述符写法
+ * (Lnet/minecraft/world/entity/LivingEntity;...),AP 在目标类映射段内能找到
+ * (m_7392_ LivingEntity 重载,段 51928 行实证)——之前报错是因为
+ * annotationProcessor 缺 reobf 映射输入;生产服重映射靠 refmap。
  */
 @Mixin(LivingEntityRenderer.class)
 public abstract class LivingEntityRenderEntityMixin {
