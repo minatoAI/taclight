@@ -1,6 +1,25 @@
 # TacLight Changelog
 
-## 09-03 晚 · iterationT 注入真实感手电调参(用户体感"太亮照不清晃眼"→ 柔和可读)
+## 09-04 · Complementary r5.9 前向注入(用户问 iterationT 自适应曝光影响,试注入 alter 包)
+
+- **状态=负结果**:零崩溃、零注入——`interop injected` 日志从缺,off/on 截图逐位一致
+  (hotspot mean 21.9→32.7 系手持模型位移噪声,ge200 恒 68),SSBO handheld=true 有数但
+  画面无锥池。证据 `docs/evidence/2026-09-04-complementary-inject/`(README+off/on+
+  log-excerpt+manifest.sha256)。
+- **AE 对照(源码级,待实机确认)**:iterationT composite 注入在 AE 采样环内
+  (MotionBlur GetExposureTiles→colortex2.a→Final GetExposureValue 全局 exposure),
+  AE 回压手电;Complementary=手动 Lottes tonemap(TM_EXPOSURE=1.00,无自适应),
+  前向注入成功后预期不吃反馈。
+- **根因链**:①钩子 miss(patchComposite 不覆 gbuffers,已加 patchSodium 6 钩子);
+  ②gbuffers AST `missing ';' at '{'` 三连(减重 21k→4.4k 行号仍随动,函数体内声明与
+  AST 冲突;前向精简去 SSO/GGX/绿锥/体素 DDA,恒可见桩,遮挡交宿主);
+  ③当前卡点=`//Program//` 注释锚在 patchSodium 输入侧不存在(jcpp 剥离注释)→静默零
+  注入,已改顶点 main 体真分支锚(GetLightMapCoordinates,selectorCount=1),契约绿但
+  **实机未验证**(实例已停)。
+- 契约 `AllContracts: ALL PASS`(TemplateLibrary 29+InlineCore 34 含前向 18);
+  新坑 **90**(gbuffers AST 体内声明)/**91**(注释锚剥离)/**92**(双实例存档锁僵尸)入册。
+- 待用户拍板:是否继续投实机验证(重启单实例+off/on,预期有锥池+injected 日志);
+  或先冻结 Complementary,回主线。
 
 - **根因**:调用点直接加物理 radiance,宿主 composite 尾部 `/=MAIN_OUTPUT_FACTOR
   (=2048)` + LinearToCurve——宿主内光照是"输出前量纲",高千倍饱和糊死。

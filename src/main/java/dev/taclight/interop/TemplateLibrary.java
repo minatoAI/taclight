@@ -42,6 +42,7 @@ public final class TemplateLibrary {
     }
 
     private static volatile String inlineCoreCache;
+    private static volatile String inlineCoreForwardCache;
 
     private TemplateLibrary() {}
 
@@ -64,7 +65,7 @@ public final class TemplateLibrary {
     public static Optional<Template> load(String resourcePath) {
         try (InputStream in = TemplateLibrary.class.getResourceAsStream(resourcePath)) {
             if (in == null) return Optional.empty();
-            return fromJson(new String(in.readAllBytes(), StandardCharsets.UTF_8));
+            return fromJson(new String(in.readAllBytes(), StandardCharsets.UTF_8), resourcePath);
         } catch (Exception e) {
             return Optional.empty();
         }
@@ -72,6 +73,10 @@ public final class TemplateLibrary {
 
     /** 解析并校验模板 JSON;INLINE_CORE 占位符在此替换。任何问题 = empty。 */
     public static Optional<Template> fromJson(String json) {
+        return fromJson(json, null);
+    }
+
+    private static Optional<Template> fromJson(String json, String resourcePath) {
         try {
             JsonObject root = JsonParser.parseString(json).getAsJsonObject();
             Template t = new Template();
@@ -115,7 +120,8 @@ public final class TemplateLibrary {
                     } else if (op.anchor == null || op.content == null) {
                         return Optional.empty();
                     }
-                    op.content = op.content.replace(INLINE_CORE_PLACEHOLDER, inlineCoreText());
+                    op.content = op.content.replace(INLINE_CORE_PLACEHOLDER,
+                            inlineFor(resourcePath));
                     rule.ops.add(op);
                 }
                 t.files.add(rule);
@@ -136,6 +142,15 @@ public final class TemplateLibrary {
      * 不受影响(其指令被 jcpp 正常解析);运行时注入在 jcpp 之后,故内联文本必须
      * 零指令形态。资源由 gradle copyInlineCore 从 pack/shaders/lib 拷入
      * (InlineCoreContract SHA 对账防漂移)。
+     * <p>gbuffers 前向注入(2026-09-03 Complementary 实机):patchSodium 收到的
+     * gbuffers 源同样走 transformInternal AST 解析,<b>函数定义体同样禁活指令 +
+     * 复杂控制流风险</b>(SSO 24 步循环+自体胶囊分支/DDA 位运算/ggx 高次幂在
+     * gbuffers_terrain AST 下 `missing ';' at '{'` 崩溃,同一内联在 composite
+     * 路径零报错)。故内联分两种形态,模板按注入目标选择:
+     * {@link #inlineCoreText()} = 完整版(composite/deferred/final 路径);
+     * {@link #inlineCoreTextForward()} = 前向精简版(gbuffers 路径):
+     * 坐标换算/衰减/软膝/肩部(恒等式 exp 版,无 tanh)/surface 主循环直连体素 DDA
+     * (SSO/GGX/绿锥不进前向:voxel 无效(-1)即按可见=1,GGX 高光不计)。
      */
     public static String inlineCoreText() {
         String r = inlineCoreCache;
@@ -156,7 +171,163 @@ public final class TemplateLibrary {
         return r;
     }
 
-    /** 遮挡钩子的运行时形态:宏不可用(jcpp 已过),改真函数;调用点同步改写。 */
+    /** 模板占位符替换统一走此函数:前向模板(gbuffers)用精简版,其余用完整版。 */
+    public static String inlineFor(String templatePath) {
+        if (templatePath != null && templatePath.contains("complementary")) {
+            return inlineCoreTextForward();
+        }
+        return inlineCoreText();
+    }
+
+    /** 前向精简版:从 core 真源抽取"坐标换算+衰减+软膝+肩部+DDA+surface"子集,
+     *  surface 体重写为直连 DDA(SSO/GGX/绿锥不进前向,voxel 无效即按可见)。
+     * 抽取是白名单行级过滤(函数签名锚),core 真源改动若致锚点缺失 = 抛异常 =
+     * 模板被拒零注入(InlineCoreContract 同步钉死锚点存在,fail-safe)。 */
+    public static String inlineCoreTextForward() {
+        String r = inlineCoreForwardCache;
+        if (r != null) return r;
+        String core = readResource("/shader_patches/inline/taclight_core.glsl");
+        if (core == null) {
+            throw new IllegalStateException("inline core resources missing — copyInlineCore 未执行?");
+        }
+        String coreNoInclude = core.lines()
+                .filter(l -> !l.trim().startsWith("#include"))
+                .collect(Collectors.joining("\n"));
+        String slim = slimForwardCore(directiveFree(coreNoInclude));
+        String prelude = "// TACLIGHT interop prelude-forward(gbuffers 前向精简版,SSO/GGX 不进前向)\n"
+                + "const float TACLIGHT_LIGHT_GAIN = 2.2;\n"
+                + "const float TACLIGHT_ATTEN_K = 5.0;\n"
+                + "const float TACLIGHT_KNEE_GAIN = 2.0;\n"
+                + "const float TACLIGHT_VOX_FUZZ = 0.35;\n";
+        r = "/* " + PatchExecutor.MARKER + " inline-core-forward (injected by TacLight interop) */\n"
+                + prelude + slim + "\n";
+        inlineCoreForwardCache = r;
+        return r;
+    }
+
+    /** 白名单抽取:SSBO 声明 + struct + 坐标五函数 + 衰减/软膝/肩部 + DDA +
+     * surface-forward(重写的直连 DDA 版)。丢弃 SSO/GGX/绿锥/debug 函数。 */
+    private static String slimForwardCore(String free) {
+        List<String> keep = new java.util.ArrayList<>();
+        String[] lines = free.split("\r?\n", -1);
+        int i = 0;
+        while (i < lines.length) {
+            String t = lines[i].trim();
+            if (t.startsWith("struct TacLightSpot")) {
+                int s = i; while (i < lines.length && !lines[i].contains("};")) i++; i++;
+                keep.add(String.join("\n",
+                        java.util.Arrays.copyOfRange(lines, s, Math.min(i, lines.length))));
+                continue;
+            }
+            if (t.startsWith("layout(std430, binding = 7)")) {
+                int s = i; while (i < lines.length && !lines[i].contains("};")) i++; i++;
+                keep.add(String.join("\n",
+                        java.util.Arrays.copyOfRange(lines, s, Math.min(i, lines.length))));
+                continue;
+            }
+            String fn = null;
+            for (String sig : new String[]{
+                    "vec3 taclight_world_to_scene(", "vec3 taclight_scene_to_view(",
+                    "vec2 taclight_view_to_uv(", "vec3 taclight_depth_to_view(",
+                    "vec3 taclight_view_to_world(", "float taclight_attenuation(",
+                    "float taclight_soft_knee(", "vec3 taclight_soft_knee3(",
+                    "vec3 taclight_shoulder3("}) {
+                if (t.contains(sig)) { fn = sig; break; }
+            }
+            if (fn != null) {
+                int s = i; int depth = 0; boolean started = false;
+                while (i < lines.length) {
+                    for (char c : lines[i].toCharArray()) {
+                        if (c == '{') { depth++; started = true; }
+                        else if (c == '}') depth--;
+                    }
+                    i++;
+                    if (started && depth == 0) break;
+                }
+                keep.add(String.join("\n",
+                        java.util.Arrays.copyOfRange(lines, s, Math.min(i, lines.length))));
+                continue;
+            }
+            // 体素 DDA 整函数跳过(ivec3/bvec3/位运算在 gbuffers_terrain AST 下
+            // `missing ';' at '{'` 三连崩溃 20:54/21:06/21:26;前向遮挡由宿主
+            // DoLighting 主管,此处恒可见。锚点上一行注释块 DDA 字样无害(纯注释)。
+            if (t.contains("float taclight_vox_transmit(")) {
+                int depth = 0; boolean started = false;
+                while (i < lines.length) {
+                    for (char c : lines[i].toCharArray()) {
+                        if (c == '{') { depth++; started = true; }
+                        else if (c == '}') depth--;
+                    }
+                    i++;
+                    if (started && depth == 0) break;
+                }
+                continue;
+            }
+            // surface 主循环:丢弃,改用下面的 forward 重写版
+            if (t.contains("vec3 taclight_surface_lighting(")) {
+                int depth = 0; boolean started = false;
+                while (i < lines.length) {
+                    for (char c : lines[i].toCharArray()) {
+                        if (c == '{') { depth++; started = true; }
+                        else if (c == '}') depth--;
+                    }
+                    i++;
+                    if (started && depth == 0) break;
+                }
+                continue;
+            }
+            i++;
+        }
+        String joined = String.join("\n", keep);
+        for (String need : new String[]{
+                "struct TacLightSpot", "layout(std430, binding = 7)",
+                "vec3 taclight_world_to_scene(", "vec3 taclight_scene_to_view(",
+                "vec3 taclight_view_to_world(", "float taclight_attenuation(",
+                "vec3 taclight_soft_knee3(", "vec3 taclight_shoulder3("}) {
+            if (!joined.contains(need)) {
+                throw new IllegalStateException("前向精简抽取缺锚点(core 真源改动?): " + need);
+            }
+        }
+        // 体素 DDA 不进前向(ivec3/bvec3/位运算 AST 高危):上方白名单循环已整体跳过,
+        // 此处只需追加单行恒可见桩(遮挡由宿主 DoLighting 主管)。
+        return joined + "\n" + FORWARD_VOX_STUB + FORWARD_SURFACE;
+    }
+
+    /** 前向 surface:漫反射单项 + 锥判定 + 距离衰减(无体素 DDA,恒可见)。
+     * 无 SSO(屏参/depthtex 在 gbuffers 地形 AST 下高危)/无 GGX(高次幂)/无体素
+     * DDA(ivec3/bvec3/位运算在 gbuffers_terrain AST 下 `missing ';' at '{'`
+     * 三连崩溃 20:54/21:06/21:26,SLIM 减重后行号仍随动;前向遮挡由宿主
+     * DoLighting 阴影主管,此处只做加性锥光)。 */
+    private static final String FORWARD_VOX_STUB =
+            "float taclight_vox_transmit(vec3 worldA, vec3 worldB) { return 1.0; }\n";
+    private static final String FORWARD_SURFACE =
+            "vec3 taclight_surface_lighting(vec3 fragView, vec3 albedo, vec3 n,\n"
+            + "                               float roughness, float metal, vec3 f0) {\n"
+            + "    vec3 radiance = vec3(0.0);\n"
+            + "    for (int i = 0; i < 8; i++) {\n"
+            + "        if (float(i) >= lightCount) { break; }\n"
+            + "        TacLightSpot L = lights[i];\n"
+            + "        vec3 lightScene = taclight_world_to_scene(L.posRadius.xyz);\n"
+            + "        vec3 lightView = taclight_scene_to_view(lightScene);\n"
+            + "        vec3 toFrag = fragView - lightView;\n"
+            + "        float dist = length(toFrag);\n"
+            + "        float radius = L.posRadius.w;\n"
+            + "        if (dist < radius && radius > 0.001) {\n"
+            + "            vec3 lf = toFrag / max(dist, 0.0001);\n"
+            + "            vec3 dirView = mat3(gbufferModelView) * (L.dirType.xyz / max(length(L.dirType.xyz), 0.0001));\n"
+            + "            float spot = smoothstep(L.cone.x, L.cone.y, dot(lf, dirView));\n"
+            + "            float ndl = dot(n, (vec3(0.0) - lf));\n"
+            + "            if (spot > 0.001 && ndl > 0.0) {\n"
+            + "                float vt = taclight_vox_transmit(L.posRadius.xyz, taclight_view_to_world(fragView));\n"
+            + "                float vis = vt >= 0.0 ? vt : 1.0;\n"
+            + "                vec3 lc = L.colorIntensity.rgb * L.colorIntensity.a;\n"
+            + "                float atten = taclight_attenuation(dist, radius);\n"
+            + "                radiance = radiance + (((albedo * (ndl * (1.0 - metal))) * lc) * (spot * atten * vis));\n"
+            + "            }\n"
+            + "        }\n"
+            + "    }\n"
+            + "    return radiance;\n"
+            + "}\n";
     private static final String OCCLUSION_FN =
             "float taclight_occlusion_at(vec2 uv) { return 1.0; }";
 

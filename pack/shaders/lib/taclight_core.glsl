@@ -181,7 +181,10 @@ vec3 taclight_soft_knee3(vec3 x) {
 #define TACLIGHT_SHOULDER_Q 0.15
 vec3 taclight_shoulder3(vec3 x, float t, float head) {
     vec3 e = max(x - vec3(t), vec3(0.0));
-    return min(x, vec3(t)) + head * tanh(e / head);
+    // GLSL 版本兼容(2026-09-03 interop:Complementary gbuffers 经 #version 130 编译,
+    // tanh 需 GLSL 1.30+;双曲正切恒等式 tanh(e)=1-2/(exp(2e)+1),exp 全版本可用):
+    vec3 te = vec3(1.0) - vec3(2.0) / (exp(vec3(2.0) * e / max(vec3(head), vec3(1e-4))) + vec3(1.0));
+    return min(x, vec3(t)) + head * te;
 }
 
 // ----------------------------------------------------------------------------

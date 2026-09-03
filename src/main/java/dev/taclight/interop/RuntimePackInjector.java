@@ -22,7 +22,8 @@ import net.minecraftforge.fml.loading.FMLPaths;
  */
 public final class RuntimePackInjector {
     private static final List<String> FINGERPRINT_FILES =
-            List.of("shaders/composite.fsh", "shaders/shaders.properties");
+            List.of("shaders/composite.fsh", "shaders/shaders.properties",
+                    "shaders/program/gbuffers_terrain.glsl");
 
     /** 缓存:packName → 该包的解析结果(仅非 null 模板)。 */
     private static final Map<String, TemplateLibrary.Template> RESOLVED = new ConcurrentHashMap<>();

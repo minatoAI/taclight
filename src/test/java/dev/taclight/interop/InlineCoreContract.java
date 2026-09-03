@@ -64,6 +64,8 @@ public class InlineCoreContract {
         check(inline.indexOf("taclight_occlusion_at(vec2") < inline.indexOf("taclight_occlusion_at(suv)"),
                 "定义顺序:遮挡函数先于调用点(GLSL 词法前序)");
 
+        forwardSlim();
+
         System.out.println("InlineCoreContract: ALL PASS (" + checks + " checks)");
     }
 
@@ -71,6 +73,75 @@ public class InlineCoreContract {
         try (var in = InlineCoreContract.class.getResourceAsStream(path)) {
             return in == null ? null : in.readAllBytes();
         }
+    }
+
+    /** 前向精简版契约(gbuffers_terrain AST 崩溃减负,2026-09-03 Complementary 实机):
+     * 坐标/衰减/肩部数学与完整版逐词一致(共享真源,不漂移)+ surface 前向重写 +
+     * SSO/GGX/绿锥/体素 DDA 不进前向(恒可见桩,遮挡由宿主 DoLighting 主管) +
+     * 零指令 + 花括号平衡 + 锚点缺失抛异常 fail-safe。 */
+    private static void forwardSlim() {
+        String fwd = TemplateLibrary.inlineCoreTextForward();
+        check(fwd.contains("inline-core-forward"),
+                "前向精简块含 marker(幂等锚)");
+        for (String anchor : new String[]{
+                "layout(std430, binding = 7)", "vec3 taclight_world_to_scene(",
+                "vec3 taclight_scene_to_view(", "vec3 taclight_view_to_world(",
+                "float taclight_attenuation(", "vec3 taclight_soft_knee3(",
+                "vec3 taclight_shoulder3(", "float taclight_vox_transmit(",
+                "vec3 taclight_surface_lighting(vec3 fragView"}) {
+            check(fwd.contains(anchor), "前向精简含锚点: " + anchor);
+        }
+        // 禁入项:gbuffers_terrain AST 高危面(SSO 主循环/自体豁免常数/GGX/绿锥宏/
+        // 体素 DDA 函数体——实机三连 missing ';' at '{' 20:54/21:06/21:26;
+        // 注:SSBO 声明块自带 voxData[] 注释(纯声明,零语句),故只查 DDA 索引语句
+        // voxData[..] 带下标者(声明 `voxData[]` 不带下标,不在黑名单内)
+        check(!fwd.contains("taclight_sample_shadow")
+                        && !fwd.contains("TACLIGHT_SSO_SELF_FREE")
+                        && !fwd.contains("taclight_ggx")
+                        && !fwd.contains("GREEN_CONE")
+                        && fwd.replace("voxData[]", "").contains("voxData") == false
+                        && !fwd.contains("ivec3(cell") && !fwd.contains("bvec3"),
+                "前向精简不含 SSO/GGX/绿锥/体素 DDA 体(与 composite 完整版区分开)");
+        check(fwd.lines().noneMatch(l -> l.trim().startsWith("#")),
+                "前向精简零预处理指令行(坑80 同理适用 gbuffers AST)");
+        check(fwd.lines().noneMatch(l -> l.trim().startsWith("uniform")),
+                "前向精简零 uniform 声明行(宿主 gbuffers 已声明 Iris 标准附件)");
+        // shoulder3 源码注释含 tanh 字样(恒等式说明),故只断言"无 tanh 调用":
+        // 含 tanh( 且行首非 // 注释 —— exp 恒等式实现,GLSL 1.30 路径安全
+        check(fwd.lines().noneMatch(l -> l.contains("tanh(") && !l.trim().startsWith("//")),
+                "前向精简无 tanh 调用行(注释提及除外,exp 恒等式实现)");
+        long open = fwd.chars().filter(c -> c == '{').count();
+        long close = fwd.chars().filter(c -> c == '}').count();
+        check(open == close && open > 0, "前向精简花括号平衡: " + open + "/" + close);
+        // 同一数学:精简版 attenuation/shoulder3 与完整版逐词一致
+        // (子串抽取同一 directiveFree 真源,防"两份数学漂移");体素 DDA 不进前向,
+        // 前向恒可见桩与完整版真 DDA 语义不同是设计使然(遮挡由宿主 DoLighting 主管)
+        String full = TemplateLibrary.inlineCoreText();
+        for (String fn : new String[]{"float taclight_attenuation(",
+                "vec3 taclight_shoulder3("}) {
+            check(extractFn(full, fn).equals(extractFn(fwd, fn)),
+                    "前向/完整版同函数逐词一致: " + fn);
+        }
+        check(extractFn(fwd, "float taclight_vox_transmit(").replaceAll("\\s+", "")
+                        .equals("floattaclight_vox_transmit(vec3worldA,vec3worldB){return1.0;}"),
+                "前向 vox_transmit = 单行恒可见桩(无 DDA,宿主阴影主管遮挡)");
+    }
+
+    /** 按签名抽取函数体(花括号配平),契约级白盒比对。 */
+    private static String extractFn(String src, String sig) {
+        int s = src.indexOf(sig);
+        if (s < 0) return "";
+        int b = src.indexOf('{', s);
+        int depth = 0;
+        for (int i = b; i < src.length(); i++) {
+            char c = src.charAt(i);
+            if (c == '{') depth++;
+            else if (c == '}') {
+                depth--;
+                if (depth == 0) return src.substring(s, i + 1);
+            }
+        }
+        return "";
     }
 
     private static byte[] sha256(byte[] data) throws Exception {

@@ -14,6 +14,7 @@ public class TemplateLibraryContract {
     public static void main(String[] args) {
         placeholderConstant();
         loadIterationTemplate();
+        loadComplementaryTemplate();
         noPlaceholderResidue();
         inlineCoreThroughTemplate();
         malformedRejected();
@@ -68,14 +69,59 @@ public class TemplateLibraryContract {
     }
 
     private static void noPlaceholderResidue() {
+        for (String name : new String[]{
+                "/shader_patches/templates/iterationT-3.2.0.json",
+                "/shader_patches/templates/complementary-r5.9.json"}) {
+            TemplateLibrary.Template t = TemplateLibrary.load(name).orElse(null);
+            if (t == null) { check(false, "模板加载失败: " + name); return; }
+            boolean residue = t.files.stream()
+                    .flatMap(f -> f.ops.stream())
+                    .anyMatch(op -> op.content != null
+                            && op.content.contains(TemplateLibrary.INLINE_CORE_PLACEHOLDER));
+            check(!residue, "INLINE_CORE 占位符替换后无残留(" + name + ")");
+        }
+    }
+
+    // 2026-09-03 Complementary r5.9(用户要求试注入+自适应曝光观察):
+    // 前向 gbuffers 注入——宿主在 gbuffers_terrain(DoLighting 将光照乘进 albedo)
+    // 完成全部光照(含自有 heldLighting),color.rgb 此时=已照亮反照率;
+    // 注入点在其后做加性锥光,走宿主下游 tonemap(DoCompTonemap,composite5,手动曝光
+    // TM_EXPOSURE 无自适应),曝光不吃手电反馈。SSBO binding=7 与宿主体素
+    // binding=0/3 无冲突。前向注入不走 composite 族=auto exposure(如 iterationT
+    // 的 colortex1 分块 AE)在 composite 之前采样不到注入光,无反馈压制。
+    private static void loadComplementaryTemplate() {
         TemplateLibrary.Template t = TemplateLibrary.load(
-                "/shader_patches/templates/iterationT-3.2.0.json").orElse(null);
-        if (t == null) { check(false, "模板加载失败"); return; }
-        boolean residue = t.files.stream()
-                .flatMap(f -> f.ops.stream())
-                .anyMatch(op -> op.content != null
-                        && op.content.contains(TemplateLibrary.INLINE_CORE_PLACEHOLDER));
-        check(!residue, "INLINE_CORE 占位符替换后无残留");
+                "/shader_patches/templates/complementary-r5.9.json").orElse(null);
+        check(t != null, "Complementary r5.9 模板可从 resources 加载");
+        if (t == null) return;
+        check("complementary".equals(t.familyId) && "ComplementaryReimagined".equals(t.packName),
+                "familyId/packName: " + t.familyId + " / " + t.packName);
+        check(t.packHash.containsKey("shaders/program/gbuffers_terrain.glsl")
+                        && t.packHash.get("shaders/program/gbuffers_terrain.glsl").matches("[0-9a-f]{16}"),
+                "packHash 含 gbuffers_terrain.glsl 的 16 位 sha256 前缀");
+        check(t.files.size() == 1
+                        && "shaders/program/gbuffers_terrain.glsl".equals(t.files.get(0).file),
+                "Complementary 模板只动 program/gbuffers_terrain.glsl(前向注入,deferred1 不动)");
+        TemplateLibrary.FileRule rule = t.files.get(0);
+        // 2026-09-03 晚:内联核心从"DoLighting 函数体内"搬到"顶点 main 体内
+        // GetLightMapCoordinates 行后"(实机三连 missing ';' at '{':函数体内声明 +
+        // 宿主 #ifdef/#endif 包裹下的 AST 声明解析失败;顶点 main 体是持续编译的
+        // 真分支,//Program// 锚在 patchSodium 输入侧是注释行,文本不存在=Iris
+        // jcpp/合并阶段已剥离注释,selector 零命中=零注入无崩溃)。片元 DoLighting
+        // FRAGMENT main 不动,调用点仍在其体内(逐片元执行)。
+        check(rule.selector != null && rule.selector.contains("GetLightMapCoordinates();")
+                        && rule.selectorCount != null && rule.selectorCount == 1,
+                "selector = 顶点 main 体 GetLightMapCoordinates 行且唯一");
+        check(rule.ops.size() == 2
+                        && "insertAfterLine".equals(rule.ops.get(0).op)
+                        && "insertAfterLine".equals(rule.ops.get(1).op),
+                "算子序列 = 顶点 main 体内联注入 → DoLighting 调用后加性锥光(无版本抬升,#version 130 保持)");
+        String callOp = rule.ops.get(1).content;
+        check(callOp.contains("taclight_shoulder3(TACLIGHT_LIGHT_GAIN * taclight_surface_lighting(viewPos, color.rgb, normalize(normalM)")
+                        && callOp.contains("0.55") && callOp.contains("0.15"),
+                "调用点 = DoLighting 后 color.rgb(已照亮)×GAIN×shoulder3(本家同参,无 2048 除法)");
+        check(!callOp.contains("/ 2048.0"),
+                "调用点无 /2048(Complementary 前向光照无 iterationT 式输出前除法)");
     }
 
     private static void inlineCoreThroughTemplate() {
