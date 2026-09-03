@@ -1,5 +1,22 @@
 # TacLight Changelog
 
+## 09-03 晚 · iterationT 注入真实感手电调参(用户体感"太亮照不清晃眼"→ 柔和可读)
+
+- **根因**:调用点直接加物理 radiance,宿主 composite 尾部 `/=MAIN_OUTPUT_FACTOR
+  (=2048)` + LinearToCurve——宿主内光照是"输出前量纲",高千倍饱和糊死。
+  修复=调用点 `(radiance×GAIN/2048)→shoulder3(T=0.55/Q=0.15,本家包同参)`。
+- **衰减压近场**:TACLIGHT_ATTEN_K 2.0→5.0(0.5r 处 50%→20%;端点/远场尾部不动,
+  只改中段肩部)。hotspot ge200:12473→334(−97%),饱和归零,草叶/砖墙/远景全可读。
+- **!lv 档位覆盖层**(LightLevelOverride+relay,10 项契约):CLIENT config 热改 toml
+  不回读——覆盖层供零重启体感扫参(lv d→intensity=6·2^-d,radius √自耦合);
+  实证 lv2/3/4 画面逐位一致(亮度由 shoulder 参数决定,SSBO 已在线性段外),
+  反推旧 radiance 在肩部之上 ≈2.6×。重启=覆盖清零。
+- 契约 `AllContracts: ALL PASS`;证据 `docs/evidence/2026-09-03-interop-true-flashlight/`。
+- 新坑:**坑88**(CLIENT config 游戏内热改 toml 不回读,重启才生效;亮度对照走 !lv
+  覆盖层)、**坑89**(`/` 行原版命令在 dev 客户端被本地预解析拒,scene 预设的
+  setWeatherParameters 才是可靠晴天路径)。
+- 待用户体感:最终柔和版是否自然(近亮远暗+远景可见);下一步候选=Complementary 族模板。
+
 ## 09-03 03:1x · 里程碑2(方案C 运行时注入引擎)实机全链闭环,验收 1-7 全 PASS
 
 - **引擎上线实机**:mixin 挂 Oculus(oculus-1.8.0)`TransformPatcher.patchComposite`

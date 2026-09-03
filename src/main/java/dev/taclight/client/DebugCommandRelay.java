@@ -128,6 +128,15 @@ public final class DebugCommandRelay {
             TacLightMod.LOGGER.info("[TacLight] RELAY neon(debug cone) -> {}", ClientLightState.debugMode());
             return;
         }
+        if (line.startsWith("!lv")) {
+            // 2026-09-03 真实感调参档位(零重启体感):lv 即时覆盖 TacLightConfig 读到的
+            // 亮度(ln 档 0-6 → intensity 6·2^-档),radius 按 √(I/6) 自耦合;重置=重启实例。
+            // 用法:!lv 2 / !lv 3.5 / !lv status。CLIENT config 热改 toml 不回读,故走覆盖层。
+            String arg = line.length() > 3 ? line.substring(3).trim() : "";
+            TacLightMod.LOGGER.info("[TacLight] RELAY lv -> {}",
+                    dev.taclight.channel.LightLevelOverride.configure(arg));
+            return;
+        }
         if (line.startsWith("!gun")) {
             ClientLightState.setGunLight(!ClientLightState.gunLightOn());
             TacLightMod.LOGGER.info("[TacLight] RELAY gunLight -> {}", ClientLightState.gunLightOn());

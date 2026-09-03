@@ -1,6 +1,7 @@
 package dev.taclight;
 
 import dev.taclight.channel.LookTraceContract;
+import dev.taclight.channel.LightLevelOverrideContract;
 import dev.taclight.channel.MotionCaptureContract;
 import dev.taclight.channel.FrameRecorderContract;
 import dev.taclight.channel.MultiLightCollectorContract;
@@ -46,6 +47,8 @@ public class AllContracts {
         InlineCoreContract.main(args);
         System.out.println("== UploaderSemanticContract ==");
         UploaderSemanticContract.main(args);
+        System.out.println("== LightLevelOverrideContract ==");
+        LightLevelOverrideContract.main(args);
         System.out.println("== MuzzlePoseMathContract ==");
         MuzzlePoseMathContract.main(args);
         System.out.println("== ScenePlanContract ==");

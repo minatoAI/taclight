@@ -5,7 +5,8 @@ import java.util.List;
 /**
  * 模板库契约(方案C 里程碑2,计划文档 §4/§6)。
  * 钉死:JSON 解析与字段校验 / INLINE_CORE 占位符替换(替换后无残留,且内联文本
- * 携带 SSBO 声明、surface 入口、GAIN 标定、marker)/ iterationT 冒烟模板真实存在且形态正确。
+ * 携带 SSBO 声明、surface 入口、GAIN 标定、marker)/ iterationT 冒烟模板真实存在且形态正确/
+ * 调用点亮度归一化(与本家包同链路)。
  */
 public class TemplateLibraryContract {
     private static int checks;
@@ -54,6 +55,16 @@ public class TemplateLibraryContract {
                         + "#version 行为双空格,锚必须按 DUMP 实测文本编写)");
         check(rule.ops.get(2).content.contains("taclight_surface_lighting(viewPos, gbuffer.albedo"),
                 "调用点算子 = 2.0 core 新签名(非路线 P 旧签名)");
+        // 2026-09-03 真实感调参(用户体感"光晕太亮照不清"):调用点必须与宿主物理量纲一致。
+        // 宿主 composite 尾部:finalComposite/=MAIN_OUTPUT_FACTOR(=2048,实测 Lib/Settings.glsl:484)
+        // 后再 LinearToCurve——宿主内光照量级是"输出前量纲",直接加物理 radiance 高千倍过曝。
+        // 调用点 = (radiance×GAIN/2048)进 shoulder3(T=0.55/Q=0.15,本家包同参数)。
+        String callOp = rule.ops.get(2).content;
+        check(callOp.contains("taclight_shoulder3(")
+                        && callOp.contains("TACLIGHT_LIGHT_GAIN")
+                        && callOp.contains("/ 2048.0")
+                        && callOp.contains("0.55") && callOp.contains("0.15"),
+                "调用点 = 按宿主 MAIN_OUTPUT_FACTOR(=2048)归一化的 GAIN×shoulder3");
     }
 
     private static void noPlaceholderResidue() {

@@ -1,0 +1,7 @@
+[TacLight] interop injected family=iterationT pack=iterationT 3.2.0 (+20922 chars)
+[TacLight] RELAY lv -> level=3.0 intensity=0.75
+[TacLight] RELAY lv -> level=2.0 intensity=1.5
+[TacLight] RELAY lv -> level=4.0 intensity=0.375
+[TacLight] RELAY lv -> off(默认 intensity=6.0)
+[TacLight] interop injected family=iterationT pack=iterationT 3.2.0 (+20922 chars)
+[TacLight] RELAY Iris.reload() ok

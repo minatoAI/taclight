@@ -130,8 +130,11 @@ vec3 taclight_view_to_world(vec3 viewPos) {
 // v0.9.0 M0 热修:绿锥预览即用本函数(替换旧 (1-d/r) 线性淡出——线性在
 // 半半径处只剩 50% 亮度,视觉半径"提前死亡",即实测"照明距离不足"主因)。
 // M1 表面照明直接复用本函数,不再另写。
+// 2026-09-03 真实感调参(用户体感"光晕太亮照不清"):K 2.0→5.0。
+// 数学:分母 1+K(d/r)²,K 只改变"中段肩部"(0.5r 处 50%→20% 亮度),
+// 端点 atten(0)=1/atten(r)=0 不动,远场尾部保持。移植到其他包按宿主量纲重标(同 GAIN)。
 // ----------------------------------------------------------------------------
-#define TACLIGHT_ATTEN_K 2.0   // 标定常数:越小尾越长;2.0 = 0.8r 处约 16% 亮度
+#define TACLIGHT_ATTEN_K 5.0   // 标定常数:越小尾越长;5.0 = 0.5r 处约 20% 亮度
 float taclight_attenuation(float dist, float radius) {
     float k = TACLIGHT_ATTEN_K / max(radius * radius, 1e-4);
     float tail = 1.0 / (1.0 + k * radius * radius);   // = 1/(1+K)

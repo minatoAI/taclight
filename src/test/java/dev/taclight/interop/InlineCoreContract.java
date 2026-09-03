@@ -53,8 +53,8 @@ public class InlineCoreContract {
         check(inline.contains("const float TACLIGHT_LIGHT_GAIN = 2.2;"),
                 "prelude 提供 GAIN 标定 const(core 无兜底,计划 §3)");
         check(inline.contains("const uint TACLIGHT_FLAG_HAS_DATA = 1u;")
-                        && inline.contains("const float TACLIGHT_ATTEN_K = 2.0;"),
-                "对象式宏 → const 常量(uint/float 类型推断)");
+                        && inline.contains("const float TACLIGHT_ATTEN_K = 5.0;"),
+                "对象式宏 → const 常量(uint/float 类型推断;ATTEN_K=5.0 真实感调参 2026-09-03)");
         check(inline.contains("vec3 taclight_surface_lighting"), "照明主入口定义在");
         long open = inline.chars().filter(c -> c == '{').count();
         long close = inline.chars().filter(c -> c == '}').count();

@@ -50,7 +50,9 @@ public final class ClientSpotlightUploader {
             return new LightParams(
                     dev.taclight.config.TacLightConfig.RADIUS.get().floatValue(),
                     (float) dev.taclight.config.TacLightConfig.RADIUS_MAX,
-                    dev.taclight.config.TacLightConfig.INTENSITY.get().floatValue(),
+                    // 2026-09-03 真实感调参:!lv 覆盖层(无覆盖 = 原值,零行为变化)
+                    LightLevelOverride.intensityFor(
+                            dev.taclight.config.TacLightConfig.INTENSITY.get().floatValue()),
                     dev.taclight.config.TacLightConfig.cosDeg(dev.taclight.config.TacLightConfig.CONE_OUTER_DEG.get()),
                     dev.taclight.config.TacLightConfig.cosDeg(dev.taclight.config.TacLightConfig.CONE_INNER_DEG.get()),
                     dev.taclight.config.TacLightConfig.BEAM_DENSITY.get().floatValue());
