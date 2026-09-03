@@ -1,3 +1,12 @@
+## 09-03 21:0x · v3 收尾:用户体感通过 + 双向开关修复验证通过(构建 8019aca,LAN 63057)
+
+- **v3 体感通过**:Dev 屏外奔跑,B 视角无出入跳变;屏外灯照侧面(跟真枪不跟头)。
+  程序化自检(410 帧全 fresh,方向步进 max 0.27°)+ 体感双闭环 → v3 主路径正式关闭。
+- **坑85 修复验证通过**:Dev 与 ObserverB 各自视角灯亮、开关有效。
+- **交叉诊断**(!diag 双端):A 端 SSBO count=1(Dev flash=false/gun=true);
+  B 端 SSBO count=1(Dev flash=false/gun=true)——跨端所见一致,灯态同步正常。
+- 证据包 docs/evidence/2026-09-03-v3-offscreen-nocull/(README 补体感结论+manifest 重建)。
+
 
 ## 09-03 19:5x · 小问题修复:枪灯手动开关"无效"(tick 探针+S2C 双覆盖)+ !selflight 显式设定(用户实机反馈)
 
