@@ -1,0 +1,13 @@
+[049月2026 10:18:57.178] [Server thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] LIGHT-SYNC InteropA2 handheld=true gun=false (login-restore)
+[049月2026 10:21:12.560] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] RELAY exec: /taclight scene wall
+[049月2026 10:21:12.567] [Server thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] SCENE wall fills=2 blocks=0 spawns=2 | midnight daylight=off mobspawning=off clear
+[049月2026 10:25:37.088] [Server thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] LIGHT-SYNC InteropA2 handheld=true gun=false (login-restore)
+[049月2026 10:35:33.713] [Render thread/INFO] [net.minecraft.client.server.IntegratedServer/]: Started serving on 25560
+[049月2026 10:38:53.843] [Server thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] CAM goto wall_back x=2000.00 y=121.50 z=-8.00 yaw=0.0 pitch=5.0 dim=minecraft:overworld
+[049月2026 10:39:21.699] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] RELAY exec: /taclight scene wall
+[049月2026 10:39:21.700] [Server thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] SCENE wall fills=2 blocks=0 spawns=2 | midnight daylight=off mobspawning=off clear
+[049月2026 10:39:49.705] [Server thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] LIGHT-SYNC InteropA2 handheld=false gun=false (cmd:off@target)
+[049月2026 10:40:24.199] [Server thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] LIGHT-SYNC ObserverB handheld=true gun=false (cmd:on@target)
+[049月2026 10:41:37.709] [Server thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] LIGHT-SYNC ObserverB handheld=false gun=false (cmd:off@target)
+[049月2026 10:46:25.197] [Server thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] LIGHT-SYNC ObserverB handheld=false gun=false (login-restore)
+[049月2026 10:49:09.006] [Server thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] CAM goto wall_back x=2000.00 y=121.50 z=-8.00 yaw=0.0 pitch=5.0 dim=minecraft:overworld

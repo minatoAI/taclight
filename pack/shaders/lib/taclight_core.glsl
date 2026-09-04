@@ -135,8 +135,11 @@ vec3 taclight_view_to_world(vec3 viewPos) {
 // 端点 atten(0)=1/atten(r)=0 不动,远场尾部保持。移植到其他包按宿主量纲重标(同 GAIN)。
 // ----------------------------------------------------------------------------
 #define TACLIGHT_ATTEN_K 5.0   // 标定常数:越小尾越长;5.0 = 0.5r 处约 20% 亮度
-float taclight_attenuation(float dist, float radius) {
-    float k = TACLIGHT_ATTEN_K / max(radius * radius, 1e-4);
+// 2026-09-04 逐灯 K(用户体感 !atten 经 SSBO cone.z 透传):kOverride>0 取逐灯值,
+// ≤0 回退编译期默认 —— 半径 r 仍走原通道,端点 atten(0)=1/atten(r)=0 语义不动。
+float taclight_attenuation(float dist, float radius, float kOverride) {
+    float kk = kOverride > 0.0 ? kOverride : TACLIGHT_ATTEN_K;
+    float k = kk / max(radius * radius, 1e-4);
     float tail = 1.0 / (1.0 + k * radius * radius);   // = 1/(1+K)
     float e = 1.0 / (1.0 + k * dist * dist) - tail;
     return max(e, 0.0) / (1.0 - tail);
@@ -381,7 +384,7 @@ float taclight_debug_green_cone(TacLightSpot L, vec3 fragView) {
     // 内锥(cosY)全亮,外锥(cosX)全灭:spot = smoothstep(cosOut, cosIn, cosAng)
     float spot = smoothstep(L.cone.x, L.cone.y, cosAng);
     // 软肩压缩:近场压暗、远场几乎不动(实机调优 2026-08-27,详见上方注释)
-    return taclight_soft_knee(spot * taclight_attenuation(dist, radius));
+    return taclight_soft_knee(spot * taclight_attenuation(dist, radius, L.cone.z));
 }
 
 // ----------------------------------------------------------------------------
@@ -432,7 +435,7 @@ vec3 taclight_surface_lighting(vec3 fragView, vec3 albedo, vec3 n,
         if (vis <= 0.003) continue;
 
         vec3 lc = L.colorIntensity.rgb * L.colorIntensity.a;
-        float atten = taclight_attenuation(dist, radius);
+        float atten = taclight_attenuation(dist, radius, L.cone.z);
         vec3 diffuse = albedo * (ndl * (1.0 - metal));
         vec3 spec = taclight_ggx(n, -normalize(fragView), l, roughness, f0) * (ndl * TACLIGHT_SPEC_DAMP);
         radiance += (diffuse + spec) * lc * (spot * atten * vis);

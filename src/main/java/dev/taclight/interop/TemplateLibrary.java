@@ -196,7 +196,7 @@ public final class TemplateLibrary {
         String slim = slimForwardCore(directiveFree(coreNoInclude));
         String prelude = "// TACLIGHT interop prelude-forward(gbuffers 前向精简版,SSO/GGX 不进前向)\n"
                 + "const float TACLIGHT_LIGHT_GAIN = 2.2;\n"
-                + "const float TACLIGHT_ATTEN_K = 2.0;\n"
+                + "const float TACLIGHT_ATTEN_K = 5.0;\n"
                 + "const float TACLIGHT_KNEE_GAIN = 2.0;\n"
                 + "const float TACLIGHT_VOX_FUZZ = 0.35;\n";
         r = "/* " + PatchExecutor.MARKER + " inline-core-forward (injected by TacLight interop) */\n"
@@ -299,7 +299,8 @@ public final class TemplateLibrary {
      * 完整版三连崩溃 `missing ';' at '{'` 20:54/21:06/21:26 的 AST 高危面;前向
      * 穿墙漏光 2026-09-04 用户实机:恒可见桩 return 1.0 致墙后也亮,宿主 DoLighting
      * 只管太阳阴影不管 SSBO 灯,故 DDA 必须回前向)。分类/衰减与完整版同源
-     * (实心一票否决/树叶 0.4/植被 0.75)。掠边软化带暂不搬(影缘比自研包硬一档)。 */
+     * (实心深穿一票否决/树叶 0.4/植被 0.75)。掠边软化带已搬(与主线 TACLIGHT_VOX_FUZZ 0.35
+ * 同源,穿透<0.35 按比例放行,≥0.35 仍 T=0;修 2026-09-04 墙面阴影破碎硬齿)。 */
     private static final String FORWARD_VOX_STUB =
             "float taclight_vox_fetch(vec3 cellCoords, vec3 dim) {\n"
             + "    if (cellCoords.x < 0.0 || cellCoords.y < 0.0 || cellCoords.z < 0.0) return -1.0;\n"
@@ -309,11 +310,10 @@ public final class TemplateLibrary {
             + "    int iz = int(floor(cellCoords.z));\n"
             + "    int idx = ix + iy * int(dim.x) + iz * int(dim.x) * int(dim.y);\n"
             + "    int word = idx / 16;\n"
-            + "    int bit = (idx - word * 16) * 2;\n"
-            + "    float w = float(voxData[word]);\n"
-            + "    float div = 1.0;\n"
-            + "    for (int b = 0; b < 16; b++) { if (b >= bit) break; div *= 4.0; }\n"
-            + "    float code = mod(floor(w / div), 4.0);\n"
+            + "    int slot = idx - word * 16;\n"
+            + "    uint w = voxData[word];\n"
+            + "    for (int b = 0; b < 16; b++) { if (b >= slot) break; w = w / 4u; }\n"
+            + "    float code = float(w % 4u);\n"
             + "    return code;\n"
             + "}\n"
             + "float taclight_vox_transmit(vec3 worldA, vec3 worldB) {\n"
@@ -347,7 +347,7 @@ public final class TemplateLibrary {
             + "    for (int guard = 0; guard < 384; guard++) {\n"
             + "        float tNext = min(tmx, min(tmy, tmz));\n"
             + "        float stepX = 0.0; float stepY = 0.0; float stepZ = 0.0;\n"
-            + "        float eps = max(0.000001, abs(tNext) * 0.00001);\n"
+            + "        float eps = max(0.000001, abs(tNext) * 0.000001);\n"
             + "        if (abs(tmx - tNext) <= eps) { stepX = sx; tmx += tdx; }\n"
             + "        if (abs(tmy - tNext) <= eps) { stepY = sy; tmy += tdy; }\n"
             + "        if (abs(tmz - tNext) <= eps) { stepZ = sz; tmz += tdz; }\n"
@@ -356,7 +356,15 @@ public final class TemplateLibrary {
             + "        if (cx >= dim.x || cy >= dim.y || cz >= dim.z) return T;\n"
             + "        if (cx == lx && cy == ly && cz == lz) return T;\n"
             + "        float code = taclight_vox_fetch(vec3(cx + 0.5, cy + 0.5, cz + 0.5), dim);\n"
-            + "        if (code >= 2.5) return 0.0;\n"
+            + "        if (code >= 2.5) {\n"
+            + "            float tExit = min(tmx, min(tmy, tmz));\n"
+            + "            float penLen = min(tExit, len) - tNext;\n"
+            + "            if (penLen < 0.0) penLen = 0.0;\n"
+            + "            float f = penLen / 0.35;\n"
+            + "            if (f > 1.0) f = 1.0;\n"
+            + "            if (f >= 1.0) return 0.0;\n"
+            + "            T *= 1.0 - f;\n"
+            + "        }\n"
             + "        else if (code >= 1.5) T *= 0.40;\n"
             + "        else if (code >= 0.5) T *= 0.75;\n"
             + "    }\n"
@@ -383,7 +391,8 @@ public final class TemplateLibrary {
             + "                float vt = taclight_vox_transmit(L.posRadius.xyz, taclight_view_to_world(fragView));\n"
             + "                float vis = vt >= 0.0 ? vt : 1.0;\n"
             + "                vec3 lc = L.colorIntensity.rgb * L.colorIntensity.a;\n"
-            + "                float atten = taclight_attenuation(dist, radius);\n"
+            + "                float attenK = L.cone.z > 0.0 ? L.cone.z : TACLIGHT_ATTEN_K;\n"
+            + "                float atten = taclight_attenuation(dist, radius, attenK);\n"
             + "                radiance = radiance + (((albedo * (ndl * (1.0 - metal))) * lc) * (spot * atten * vis));\n"
             + "            }\n"
             + "        }\n"

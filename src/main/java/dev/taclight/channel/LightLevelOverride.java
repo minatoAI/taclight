@@ -7,6 +7,9 @@ package dev.taclight.channel;
  * 在取值后经过本层(有覆盖 → intensity 按档位替换)。重启实例 = 覆盖清零 = 回 0 档。
  * <p>档位语义:lv 档 d(0~6) → intensity = 6·2^(-d)。d=0 即当前(6.0);
  * d=3 → 0.75。radius 经 buildSpotBeam 的 √(I/6) 自耦合,档位只改亮度,照距自动跟。
+ * <p>2026-09-04 新增 {@code !bright} 绝对亮度覆盖(见 LightTuneOverride):
+ * 两者同时激活时 {@code !bright} 优先(buildSpotBeam 内 bright 在 lv 之后取值,
+ * 绝对值覆盖档位值);体感扫参建议只用一路,另一路保持 off。
  */
 public final class LightLevelOverride {
     private static volatile float levelDb = 0.0f;

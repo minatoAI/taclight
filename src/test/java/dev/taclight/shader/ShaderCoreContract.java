@@ -65,7 +65,7 @@ public class ShaderCoreContract {
                 "vec2 taclight_view_to_uv(vec3 viewPos)",
                 "vec3 taclight_depth_to_view(vec2 uv, float depth)",
                 "vec3 taclight_view_to_world(vec3 viewPos)",
-                "float taclight_attenuation(float dist, float radius)",
+                "float taclight_attenuation(float dist, float radius, float kOverride)",
                 "float taclight_soft_knee(float x)",
                 "vec3 taclight_shoulder3(vec3 x, float t, float head)",
                 "vec3 taclight_ggx(vec3 n, vec3 v, vec3 l, float roughness, vec3 f0)",

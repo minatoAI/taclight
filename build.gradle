@@ -242,6 +242,21 @@ tasks.register('taclightMpSetup') {
             'enableVsync:false',
             'pauseOnLostFocus:false'
         ].join(System.lineSeparator()) + System.lineSeparator()
+        else {
+            // 坑101(09-04 B 失焦弹菜单):已存在文件也强制关失焦暂停——MC 缺键/
+            // 版本不对会回写默认 true(true=失焦即弹 GameMenu,联机端同样触发;
+            // session.ps1 对 run/ 同款强制,见其 OPTIONS 步)。
+            // 显式 UTF-8 无 BOM 读写(坑24:写 BOM 吃首行 version,整份作废)。
+            def ob = java.nio.file.Files.readAllBytes(opt.toPath())
+            def t = new String(ob, 'UTF-8')
+            if (t.contains('pauseOnLostFocus:true')) {
+                t = t.replace('pauseOnLostFocus:true', 'pauseOnLostFocus:false')
+            } else if (!t.contains('pauseOnLostFocus:')) {
+                if (!t.endsWith('\n')) t += System.lineSeparator()
+                t += 'pauseOnLostFocus:false' + System.lineSeparator()
+            }
+            java.nio.file.Files.write(opt.toPath(), t.getBytes('UTF-8'))
+        }
         // 坑位:Oculus 1.8.0 读 Forge 配置目录 config/oculus.properties(不是 run 根);
         // 旧版写 run-observer/oculus.properties 是死文件 → 全新环境观察者 B 静默无光影包。
         def cfgDir = file('run-observer/config')

@@ -1,5 +1,78 @@
 # TacLight Changelog
 
+## 09-04 · 手电三旋钮:亮度/距离/衰减手动调参(用户体感自助,已落码待提交)
+
+- **用户需求**:当前效果"不是很正常,不符合直觉";不要 AI 代调,要三个零重启命令亲手扫出合适效果。
+  有衰减系数(此前为 GLSL 编译期 `#define`,config 热改进不了着色器)——现经 SSBO cone.z 逐灯透传,零重启可调。
+- **新命令**(文件中继,纯内存覆盖,重启清零;无参=status,off=回默认):
+  `!bright 0.5..30`(绝对亮度,默认 6.0;与 `!lv` 档位互斥,后写者胜,建议只用一路);
+  `!dist 4..96`(绝对照距/格,默认 36,bypass √亮度耦合,钳制 ≤radiusMax);
+  `!atten 0.2..20`(衰减系数 K,默认 GLSL K=5.0;越小尾越长,0.5r 处约 44%..2% 亮度)。
+- **实现**:新 `LightTuneOverride`(三路覆盖)+`buildSpotBeam` 接入(bright 在 lv 后取值/绝对半径/cone.z 透传,
+  SSBO 96B 布局不动,保留槽此前恒 0)+GLSL `taclight_attenuation` 升三参(主包 composite/composite1/绿锥/surface
+  与前向 surface 全消费 `L.cone.z`,≤0 回退编译期默认)+`DebugCommandRelay` 三入口。TDD:`LightTuneContract` 22 项
+  (默认直通/越界拒绝不污染/SSBO cone.z 回环/收尾零残留)。
+- 契约:TemplateLibrary 37 / InlineCore 41 / ScenePlan 207,`AllContracts: ALL PASS`。
+- 本提交批量含坑99/100/101/102+证据包(forward-vox-uint/raw-albedo/shadow-fuzz/dual-leak)+SESSION 记录;
+  第三方 `.ref-packs` 与 tmp 中继脚本不进提交(红线/清理)。
+- 待用户:新构建重启双端后亲手扫参(`!bright/!dist/!atten`);下一步=合回主线(待执行)。
+
+## 09-04 · 前向体素取数精度修复：方形假阴影消除（已修待用户目验，未提交未 push）
+
+- **方形杂影定案=前向取数 float 精度丢失（坑102）**：用户体感报墙面/地面出现“不存在方块的
+  阴影”、杂乱方形阴影出现在不该有的位置。与坑100横贯硬带不同机制：旧
+  `taclight_vox_fetch` 用 `float(voxData[word])` 整字转 float 再除法剥槽——float 尾数仅 24 位，
+  字值超 2^24 即舍入（Node 实算：50331651→50331652、4294967295→4294967296、
+  50331649→50331648、16777217→16777216），空↔实心翻转=凭空多出/少掉整块方形阴影。
+  修法=uint 域内逐槽剥除（`w/4u` + `w%4u`，小值转 float 精确，全程整数域）；
+  slot=idx-word*16（与 Java VoxelField pack 同语义）。TDD：先加红断言
+  （/4u+%4u 必备、禁 float 整字除法路径）再实现。
+- **验证**：双端重拉（RESOLVED 进程缓存，!reload 换不上来），A/B 均注入 +7859；
+  B（gunless）wall_back 开关对照全图 meanDiff **29.58**/maxDiff 175/changed 26.3%；
+  热点 on mean **136.6**/p50 160.7/p90 182.4/**ge128=23255/ge200=0/ge250=0**——
+  锥池居中柔和、无死白；on 帧白砖墙面干净，无方形假阴影。
+  证据 `docs/evidence/2026-09-04-forward-vox-uint/`（README+off/on+log-excerpt+manifest，可复算）。
+- 契约：TemplateLibrary 37 / InlineCore **39**（+2 坑102 断言）/ ScenePlan 207，
+  `AllContracts: ALL PASS`。
+- 收尾状态：双端运行中（LAN 25560，B 灯开，包启用；收尾/交用户前按 §7 关灯+禁包）；
+  未提交未 push（等批准）；待用户目验（用户截图场景的方形杂影是否已消，本包为 wall_back 墙面验证）。
+
+## 09-04 · 调用点反照率污染修复+失焦弹菜单修复（已修待用户目验，未提交未 push）
+
+- **横贯硬边定案=调用点反照率污染（坑100）**：用户实机报灯锥区一条与灯无关的横向亮暗硬带
+  （Complementary 前向注入改动后出现）。机制=宿主 DoLighting 把太阳阴影/月光/火把乘进
+  color.rgb，调用点复用它作锥光 albedo = 宿主阴影二次放大。修法=DoLighting 调用前一行快照
+  `vec3 taclightRawAlbedo = color.rgb;`，调用点改用快照（entities/hand 保留 `* color.a`）；
+  注入 `+7859→+7903`（+44，快照行，日志实证）。
+- **验证**：B（gunless）wall_back 开关对照 meanDiff **21.73**/changed 22.5%/maxDiff 161；
+  on 帧锥池柔和居中、无横向硬切；热点 on mean **90.1**/p90 179.6/**ge250=0** 无死白。
+  证据 `docs/evidence/2026-09-04-raw-albedo/`（README+3帧+log-excerpt+manifest，可复算）。
+  TDD：先加红断言（调用点含快照名、禁 post-lighting color.rgb、禁 /2048.0）再实现。
+- **失焦弹菜单修复（坑101）**：B 失焦弹 GameMenu 而 A 不弹=run-observer/options.txt
+  pauseOnLostFocus:true（mp-setup 只管缺席新建不管已存在；MC 会回写默认 true）。
+  修法=当场改 false + build.gradle taclightMpSetup 加 else 分支幂等修理（UTF-8 无 BOM）；
+  实机 B 失焦 8 秒仍在游戏内（准星血条锥池俱在）。
+- 契约：TemplateLibrary 37 / InlineCore 37 / ScenePlan 207，`AllContracts: ALL PASS`。
+- 收尾状态：双端运行中（LAN 25560，B 灯开，包启用；收尾/交用户前按 §7 关灯+禁包）；
+  未提交未 push（等批准）；待用户目验（用户截图场景的横贯硬带是否已消，本包为 wall_back 墙面验证）。
+
+## 09-04 · 前向 DDA 掠边假阴影修复+back 关界面命令（已修待用户目验，未提交未 push）
+
+- **阴影破碎定案=前向 DDA 掠边假阴影（坑99）**：A 视角墙面左半块黑色锯齿咬痕+阶梯齿；
+  排除猪影/月影/灯位偏移后，机制=float 累积排序翻转（掠射末步进错邻格、墙体素即判 0）+ 零 FUZZ 硬归零，
+  前向 tie eps 1e-5 过松。修法=照搬主线配方（tie eps 1e-6 + 穿透软化带 0.35 字面量内联，前向零预处理指令红线），
+  墙后深穿遮挡基线不变（漏光 CLOSED 不受影响）。
+- **验证**：灯开修前→修后 meanDiff **1.62**/changed 3.0%；枪灯严格对照（handheld=false gun=true）
+  meanDiff **1.49**/changed **3.1%**/maxDiff 227 集中原咬痕区；post_on 黑齿消失只剩柔和左渐变；
+  热点 mean **84.4**/p90 169.2/**ge250=0** 无回归无死白。证据 `docs/evidence/2026-09-04-shadow-fuzz/`
+  （README+4帧+log-excerpt+manifest，可复算）。TDD：先加红断言（penLen+/0.35/T*=1.0-f/eps 1e-6）再实现。
+- **back 关界面命令**：`DebugCommandRelay` 新增 `!back`（=setScreen(null)，与“回到游戏”同入口），
+  补程序化缺口（坑96：此前菜单挡帧只能手点）；B 真实菜单事故中 RELAY back 日志确认自愈。
+- **教训入库**：坑97（按窗口标题杀进程误杀宿主→只看命令行，宿主只许优雅停）/ 坑98（中继一次一调用逐条验 log；
+  B 传送后必须 shot 目检机位；同机位重叠操作禁用）/ 小谜团记一笔（墙顶东沿 3 像素亮斑+猪排掉落物，场景卫生非渲染 bug，待拍板）。
+- 契约：TemplateLibrary 35 / InlineCore 37 / ScenePlan 207，`AllContracts: ALL PASS`。
+- 收尾状态：双端已由用户手动关闭（优雅退出，世界全存盘）；未提交未 push（等批准）；实例已关，目验需重开摆回约 8 分钟。
+
 ## 09-04 · 发射10活体感+实体不透明+漏光复核（三项全绿，待用户体感/拍板）
 
 - **发射10锥池（活A=InteropA3，新角色）**：A侧on→off meanDiff **15.07**/changed **41.5%**；

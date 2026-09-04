@@ -27,8 +27,13 @@ import java.nio.file.StandardCopyOption;
  *       旧项目 T0 判据④即以 Reloading Resource 计数验证)。</li>
  *   <li>{@code !diag} —— 与 N 键等价:一行结构化诊断入日志。</li>
  *   <li>{@code !bench} —— 与 B 键等价:3 秒帧率基准。</li>
- *   <li>{@code !light} / {@code !neon} / {@code !gun} —— 手电 / 霓虹调试锥 / 枪灯开关
- *       (L/K 键的程序化等价;场景照明状态的唯一可靠控制通道)。</li>
+ *   <li>{@code !back} —— 程序化关界面(2026-09-04:ESC 菜单挡帧以往只能手点关,
+ *       违反程序化纪律;本命令=setScreen(null),与菜单“回到游戏”同入口)。</li>
+  *   <li>{@code !light} / {@code !neon} / {@code !gun} —— 手电 / 霓虹调试锥 / 枪灯开关
+  *       (L/K 键的程序化等价;场景照明状态的唯一可靠控制通道)。</li>
+  *   <li>{@code !bright} / {@code !dist} / {@code !atten} —— 手电三旋钮(2026-09-04,
+  *       用户体感自助调参):绝对亮度 / 绝对照距 / 衰减系数 K。内存覆盖,重启清零;
+  *       无参=status,{@code off}=回默认(用法见各命令日志回显)。</li>
  *   <li>{@code !looktrace} / {@code !mcap} —— 消融探针 / 运动门控采集开关(09-01,
  *       布防后被观察角色朝向/位置变化自动连拍+逐帧信号,静止自停)。</li>
  *  </ul></p>
@@ -136,6 +141,14 @@ public final class DebugCommandRelay {
             ClientEvents.startBench();
             return;
         }
+        if (line.equals("!back") || line.startsWith("!back ")) {
+            // 程序化关界面:ESC/聊天/容器等任意 Screen 直接关(与手点“回到游戏”同入口
+            // setScreen(null);单人未发布存档的暂停态随 PauseScreen 关闭自动解除)。
+            // 踩坑补位:菜单挡帧以往只能手点(坑96)或杀进程重拉,本命令 2 秒自愈。
+            mc.setScreen(null);
+            TacLightMod.LOGGER.info("[TacLight] RELAY back -> screen closed");
+            return;
+        }
         // 灯光控制(L 键的程序化等价 —— 键注入不可靠,灯光状态走文件通道)
         if (line.startsWith("!light")) {
             ClientLightState.toggle();
@@ -157,6 +170,30 @@ public final class DebugCommandRelay {
             String arg = line.length() > 3 ? line.substring(3).trim() : "";
             TacLightMod.LOGGER.info("[TacLight] RELAY lv -> {}",
                     dev.taclight.channel.LightLevelOverride.configure(arg));
+            return;
+        }
+        if (line.startsWith("!bright")) {
+            // 2026-09-04 用户体感三旋钮①:绝对亮度(与 !lv 档位互斥,后写者胜;体感只用一路)。
+            // 用法:!bright 12 / !bright status / !bright off。范围 0.5..30(同 config 域)。
+            String arg = line.length() > 7 ? line.substring(7).trim() : "";
+            TacLightMod.LOGGER.info("[TacLight] RELAY bright -> {}",
+                    dev.taclight.channel.LightTuneOverride.configureBright(arg));
+            return;
+        }
+        if (line.startsWith("!dist")) {
+            // 2026-09-04 用户体感三旋钮②:绝对照距(格,bypass √亮度耦合,钳制 ≤96)。
+            // 用法:!dist 24 / !dist status / !dist off。范围 4..96(同 config 域)。
+            String arg = line.length() > 5 ? line.substring(5).trim() : "";
+            TacLightMod.LOGGER.info("[TacLight] RELAY dist -> {}",
+                    dev.taclight.channel.LightTuneOverride.configureDist(arg));
+            return;
+        }
+        if (line.startsWith("!atten")) {
+            // 2026-09-04 用户体感三旋钮③:衰减系数 K(越小尾越长;5.0=主包标定,0.5r 处约 20%)。
+            // 经 SSBO cone.z 逐灯透传(0=GLSL 回退编译期默认),零重启生效。范围 0.2..20。
+            String arg = line.length() > 6 ? line.substring(6).trim() : "";
+            TacLightMod.LOGGER.info("[TacLight] RELAY atten -> {}",
+                    dev.taclight.channel.LightTuneOverride.configureAtten(arg));
             return;
         }
         if (line.startsWith("!gun")) {

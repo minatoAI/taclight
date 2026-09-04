@@ -114,15 +114,19 @@ public class TemplateLibraryContract {
                         && fRule.selector.contains("smoothnessG, highlightMult, emission);")
                         && fRule.selectorCount != null && fRule.selectorCount == 1,
                 "片元规则 selector = DoLighting 调用尾行且唯一(地形变体全尾,block 等变体尾不同)");
-        check(fRule.ops.size() == 3
-                        && "insertAfterLine".equals(fRule.ops.get(0).op)
-                        && "insertBeforeLine".equals(fRule.ops.get(1).op)
-                        && "insertAfterLine".equals(fRule.ops.get(2).op),
-                "片元规则算子 = 版本行后 extension → DoLighting 定义前文件域内联 → 调用后加性锥光");
-        check(fRule.ops.get(0).anchor.equals("#version  130")
-                        && fRule.ops.get(0).content.contains("GL_ARB_shader_storage_buffer_object"),
+        check(fRule.ops.size() == 4
+                        && "insertBeforeLine".equals(fRule.ops.get(0).op)
+                        && "insertAfterLine".equals(fRule.ops.get(1).op)
+                        && "insertBeforeLine".equals(fRule.ops.get(2).op)
+                        && "insertAfterLine".equals(fRule.ops.get(3).op),
+                "片元规则算子 = 调用前 raw 快照 → 版本行后 extension → DoLighting 定义前文件域内联 → 调用后加性锥光");
+        check(fRule.ops.get(0).anchor.contains("DoLighting(color, shadowMult, playerPos, viewPos,")
+                        && fRule.ops.get(0).content.contains("taclightRawAlbedo"),
+                "快照算子锚 = DoLighting 调用首行(调用前一行声明 raw albedo)");
+        check(fRule.ops.get(1).anchor.equals("#version  130")
+                        && fRule.ops.get(1).content.contains("GL_ARB_shader_storage_buffer_object"),
                 "extension 算子锚 = 运行时实测形态(#version 双空格,宿主 SSBO 同式)");
-        check(fRule.ops.get(1).anchor.equals("void DoLighting("),
+        check(fRule.ops.get(2).anchor.equals("void DoLighting("),
                 "片元内联锚 = void DoLighting( 定义行(运行时片元半体 2960 行实测)");
         // 2026-09-03 晚:内联核心从"DoLighting 函数体内"搬到"顶点 main 体内
         // GetLightMapCoordinates 行后"(实机三连 missing ';' at '{':函数体内声明 +
@@ -133,22 +137,29 @@ public class TemplateLibraryContract {
         // 2026-09-04 落盘取证修正://Program// 在运行时输入侧真实存在(顶点半体
         // 实测),旧判断("注释被剥离")有误;真正 root cause = 顶点/片元分半到达,
         // 单规则双锚点跨半体注定 miss。现拆两条规则,core 放文件域(词法前序)。
-        String callOp = fRule.ops.get(2).content;
-        check(callOp.contains("taclight_shoulder3(TACLIGHT_LIGHT_GAIN * taclight_surface_lighting(viewPos, color.rgb, normalize(normalM)")
+        String callOp = fRule.ops.get(3).content;
+        // 2026-09-04 体感硬边修复:调用点 albedo 必须是 DoLighting 之前的 raw 反照率
+        // (taclightRawAlbedo 快照,DoLighting 调用前一行声明):DoLighting 已把宿主光照
+        // (太阳阴影/月光/火把/heldLight)乘进 color.rgb,锥光再以它为 albedo 叠加 =
+        // 宿主阴影被二次放大,形成与灯锥无关的硬切分界(体感:草地石板中央横贯亮暗带)。
+        // 旧断言(color.rgb)已作废,见坑100。
+        check(callOp.contains("taclight_surface_lighting(viewPos, taclightRawAlbedo, normalize(normalM)")
                         && callOp.contains("0.55") && callOp.contains("0.15"),
-                "调用点 = DoLighting 后 color.rgb(已照亮)×GAIN×shoulder3(本家同参,无 2048 除法)");
+                "调用点 = DoLighting 前 raw albedo×GAIN×shoulder3(本家同参,无 2048 除法)");
+        check(!callOp.contains("taclight_surface_lighting(viewPos, color.rgb"),
+                "调用点禁用 DoLighting 后 color.rgb 作 albedo(宿主光照二次放大=硬边,坑100)");
         check(!callOp.contains("/ 2048.0"),
                 "调用点无 /2048(Complementary 前向光照无 iterationT 式输出前除法)");
         // 2026-09-04 实体半透明修复:entities/hand 调用点须乘 color.a(alpha 门)——
         // 地形 alpha 恒 1 行为不变;半透处锥光跟压,不再有透层感。影子由宿主 DoLighting 给出。
         for (int fi = 1; fi <= 2; fi++) {
             TemplateLibrary.FileRule er = t.files.get(fi);
-            check(er.selectorCount != null && er.selectorCount == 1 && er.ops.size() == 3,
-                    "实体/手部规则形态 = selector 唯一 + 3 算子(" + er.file + ")");
-            String ecall = er.ops.get(2).content;
-            check(ecall.contains("taclight_surface_lighting(viewPos, color.rgb, normalize(normalM)")
+            check(er.selectorCount != null && er.selectorCount == 1 && er.ops.size() == 4,
+                    "实体/手部规则形态 = selector 唯一 + 4 算子(raw 快照+extension+内联+调用)(" + er.file + ")");
+            String ecall = er.ops.get(3).content;
+            check(ecall.contains("taclight_surface_lighting(viewPos, taclightRawAlbedo, normalize(normalM)")
                             && ecall.contains("* color.a"),
-                    "实体/手部调用点乘 color.a: " + er.file);
+                    "实体/手部调用点 raw albedo×alpha 门: " + er.file);
         }
     }
 

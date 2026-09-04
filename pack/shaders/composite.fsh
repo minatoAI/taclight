@@ -185,7 +185,7 @@ void main() {
                         if (vis0 <= 0.003) {
                             gate = vec3(0.0, 1.0, 1.0);               // 青 = SSO 门
                         } else {
-                            float atten0 = taclight_attenuation(dist0, radius0);
+                            float atten0 = taclight_attenuation(dist0, radius0, L.cone.z);
                             gate = vec3(spot0, atten0, ndl0 * vis0);  // 全过 = 幅值编码
                         }
                     }

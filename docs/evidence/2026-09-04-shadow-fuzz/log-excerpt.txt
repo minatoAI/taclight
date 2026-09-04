@@ -1,0 +1,126 @@
+# shadow-fuzz log-excerpt (2026-09-04, ComplementaryReimagined 前向注入 FUZZ 版)
+# pre=修复前旧代码(+7576/+7586), post=FUZZ 版(+7869/+7859)
+
+===== PRE (run-interop/logs/2026-09-04-1.log.gz: 旧代码启动+摆拍+pre 双帧) =====
+[049月2026 11:53:42.390] [Render thread/INFO] [dev.taclight.channel.LightBuffer/]: [TacLight] SSBO created (id=17, bytes=525104 incl voxel tail)
+[049月2026 11:53:42.779] [Server thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] LIGHT-SYNC InteropA3 handheld=false gun=true (login-restore)
+[049月2026 11:53:45.354] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7576 chars)
+[049月2026 11:53:46.172] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7576 chars)
+[049月2026 11:53:47.247] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7586 chars)
+[049月2026 11:53:47.429] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7586 chars)
+[049月2026 11:53:48.161] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7586 chars)
+[049月2026 11:53:48.835] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7586 chars)
+[049月2026 11:53:49.510] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7586 chars)
+[049月2026 11:53:50.164] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7586 chars)
+[049月2026 11:53:50.816] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7586 chars)
+[049月2026 11:53:51.480] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7586 chars)
+[049月2026 11:53:52.284] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7586 chars)
+[049月2026 11:53:52.883] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7586 chars)
+[049月2026 11:53:53.469] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7586 chars)
+[049月2026 11:53:54.059] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7586 chars)
+[049月2026 11:53:54.628] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7586 chars)
+[049月2026 11:53:55.197] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7586 chars)
+[049月2026 11:53:55.780] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7586 chars)
+[049月2026 11:53:56.371] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7586 chars)
+[049月2026 11:53:56.970] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7586 chars)
+[049月2026 11:53:57.697] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7586 chars)
+[049月2026 11:53:58.719] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7586 chars)
+[049月2026 11:53:59.467] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7586 chars)
+[049月2026 11:54:00.220] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7586 chars)
+[049月2026 11:54:00.398] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7586 chars)
+[049月2026 11:54:00.576] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7586 chars)
+[049月2026 11:54:00.750] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7586 chars)
+[049月2026 11:54:00.923] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7586 chars)
+[049月2026 11:54:01.098] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7586 chars)
+[049月2026 11:54:02.587] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] LIGHT-SYNC-ACK handheld=false gun=true
+[049月2026 11:54:02.702] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7576 chars)
+[049月2026 11:54:02.727] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7576 chars)
+[049月2026 11:54:04.872] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] LIGHT-SYNC-ACK handheld=false gun=true
+[049月2026 11:54:15.804] [Server thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] SCENE wall fills=2 blocks=0 spawns=2 | midnight daylight=off mobspawning=off clear
+[049月2026 11:54:17.297] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] [TacLight] kit given: flashlight + HK416D(预装 gun_light)
+[049月2026 11:54:19.291] [Server thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] CAM goto wall_front x=2000.00 y=121.50 z=8.00 yaw=180.0 pitch=5.0 dim=minecraft:overworld
+[049月2026 11:54:19.301] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] [TacLight] cam -> 'wall_front'
+[049月2026 11:54:20.816] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] RELAY lan -> true (port=25560)
+[049月2026 11:54:22.299] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] LIGHT-SYNC-ACK handheld=true gun=true
+[049月2026 11:54:22.299] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] [TacLight] light true -> InteropA3
+[049月2026 11:54:24.292] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] RELAY back -> screen closed
+[049月2026 11:55:01.010] [Server thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] LIGHT-SYNC ObserverB handheld=false gun=false (login-restore)
+[049月2026 11:55:36.219] [Server thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] SCENE wall fills=2 blocks=0 spawns=2 | midnight daylight=off mobspawning=off clear
+[049月2026 11:55:37.707] [Server thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] CAM goto wall_back x=2000.00 y=121.50 z=-8.00 yaw=0.0 pitch=5.0 dim=minecraft:overworld
+
+===== POST (run-interop/logs/latest.log: FUZZ 版注入+摆拍+post 双帧) =====
+[049月2026 12:09:20.879] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7859 chars)
+[049月2026 12:09:21.732] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7859 chars)
+[049月2026 12:09:22.813] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+[049月2026 12:09:22.996] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+[049月2026 12:09:23.728] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+[049月2026 12:09:24.414] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+[049月2026 12:09:25.111] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+[049月2026 12:09:25.802] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+[049月2026 12:09:26.476] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+[049月2026 12:09:27.150] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+[049月2026 12:09:27.958] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+[049月2026 12:09:28.541] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+[049月2026 12:09:29.117] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+[049月2026 12:09:29.731] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+[049月2026 12:09:30.321] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+[049月2026 12:09:30.914] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+[049月2026 12:09:31.550] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+[049月2026 12:09:32.146] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+[049月2026 12:09:32.728] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+[049月2026 12:09:33.517] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+[049月2026 12:09:34.559] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+[049月2026 12:09:35.363] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+[049月2026 12:09:36.129] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+[049月2026 12:09:36.317] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+[049月2026 12:09:36.499] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+[049月2026 12:09:36.686] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+[049月2026 12:09:36.862] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+[049月2026 12:09:37.038] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+[049月2026 12:09:38.574] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] LIGHT-SYNC-ACK handheld=false gun=true
+[049月2026 12:09:38.688] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7859 chars)
+[049月2026 12:09:38.713] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7859 chars)
+[049月2026 12:09:40.776] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] RELAY exec: /taclight light on InteropA3
+[049月2026 12:09:40.933] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] LIGHT-SYNC-ACK handheld=false gun=true
+[049月2026 12:09:40.933] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] LIGHT-SYNC-ACK handheld=true gun=true
+[049月2026 12:10:30.310] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] RELAY exec: /taclight scene wall
+[049月2026 12:10:30.317] [Server thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] SCENE wall fills=2 blocks=0 spawns=2 | midnight daylight=off mobspawning=off clear
+[049月2026 12:10:54.315] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] RELAY exec: /taclight kit
+[049月2026 12:11:16.308] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] RELAY exec: /taclight cam goto wall_front
+[049月2026 12:11:16.311] [Server thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] CAM goto wall_front x=2000.00 y=121.50 z=8.00 yaw=180.0 pitch=5.0 dim=minecraft:overworld
+[049月2026 12:11:40.807] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] RELAY exec: !lan
+
+===== OBSERVER back (run-observer/logs/latest.log) =====
+[049月2026 12:17:49.200] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] RELAY back -> screen closed
+
+===== PRE shots (2026-09-04-1.log.gz) =====
+[049月2026 11:55:53.293] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] RELAY exec: !shot
+[049月2026 11:55:53.365] [IO-Worker-17/INFO] [dev.taclight.TacLightMod/]: [TacLight] RELAY shot: 已将截图保存为2026-09-04_11.55.53.png
+[049月2026 11:56:27.291] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] RELAY exec: /taclight light off InteropA3
+[049月2026 11:56:27.291] [Server thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] LIGHT-SYNC InteropA3 handheld=false gun=true (cmd:off@target)
+[049月2026 11:56:27.307] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] LIGHT-SYNC-ACK handheld=false gun=true
+[049月2026 11:56:27.307] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] [TacLight] light false -> InteropA3
+[049月2026 11:56:43.785] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] RELAY exec: !shot
+[049月2026 11:56:43.844] [IO-Worker-17/INFO] [dev.taclight.TacLightMod/]: [TacLight] RELAY shot: 已将截图保存为2026-09-04_11.56.43.png
+
+===== POST shots+摆拍 (latest.log 12:10-12:16) =====
+[049月2026 12:10:30.310] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] RELAY exec: /taclight scene wall
+[049月2026 12:10:30.317] [Server thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] SCENE wall fills=2 blocks=0 spawns=2 | midnight daylight=off mobspawning=off clear
+[049月2026 12:10:54.315] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] RELAY exec: /taclight kit
+[049月2026 12:11:16.308] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] RELAY exec: /taclight cam goto wall_front
+[049月2026 12:11:16.311] [Server thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] CAM goto wall_front x=2000.00 y=121.50 z=8.00 yaw=180.0 pitch=5.0 dim=minecraft:overworld
+[049月2026 12:11:40.807] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] RELAY exec: !lan
+[049月2026 12:11:40.840] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] RELAY lan -> true (port=25560)
+[049月2026 12:13:10.522] [Server thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] LIGHT-SYNC ObserverB handheld=false gun=false (login-restore)
+[049月2026 12:13:45.208] [Server thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] SCENE wall fills=2 blocks=0 spawns=2 | midnight daylight=off mobspawning=off clear
+[049月2026 12:14:16.703] [Server thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] CAM goto wall_back x=2000.00 y=121.50 z=-8.00 yaw=0.0 pitch=5.0 dim=minecraft:overworld
+[049月2026 12:14:40.819] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] RELAY exec: !shot
+[049月2026 12:14:40.892] [IO-Worker-23/INFO] [dev.taclight.TacLightMod/]: [TacLight] RELAY shot: 已将截图保存为2026-09-04_12.14.40.png
+[049月2026 12:15:56.313] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] RELAY exec: /taclight light off InteropA3
+[049月2026 12:15:56.313] [Server thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] LIGHT-SYNC InteropA3 handheld=false gun=true (cmd:off@target)
+[049月2026 12:15:56.329] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] LIGHT-SYNC-ACK handheld=false gun=true
+[049月2026 12:16:09.307] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] RELAY exec: !shot
+[049月2026 12:16:09.371] [IO-Worker-23/INFO] [dev.taclight.TacLightMod/]: [TacLight] RELAY shot: 已将截图保存为2026-09-04_12.16.09.png
+[049月2026 12:16:23.308] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] RELAY exec: /taclight light on InteropA3
+[049月2026 12:16:23.310] [Server thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] LIGHT-SYNC InteropA3 handheld=true gun=true (cmd:on@target)
+[049月2026 12:16:23.324] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] LIGHT-SYNC-ACK handheld=true gun=true

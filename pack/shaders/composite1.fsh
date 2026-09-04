@@ -76,7 +76,7 @@ void main() {
                 // 体素采样不早于 0.75m(≈灯锚到枪口/手电前沿的尺度),
                 // 与 taclight_soft_knee 的近场压缩互补。
                 vl += L.colorIntensity.rgb * L.colorIntensity.a
-                      * (spot * taclight_attenuation(max(d, 0.75), radius) * ph) * L.vlParams.y;
+                      * (spot * taclight_attenuation(max(d, 0.75), radius, L.cone.z) * ph) * L.vlParams.y;
             }
         }
         vl *= TACLIGHT_BEAM_GAIN / float(TACLIGHT_VL_STEPS);

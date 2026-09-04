@@ -83,8 +83,8 @@ public class InlineCoreContract {
         String fwd = TemplateLibrary.inlineCoreTextForward();
         check(fwd.contains("inline-core-forward"),
                 "前向精简块含 marker(幂等锚)");
-        check(fwd.contains("const float TACLIGHT_ATTEN_K = 2.0;"),
-                "前向精简 prelude K=2.0(2026-09-04 用户体感:远射,中段抬起不涨峰值;完整版保持 5.0)");
+        check(fwd.contains("const float TACLIGHT_ATTEN_K = 5.0;"),
+                "前向精简 prelude K=5.0(2026-09-04 与主包收敛;!atten 逐灯经 cone.z,0=回退默认)");
         for (String anchor : new String[]{
                 "layout(std430, binding = 7)", "vec3 taclight_world_to_scene(",
                 "vec3 taclight_scene_to_view(", "vec3 taclight_view_to_world(",
@@ -93,6 +93,11 @@ public class InlineCoreContract {
                 "vec3 taclight_surface_lighting(vec3 fragView"}) {
             check(fwd.contains(anchor), "前向精简含锚点: " + anchor);
         }
+        // 2026-09-04 三旋钮:衰减三参(逐灯 K,cone.z≤0 回退默认)+前向 surface 同样消费 cone.z。
+        check(fwd.contains("float taclight_attenuation(float dist, float radius, float kOverride)"),
+                "前向 attenuation 三参签名(与主包同源,逐灯 K)");
+        check(fwd.contains("L.cone.z"),
+                "前向 surface 消费 cone.z 逐灯 K(!atten 透传)");
         // 禁入项:gbuffers AST 高危面(SSO 主循环/自体豁免常数/GGX/绿锥宏/
         // 整数位运算 DDA ——实机三连 missing ';' at '{' 20:54/21:06/21:26;
         // 标量 DDA(float/int 步进,2026-09-04 穿墙修复)允许进前向:无 ivec3/bvec3/
@@ -127,12 +132,26 @@ public class InlineCoreContract {
             check(extractFn(full, fn).equals(extractFn(fwd, fn)),
                     "前向/完整版同函数逐词一致: " + fn);
         }
-        check(extractFn(fwd, "float taclight_vox_fetch(").replaceAll("\\s+", "").contains("voxData[word]"),
-                "前向标量取数 taclight_vox_fetch 经 voxData[word] 读 2bit 分类(无位运算)");
+        String fwdFetch = extractFn(fwd, "float taclight_vox_fetch(").replaceAll("\\s+", "");
+        check(fwdFetch.contains("voxData[word]"),
+                "前向标量取数 taclight_vox_fetch 经 voxData[word] 读 2bit 分类(无 >>/& 位运算)");
+        // 2026-09-04 方形假阴影修复(坑102):整字 float(voxData[word]) 在字值>2^24 时舍入
+        // (node 实测 50331651→50331652,首体素码 3→0:空读成实心=无中生有方块影)。
+        // 修法=uint 逐槽剥除(/4u×slot 次)+末余 %4u,0..3 小数值转 float 才精确;禁用 float 整字路径。
+        check(fwdFetch.contains("/4u") && fwdFetch.contains("%4u"),
+                "前向取数经 uint 剥除(/4u)+末余(%4u,小数值转 float 精确,坑102)");
+        check(!fwdFetch.contains("float(voxData[word])") && !fwdFetch.contains("div*=4.0")
+                        && !fwdFetch.contains("mod(floor(w/div)"),
+                "前向取数禁用 float 整字除法路径(大字舍入=假阴影,坑102)");
         String fwdVox = extractFn(fwd, "float taclight_vox_transmit(").replaceAll("\\s+", "");
         check(fwdVox.contains("voxOrigin.w<=0.0") && fwdVox.contains("taclight_vox_fetch(")
                         && fwdVox.contains("return0.0") && fwdVox.contains("T*=0.40") && fwdVox.contains("T*=0.75"),
                 "前向 vox_transmit = 标量 DDA(栅格无效 -1/实心 0/树叶 0.4/植被 0.75,2026-09-04 穿墙修复)");
+        // 2026-09-04 阴影破碎修复:掠边穿透软化带(与主线 TACLIGHT_VOX_FUZZ 0.35 同源,
+        // 穿透<0.35 按比例放行,≥0.35 仍 return 0.0,墙后遮挡基线不变)+tie eps 与主线同 1e-6。
+        check(fwdVox.contains("penLen") && fwdVox.contains("/0.35") && fwdVox.contains("T*=1.0-f")
+                        && fwdVox.contains("abs(tNext)*0.000001"),
+                "前向 vox_transmit 掠边软化带 0.35+tie eps 1e-6(与主线同源,修阴影破碎硬齿)");
     }
 
     /** 按签名抽取函数体(花括号配平),契约级白盒比对。 */
