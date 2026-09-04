@@ -69,3 +69,15 @@ injected)+ 灯开关全链路(服务端真源→客户端 ACK→像素效果)+ �
   三旋钮已回默认),供用户直接体感/扫参;这是合并后第一次真实客户端运行。
 - 本证据包的 light on/off 均为服务端真源命令(非客户端旋钮),链路=合并树
   端到端完整验证。
+
+## 5. 双端(LAN,离线号)远程灯同步 —— 追加验证(用户指出:正版与否非运行因素)
+
+- 双端=合并树 A(run/ 主机,ComplementaryReimagined,注入 +8010)+ B(run-observer,
+  ObserverB 离线号,LAN 25560,注入 +8010/+8020)。A 开灯(handheld+gun),
+  B 端 `!diag`:
+  - DIAG-REMOTE player=Dev self=false flash=false **gun=true**(同步正确)
+  - DIAG-TP player=Dev state=fresh w=1.000 age=1ms(捕获链 fresh)
+  - ssbo count=1,L0 pos/dir 与 A 端一致
+- 视觉:B 视角截图 remote_b_sees_dev_pool.png = Dev 实体+其脚边清晰锥形光池
+  (远程灯同步可视证据)。
+- 复算:DIAG/DIAG-REMOTE/DIAG-TP 行在 log-excerpt-b-observer.txt。
