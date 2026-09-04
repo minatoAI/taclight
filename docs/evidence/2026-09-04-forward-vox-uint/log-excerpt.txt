@@ -1,0 +1,40 @@
+run-interop/boot-20260904-211228.log:[21:12:52] [Render thread/INFO] [de.ta.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+run-interop/boot-20260904-211228.log:[21:12:52] [Render thread/INFO] [de.ta.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+run-interop/boot-20260904-211228.log:[21:12:53] [Render thread/INFO] [de.ta.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+run-interop/boot-20260904-211228.log:[21:12:53] [Render thread/INFO] [de.ta.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+run-interop/boot-20260904-211228.log:[21:12:53] [Render thread/INFO] [de.ta.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+run-interop/boot-20260904-211228.log:[21:12:53] [Render thread/INFO] [de.ta.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+run-interop/boot-20260904-211228.log:[21:12:53] [Render thread/INFO] [de.ta.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+run-interop/boot-20260904-211228.log:[21:12:53] [Render thread/INFO] [de.ta.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+run-interop/boot-20260904-211228.log:[21:12:53] [Render thread/INFO] [de.ta.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+run-interop/boot-20260904-211228.log:[21:12:53] [Render thread/INFO] [de.ta.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+run-interop/boot-20260904-211228.log:[21:12:53] [Render thread/INFO] [de.ta.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+run-interop/boot-20260904-211228.log:[21:12:53] [Render thread/INFO] [de.ta.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+run-interop/boot-20260904-211228.log:[21:12:53] [Render thread/INFO] [de.ta.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+run-interop/boot-20260904-211228.log:[21:12:53] [Render thread/INFO] [de.ta.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+run-interop/boot-20260904-211228.log:[21:12:53] [Render thread/INFO] [de.ta.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+run-interop/boot-20260904-211228.log:[21:12:53] [Render thread/INFO] [de.ta.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+run-interop/boot-20260904-211228.log:[21:12:53] [Render thread/INFO] [de.ta.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+run-interop/boot-20260904-211228.log:[21:12:53] [Render thread/INFO] [de.ta.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+run-interop/boot-20260904-211228.log:[21:12:53] [Render thread/INFO] [de.ta.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+run-interop/boot-20260904-211228.log:[21:12:53] [Render thread/INFO] [de.ta.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+run-interop/boot-20260904-211228.log:[21:12:53] [Render thread/INFO] [de.ta.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+run-interop/boot-20260904-211228.log:[21:12:53] [Render thread/INFO] [de.ta.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+run-interop/boot-20260904-211228.log:[21:12:53] [Render thread/INFO] [de.ta.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+run-interop/boot-20260904-211228.log:[21:12:53] [Render thread/INFO] [de.ta.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+run-interop/boot-20260904-211228.log:[21:12:53] [Render thread/INFO] [de.ta.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7869 chars)
+run-interop/boot-20260904-211228.log:[21:12:54] [Render thread/INFO] [de.ta.TacLightMod/]: [TacLight] LIGHT-SYNC-ACK handheld=false gun=true
+run-interop/boot-20260904-211228.log:[21:12:54] [Render thread/INFO] [de.ta.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7859 chars)
+run-interop/boot-20260904-211228.log:[21:12:54] [Render thread/INFO] [de.ta.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+7859 chars)
+run-interop/boot-20260904-211228.log:[21:12:54] [Render thread/INFO] [de.ta.TacLightMod/]: [TacLight] LIGHT-SYNC-ACK handheld=false gun=true
+run-interop/boot-20260904-211228.log:[21:14:50] [Render thread/INFO] [de.ta.TacLightMod/]: [TacLight] RELAY exec: !lan
+run-interop/boot-20260904-211228.log:[21:15:33] [Server thread/INFO] [de.ta.TacLightMod/]: [TacLight] LIGHT-SYNC ObserverB handheld=false gun=false (login-restore)
+run-interop/boot-20260904-211228.log:[21:19:51] [Render thread/INFO] [de.ta.TacLightMod/]: [TacLight] RELAY exec: /taclight scene wall
+run-interop/boot-20260904-211228.log:[21:19:51] [Server thread/INFO] [de.ta.TacLightMod/]: [TacLight] SCENE wall fills=2 blocks=0 spawns=2 | midnight daylight=off mobspawning=off clear
+run-interop/boot-20260904-211228.log:[21:19:53] [Render thread/INFO] [de.ta.TacLightMod/]: [TacLight] RELAY exec: /taclight kit
+run-interop/boot-20260904-211228.log:[21:19:54] [Render thread/INFO] [de.ta.TacLightMod/]: [TacLight] RELAY exec: /taclight cam goto wall_front
+run-interop/boot-20260904-211228.log:[21:19:54] [Server thread/INFO] [de.ta.TacLightMod/]: [TacLight] CAM goto wall_front x=2000.00 y=121.50 z=8.00 yaw=180.0 pitch=5.0 dim=minecraft:overworld
+run-interop/boot-20260904-211228.log:[21:19:55] [Render thread/INFO] [de.ta.TacLightMod/]: [TacLight] RELAY exec: !lan
+run-interop/boot-20260904-211228.log:[21:20:20] [Server thread/INFO] [de.ta.TacLightMod/]: [TacLight] CAM goto wall_back x=2000.00 y=121.50 z=-8.00 yaw=0.0 pitch=5.0 dim=minecraft:overworld
+run-interop/boot-20260904-211228.log:[21:21:04] [Server thread/INFO] [de.ta.TacLightMod/]: [TacLight] LIGHT-SYNC ObserverB handheld=false gun=false (cmd:off@target)
+run-interop/boot-20260904-211228.log:[21:21:33] [Server thread/INFO] [de.ta.TacLightMod/]: [TacLight] LIGHT-SYNC ObserverB handheld=true gun=false (cmd:on@target)

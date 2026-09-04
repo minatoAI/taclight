@@ -14,7 +14,8 @@
     "GunModelRenderProbeMixin",
     "LivingEntityLerpAccess",
     "LivingEntityRenderEntityMixin",
-    "TpOffscreenRenderMixin"
+    "TpOffscreenRenderMixin",
+    "oculus.TransformPatcherMixin"
   ],
   "injectors": {
     "defaultRequire": 1

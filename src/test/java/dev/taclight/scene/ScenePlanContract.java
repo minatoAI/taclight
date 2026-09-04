@@ -110,9 +110,9 @@ public class ScenePlanContract {
         check(p.fills().stream().anyMatch(f -> f.block().equals("minecraft:stone_bricks")
                 && f.x1() == 1994 && f.x2() == 2005 && f.y1() == 121 && f.y2() == 123
                 && f.z1() == 0 && f.z2() == 0), "wall: 石砖墙 12x3x1 墙心过原点");
-        check(p.spawns().size() == 2, "wall: 2 只蜘蛛");
+        check(p.spawns().size() == 2, "wall: 2 只猪");
         for (ScenePresets.Spawn s : p.spawns()) {
-            check(s.entity().equals("minecraft:spider"), "wall: 蜘蛛实体 " + s);
+            check(s.entity().equals("minecraft:pig"), "wall: 猪实体(2026-09-04 防干扰:蜘蛛咬死双端,改被动猪) " + s);
             check(s.x() == 2000 && s.y() == 121 && Math.abs(Math.abs(s.z()) - 2) < 1e-9,
                     "wall: 蜘蛛位于墙前/墙后 2 格(x=2000,y=121,z=±2): " + s);
         }
@@ -187,6 +187,7 @@ public class ScenePlanContract {
         Map<String, CamStore.Cam> cams = CamStore.defaults();
         checkCams(cams);
         camSafe(cams, "wall", "wall_front");
+        camSafe(cams, "wall", "wall_back");
         camSafe(cams, "grass", "grass_low");
         camSafe(cams, "corridor", "corridor_end");
         camSafe(cams, "bloom", "bloom_inside");

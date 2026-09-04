@@ -50,6 +50,9 @@ public final class CamStore {
     private static final Map<String, Cam> DEFAULTS = new LinkedHashMap<>();
     static {
         DEFAULTS.put("wall_front", new Cam(2000.0, 121.5, 8.0, 180.0, 5.0));
+        // 2026-09-04 双端漏光验证:B 站墙后看墙背。墙 z=0 高 121..123;
+        // B 在 z=-8 朝南(yaw=0)回看墙背,与 wall_front 成镜像对照。
+        DEFAULTS.put("wall_back", new Cam(2000.0, 121.5, -8.0, 0.0, 5.0));
         DEFAULTS.put("corridor_end", new Cam(2001.5, 122.0, -0.5, 270.0, 0.0));
         DEFAULTS.put("bloom_inside", new Cam(2010.5, 122.0, 9.0, 180.0, 0.0));
         DEFAULTS.put("grass_low", new Cam(2000.0, 121.6, -8.0, 0.0, 10.0));

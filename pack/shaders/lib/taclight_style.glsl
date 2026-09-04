@@ -3,23 +3,15 @@
 // 版本无关(#version 120 的 final 与 #version 430 的 composite 家族均可 include;
 // 纯函数、无 uniform、无内建状态依赖)。doc06 §2.9:风格层 = 原创性核心资产。
 // 只使用公开数学公式与 ACES 官方色度常量(0 行第三方 shader 代码)。
+// 【interop 分层】IGN/HG(公开数学、core 复用)已移至 taclight_math.glsl,
+// 此处经 include 保持对 final 的传递可见(胶片颗粒用 ign)。
 // ============================================================================
 
 #ifndef TACLIGHT_STYLE_INCLUDED
 #define TACLIGHT_STYLE_INCLUDED
 
-// Interleaved Gradient Noise(Jimenez 2014 公开公式):时序稳定的空间抖动源,
-// 用于 SSO/体积光步进抖动与胶片颗粒。
-float taclight_ign(vec2 p) {
-    return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715))));
-}
+#include "/lib/taclight_math.glsl"
 
-// M3 · HG 相位函数(Henyey-Greenstein,公开数学):体积散射角分布。
-// cosTheta = 视线方向 · 光传播方向;g>0 前向散射强(手电束感),g=0 各向同性。
-float taclight_hg(float cosTheta, float g) {
-    float g2 = g * g;
-    return (1.0 - g2) / (12.566371 * pow(1.0 + g2 - 2.0 * g * cosTheta, 1.5));
-}
 
 // M2 · ACES 色调映射(Hill 拟合;输入/输出均为线性值,矩阵 = ACES 官方
 // 输入/输出色度变换常量)。高光滚降防"平白一片",暗部 S 曲线收黑位。

@@ -51,7 +51,9 @@ public final class ClientSpotlightUploader {
             return new LightParams(
                     dev.taclight.config.TacLightConfig.RADIUS.get().floatValue(),
                     (float) dev.taclight.config.TacLightConfig.RADIUS_MAX,
-                    dev.taclight.config.TacLightConfig.INTENSITY.get().floatValue(),
+                    // 2026-09-03 真实感调参:!lv 覆盖层(无覆盖 = 原值,零行为变化)
+                    LightLevelOverride.intensityFor(
+                            dev.taclight.config.TacLightConfig.INTENSITY.get().floatValue()),
                     dev.taclight.config.TacLightConfig.cosDeg(dev.taclight.config.TacLightConfig.CONE_OUTER_DEG.get()),
                     dev.taclight.config.TacLightConfig.cosDeg(dev.taclight.config.TacLightConfig.CONE_INNER_DEG.get()),
                     dev.taclight.config.TacLightConfig.BEAM_DENSITY.get().floatValue());
@@ -469,18 +471,30 @@ public final class ClientSpotlightUploader {
 
     /** 纯数据装配:world 坐标原样直传给 SSBO(唯一合法性入口;无相机/GL/MC 类型,可离线测试)。
      *  亮度-距离耦合:有效半径 = radius × √(finalIntensity/6.0),钳制 ≤ radiusMax ——
-     *  未来"挡位"只需改亮度,照距自动 √ 缩放(用户需求:亮度和距离正相关)。 */
+     *  未来"挡位"只需改亮度,照距自动 √ 缩放(用户需求:亮度和距离正相关)。
+     *  2026-09-04 三旋钮(体感调参):!bright 在 !lv 之后取值(绝对亮度,互斥以后写者为准);
+     *  !dist 覆盖本耦合(绝对照距);!atten 经 cone.z 逐灯透传(0=GLSL 回退编译期默认)。 */
     public static SpotlightData buildSpotBeam(double wx, double wy, double wz,
                                               double dx, double dy, double dz,
                                               LightParams p, float intensityMult) {
-        float intensity = p.intensity * intensityMult;
-        float radius = p.radius * (float) Math.sqrt(Math.max(intensity, 1e-3f) / INTENSITY_REFERENCE);
+        float intensity = LightTuneOverride.brightnessFor(p.intensity * intensityMult);
+        float radius = LightTuneOverride.radiusFor(
+                p.radius * (float) Math.sqrt(Math.max(p.intensity * intensityMult, 1e-3f) / INTENSITY_REFERENCE),
+                p.radiusMax);
         radius = Math.min(radius, p.radiusMax);
-        return SpotlightData.spotBeam(
+        SpotlightData plain = SpotlightData.spotBeam(
                 (float) wx, (float) wy, (float) wz, radius,
                 R, G, B, intensity,
                 (float) dx, (float) dy, (float) dz,
                 p.cosOuter, p.cosInner, p.beamDensity, 1.0f);
+        float k = LightTuneOverride.attenK();
+        if (k == 0.0f) return plain;
+        return new SpotlightData(plain.posX(), plain.posY(), plain.posZ(), plain.radius(),
+                plain.red(), plain.green(), plain.blue(), plain.intensity(),
+                plain.dirX(), plain.dirY(), plain.dirZ(), plain.type(),
+                plain.cosOuter(), plain.cosInner(), k, plain.coneReservedW(),
+                plain.anisotropy(), plain.density(), plain.beam(), plain.vlReservedW(),
+                plain.cookieR(), plain.cookieG(), plain.cookieB(), plain.cookieA());
     }
 
     /** ABI:posRadius.xyz = world 坐标(v0.9.0);GLSL 消费侧负责转 scene-relative。 */

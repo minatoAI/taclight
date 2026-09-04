@@ -1,0 +1,14 @@
+[TacLight] mixin gate dev.taclight.mixin.oculus.TransformPatcherMixin -> true (self-guarded)
+Creating pipeline for dimension NamespacedId{namespace='minecraft', name='overworld'}
+[TacLight] interop injected family=iterationT pack=iterationT 3.2.0 (+20852 chars)
+Creating pipeline for dimension NamespacedId{namespace='minecraft', name='overworld'}
+[TacLight] interop: 包 "taclight-shaders-dev" 暂无注入模板,本包不生效 TacLight 照明(零改动)
+[TacLight] RELAY Iris.reload() ok
+Creating pipeline for dimension NamespacedId{namespace='minecraft', name='overworld'}
+[TacLight] RELAY Iris.reload() ok
+Creating pipeline for dimension NamespacedId{namespace='minecraft', name='overworld'}
+[TacLight] interop injected family=iterationT pack=iterationT 3.2.0 (+20852 chars)
+[TacLight] RELAY Iris.reload() ok
+Creating pipeline for dimension NamespacedId{namespace='minecraft', name='overworld'}
+[TacLight] interop injected family=iterationT pack=iterationT 3.2.0 (+20852 chars)
+[TacLight] RELAY Iris.reload() ok

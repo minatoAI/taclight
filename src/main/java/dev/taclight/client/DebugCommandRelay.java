@@ -27,8 +27,13 @@ import java.nio.file.StandardCopyOption;
  *       旧项目 T0 判据④即以 Reloading Resource 计数验证)。</li>
  *   <li>{@code !diag} —— 与 N 键等价:一行结构化诊断入日志。</li>
  *   <li>{@code !bench} —— 与 B 键等价:3 秒帧率基准。</li>
- *   <li>{@code !light} / {@code !neon} / {@code !gun} —— 手电 / 霓虹调试锥 / 枪灯开关
- *       (L/K 键的程序化等价;场景照明状态的唯一可靠控制通道)。</li>
+ *   <li>{@code !back} —— 程序化关界面(2026-09-04:ESC 菜单挡帧以往只能手点关,
+ *       违反程序化纪律;本命令=setScreen(null),与菜单“回到游戏”同入口)。</li>
+  *   <li>{@code !light} / {@code !neon} / {@code !gun} —— 手电 / 霓虹调试锥 / 枪灯开关
+  *       (L/K 键的程序化等价;场景照明状态的唯一可靠控制通道)。</li>
+  *   <li>{@code !bright} / {@code !dist} / {@code !atten} —— 手电三旋钮(2026-09-04,
+  *       用户体感自助调参):绝对亮度 / 绝对照距 / 衰减系数 K。内存覆盖,重启清零;
+  *       无参=status,{@code off}=回默认(用法见各命令日志回显)。</li>
  *   <li>{@code !looktrace} / {@code !mcap} —— 消融探针 / 运动门控采集开关(09-01,
  *       布防后被观察角色朝向/位置变化自动连拍+逐帧信号,静止自停)。</li>
  *  </ul></p>
@@ -70,6 +75,20 @@ public final class DebugCommandRelay {
     private static void execute(String line) {
         Minecraft mc = Minecraft.getInstance();
         TacLightMod.LOGGER.info("[TacLight] RELAY exec: {}", line);
+        if (line.startsWith("!shot")) {
+            // 程序化截图(2026-09-02 用户要求:测试驱动弃用键鼠模拟/抢前台窗口):
+            // 与 F2 同源直接读主帧缓冲落盘,零输入模拟;中继在渲染线程 tick 内执行,
+            // GL 上下文在位,读到的是最近一帧。文件名 = 原版时间戳规则。
+            try {
+                net.minecraft.client.Screenshot.grab(
+                        net.minecraftforge.fml.loading.FMLPaths.GAMEDIR.get().toFile(),
+                        mc.getMainRenderTarget(),
+                        (msg) -> TacLightMod.LOGGER.info("[TacLight] RELAY shot: {}", msg.getString()));
+            } catch (Throwable t) {
+                TacLightMod.LOGGER.warn("[TacLight] RELAY shot failed: {}", t.toString());
+            }
+            return;
+        }
         if (line.startsWith("!reload")) {
             // Iris.reload() = 重载键绑(J)的最终入口,从磁盘重解析+重编译整包。
             // 反射调用:oculus 是 runtimeOnly 可选依赖;Iris 为模组自有类,方法名不经 SRG 重映射。
@@ -96,8 +115,38 @@ public final class DebugCommandRelay {
             ClientEvents.dumpDiag();
             return;
         }
+        if (line.equals("!lan") || line.startsWith("!lan ")) {
+            // 直调服务端开 LAN(2026-09-04 双端漏光环境:/publish 走客户端命令树被
+            // 本地预解析拒"未知或不完整的命令";此处绕过命令分发器,直接调集成服
+            // publishServer,与暂停菜单"对局域网开放"同入口;固定端口 25560,
+            // 观察者 B 直连 127.0.0.1:25560。传 0 走随机端口实测 getPort()=0 未绑定)。
+            try {
+                var server = mc.getSingleplayerServer();
+                if (server == null) {
+                    TacLightMod.LOGGER.warn("[TacLight] RELAY lan: 非单人集成服,无服务端可开");
+                } else if (!server.isPublished()) {
+                    boolean ok = server.publishServer(
+                            net.minecraft.world.level.GameType.SURVIVAL, false, 25560);
+                    TacLightMod.LOGGER.info("[TacLight] RELAY lan -> {} (port={})", ok, 25560);
+                } else {
+                    TacLightMod.LOGGER.info("[TacLight] RELAY lan: 已开放(port={})",
+                            server.getPort());
+                }
+            } catch (Throwable t) {
+                TacLightMod.LOGGER.warn("[TacLight] RELAY lan failed: {}", t.toString());
+            }
+            return;
+        }
         if (line.startsWith("!bench")) {
             ClientEvents.startBench();
+            return;
+        }
+        if (line.equals("!back") || line.startsWith("!back ")) {
+            // 程序化关界面:ESC/聊天/容器等任意 Screen 直接关(与手点“回到游戏”同入口
+            // setScreen(null);单人未发布存档的暂停态随 PauseScreen 关闭自动解除)。
+            // 踩坑补位:菜单挡帧以往只能手点(坑96)或杀进程重拉,本命令 2 秒自愈。
+            mc.setScreen(null);
+            TacLightMod.LOGGER.info("[TacLight] RELAY back -> screen closed");
             return;
         }
         // 灯光控制(L 键的程序化等价 —— 键注入不可靠,灯光状态走文件通道)
@@ -112,6 +161,39 @@ public final class DebugCommandRelay {
         if (line.startsWith("!neon")) {
             ClientLightState.toggleDebug();
             TacLightMod.LOGGER.info("[TacLight] RELAY neon(debug cone) -> {}", ClientLightState.debugMode());
+            return;
+        }
+        if (line.startsWith("!lv")) {
+            // 2026-09-03 真实感调参档位(零重启体感):lv 即时覆盖 TacLightConfig 读到的
+            // 亮度(ln 档 0-6 → intensity 6·2^-档),radius 按 √(I/6) 自耦合;重置=重启实例。
+            // 用法:!lv 2 / !lv 3.5 / !lv status。CLIENT config 热改 toml 不回读,故走覆盖层。
+            String arg = line.length() > 3 ? line.substring(3).trim() : "";
+            TacLightMod.LOGGER.info("[TacLight] RELAY lv -> {}",
+                    dev.taclight.channel.LightLevelOverride.configure(arg));
+            return;
+        }
+        if (line.startsWith("!bright")) {
+            // 2026-09-04 用户体感三旋钮①:绝对亮度(与 !lv 档位互斥,后写者胜;体感只用一路)。
+            // 用法:!bright 12 / !bright status / !bright off。范围 0.5..30(同 config 域)。
+            String arg = line.length() > 7 ? line.substring(7).trim() : "";
+            TacLightMod.LOGGER.info("[TacLight] RELAY bright -> {}",
+                    dev.taclight.channel.LightTuneOverride.configureBright(arg));
+            return;
+        }
+        if (line.startsWith("!dist")) {
+            // 2026-09-04 用户体感三旋钮②:绝对照距(格,bypass √亮度耦合,钳制 ≤96)。
+            // 用法:!dist 24 / !dist status / !dist off。范围 4..96(同 config 域)。
+            String arg = line.length() > 5 ? line.substring(5).trim() : "";
+            TacLightMod.LOGGER.info("[TacLight] RELAY dist -> {}",
+                    dev.taclight.channel.LightTuneOverride.configureDist(arg));
+            return;
+        }
+        if (line.startsWith("!atten")) {
+            // 2026-09-04 用户体感三旋钮③:衰减系数 K(越小尾越长;5.0=主包标定,0.5r 处约 20%)。
+            // 经 SSBO cone.z 逐灯透传(0=GLSL 回退编译期默认),零重启生效。范围 0.2..20。
+            String arg = line.length() > 6 ? line.substring(6).trim() : "";
+            TacLightMod.LOGGER.info("[TacLight] RELAY atten -> {}",
+                    dev.taclight.channel.LightTuneOverride.configureAtten(arg));
             return;
         }
         if (line.startsWith("!gun")) {
@@ -221,7 +303,10 @@ public final class DebugCommandRelay {
         }
         if (line.startsWith("/")) {
             if (mc.getConnection() != null) {
-                mc.getConnection().sendCommand(line.substring(1));
+                // 2026-09-02:dev 客户端命令树不完整(javadoc 顶部已载,原版节点缺失,
+                // /fill /gamemode /time 被本地预解析拒"未知或不完整的命令");
+                // sendUnsignedCommand 跳过本地校验/签名直发服务端,服务端分发器健康。
+                mc.getConnection().sendUnsignedCommand(line.substring(1));
             } else {
                 TacLightMod.LOGGER.warn("[TacLight] RELAY no-connection, dropped: {}", line);
             }

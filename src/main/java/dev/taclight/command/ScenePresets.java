@@ -146,12 +146,14 @@ public final class ScenePresets {
         return out;
     }
 
-    /** 石砖墙 12x3x1 东西向,墙心过原点;墙前(+Z,相机侧)/墙后 2 格各 1 蜘蛛。 */
+    /** 石砖墙 12x3x1 东西向,墙心过原点;墙前(+Z,相机侧)/墙后 2 格各 1 头猪。
+     * 2026-09-04 双端漏光环境防干扰:此前用蜘蛛,实机双端均被咬死(InteropA/ObserverB
+     * 先后被蜘蛛杀死);改被动猪(零攻击) + SceneExecutor 和平/NoAI/创造三件套。 */
     private static Plan wall() {
         return new Plan("wall",
                 withPlatform(new Fill("minecraft:stone_bricks", 1994, 121, 0, 2005, 123, 0)),
-                List.of(new Spawn("minecraft:spider", 2000, 121, 2),
-                        new Spawn("minecraft:spider", 2000, 121, -2)));
+                List.of(new Spawn("minecraft:pig", 2000, 121, 2),
+                        new Spawn("minecraft:pig", 2000, 121, -2)));
     }
 
     /** 草台面 16x16 + 30 株确定性植被 + 橡树/云杉各一棵。 */

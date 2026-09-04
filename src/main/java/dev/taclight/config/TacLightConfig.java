@@ -25,7 +25,7 @@ public final class TacLightConfig {
         // F3(2026-08-30)能量重标定:56 是为室外远照调的档,反平方在室内尺度
         // 无衰减感(atten(8m)≈0.94 → 多链叠加推平顶,R1);18 档下 atten(8m)≈0.58、
         // atten(3m)≈0.92,光斑恢复衰减层次。室外远照场景调大 radius 即可(√ 亮度耦合不变)。
-        RADIUS = builder.comment("reference radius (blocks) @ intensity 6.0; effective radius scales as sqrt(intensity/6.0)").defineInRange("radius", 18.0, 4.0, RADIUS_MAX);
+        RADIUS = builder.comment("reference radius (blocks) @ intensity 6.0; effective radius scales as sqrt(intensity/6.0)").defineInRange("radius", 36.0, 4.0, RADIUS_MAX);
         INTENSITY = builder.comment("light intensity").defineInRange("intensity", 6.0, 0.5, 30.0);
         CONE_OUTER_DEG = builder.comment("outer half-angle in degrees").defineInRange("coneOuterDeg", 32.0, 5.0, 60.0);
         CONE_INNER_DEG = builder.comment("inner half-angle in degrees").defineInRange("coneInnerDeg", 18.0, 2.0, 55.0);

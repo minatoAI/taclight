@@ -58,6 +58,22 @@ minecraft {
                 args '--username', "${project.property('taclightUser')}"
             }
         }
+        // 方案C interop:第三实例(run-interop),与主线任务的 run/run-observer 完全隔离
+        // (并行任务会在 A/B 端换包+reload,共享目录会文件级互相覆盖)。
+        // 用法:gradlew runClientInterop -PtaclightQuickPlay=interop -PtaclightUser=InteropA
+        // quickPlay 不在本块重复声明:parents 继承 client 的条件参数,再声明会
+        // 重复传 --quickPlaySingleplayer → jopt 崩溃(实机踩坑)。
+        clientInterop {
+            parents = [project.minecraft.runs.client]
+            workingDirectory project.file('run-interop')
+            property 'forge.enabledGameTestNamespaces', mod_id
+            property 'taclight.dev.disableLanAuth', 'true'
+            args '-mixin.config=taclight.mixins.json'
+            jvmArgs '-Xmx3G'
+            if (project.hasProperty('taclightUser')) {
+                args '--username', "${project.property('taclightUser')}"
+            }
+        }
         server {
             // 独立目录:server 与 client 同写 run/ 会互踩 logs/latest.log 与 options.txt
             // 注意:oculus/embeddium 在 runtimeOnly → dev 专服必崩(dist);多人测试走 LAN。
@@ -171,8 +187,17 @@ tasks.register('generateRefmap') {
         logger.lifecycle("[TacLight] refmap written: ${out} (define=${seargeDefine} should=${seargeShould} render=${seargeRender} lerp=${seargeLerpX},${seargeLerpY},${seargeLerpZ})")
     }
 }
+// interop 注入引擎(方案C 里程碑2):pack/shaders/lib 两文件拷入 resources,
+// 单一真源 = pack/shaders/lib(InlineCoreContract 以 SHA-256 对账防两份漂移)
+tasks.register('copyInlineCore', Copy) {
+    from file('pack/shaders/lib/taclight_math.glsl')
+    from file('pack/shaders/lib/taclight_core.glsl')
+    into file("$buildDir/generated/resources-extra/shader_patches/inline")
+}
+sourceSets.main.resources.srcDir file("$buildDir/generated/resources-extra")
 
 tasks.named('processResources', ProcessResources).configure {
+    dependsOn tasks.named('copyInlineCore')
     var replaceProperties = [
             minecraft_version: minecraft_version, minecraft_version_range: minecraft_version_range,
             forge_version: forge_version, forge_version_range: forge_version_range,
@@ -263,6 +288,12 @@ tasks.register('syncShaderPackObserver', Copy) {
     from file('pack/shaders')
     into file('run-observer/shaderpacks/taclight-shaders-dev/shaders')
 }
+// interop 实例(方案C):worktree 自有实例,同步本分支包(与主仓 run/ 隔离)
+tasks.register('syncShaderPackInterop', Copy) {
+    dependsOn tasks.named('checkShaderIncludes')
+    from file('pack/shaders')
+    into file('run-interop/shaderpacks/taclight-shaders-dev/shaders')
+}
 tasks.named('syncShaderPack') { dependsOn 'syncShaderPackObserver' }
 
 // M5 多人测试环境预置:eula/专服属性(离线+RCON)/观察者目录(低配 options + oculus 选包)
@@ -294,6 +325,21 @@ tasks.register('taclightMpSetup') {
             'enableVsync:false',
             'pauseOnLostFocus:false'
         ].join(System.lineSeparator()) + System.lineSeparator()
+        else {
+            // 坑101(09-04 B 失焦弹菜单):已存在文件也强制关失焦暂停——MC 缺键/
+            // 版本不对会回写默认 true(true=失焦即弹 GameMenu,联机端同样触发;
+            // session.ps1 对 run/ 同款强制,见其 OPTIONS 步)。
+            // 显式 UTF-8 无 BOM 读写(坑24:写 BOM 吃首行 version,整份作废)。
+            def ob = java.nio.file.Files.readAllBytes(opt.toPath())
+            def t = new String(ob, 'UTF-8')
+            if (t.contains('pauseOnLostFocus:true')) {
+                t = t.replace('pauseOnLostFocus:true', 'pauseOnLostFocus:false')
+            } else if (!t.contains('pauseOnLostFocus:')) {
+                if (!t.endsWith('\n')) t += System.lineSeparator()
+                t += 'pauseOnLostFocus:false' + System.lineSeparator()
+            }
+            java.nio.file.Files.write(opt.toPath(), t.getBytes('UTF-8'))
+        }
         // 坑位:Oculus 1.8.0 读 Forge 配置目录 config/oculus.properties(不是 run 根);
         // 旧版写 run-observer/oculus.properties 是死文件 → 全新环境观察者 B 静默无光影包。
         def cfgDir = file('run-observer/config')

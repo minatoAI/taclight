@@ -1,3 +1,17 @@
+## 09-05 · 主线合回 interop/core-extract(无快进合并,冲突已解,未 push)
+
+- **合并**:`master(4d6f09e)` ← `interop/core-extract`(含 935548a 三旋钮+坑99-102 批量),基 `c3bb689`。
+  冲突 3 处,全部"双留"零语义丢失:`build.gradle`(generateRefmap+copyInlineCore 两个 Task 并存);
+  `taclight.mixins.json`(client 侧 7 项并集,补 TransformPatcherMixin+GunModelRenderProbeMixin 等);
+  坑位册(主线段原文不动+互操作段 25 条仅条目前序号+17 顺排 64-88,坑号原文不动——
+  坑82-85 主线/互操作各一套,合并注写明段落归属,新坑从 103 起编;双方证据包零改动,manifest 有效)。
+- **自动合并高危区已验**:uploader(!lv+SELF_LIGHT 总闸+三旋钮三路取值共存);
+  relay(!gun 手动旗/!selflight+!bright/!dist/!atten/!back 入口共存);
+  AllContracts 注册(TemplateLibrary/InlineCore/LightTune/SelfLightGate 全在)。
+- 契约(合并树实跑):TemplateLibrary 37 / InlineCore 41 / LightTune 22 / SelfLightGate 11 /
+  ScenePlan 207,`AllContracts: ALL PASS`+BUILD SUCCESSFUL。
+- 待用户验收:三旋钮实机扫参(新构建重启双端后 `!bright/!dist/!atten`)+ 本合并无行为变更(纯汇合)。
+
 ## 09-04 02:0x · 生产 jar 离线验收通过(新 jar 含 refmap,forge 实机 Done)
 
 - **验收**(C:/Users/20506/AppData/Local/Temp/prodtest,Forge47.1.3+online-mode=false,无 Mojang):Done(1.411s)!0 mixin 报错;[TacLight]loading/NET channel/CMDS 全绿,只缺 TaCZ/Oculus 降级提示正常。证明 jar 可用。
@@ -262,6 +276,272 @@
   第三人称视觉行为,非灯链缺陷。补齐路线:装 playerAnimator(推荐,双端,零改动)/
   自研 TP 疾跑姿 mixin(改 TaCZ 视觉,超灯范畴,不建议)/灯单独加疾跑摆(制造灯枪
   不一致,违背"灯跟枪"原则,排除)。
+
+## 09-04 · 手电三旋钮:亮度/距离/衰减手动调参(用户体感自助,已落码待提交)
+
+- **用户需求**:当前效果"不是很正常,不符合直觉";不要 AI 代调,要三个零重启命令亲手扫出合适效果。
+  有衰减系数(此前为 GLSL 编译期 `#define`,config 热改进不了着色器)——现经 SSBO cone.z 逐灯透传,零重启可调。
+- **新命令**(文件中继,纯内存覆盖,重启清零;无参=status,off=回默认):
+  `!bright 0.5..30`(绝对亮度,默认 6.0;与 `!lv` 档位互斥,后写者胜,建议只用一路);
+  `!dist 4..96`(绝对照距/格,默认 36,bypass √亮度耦合,钳制 ≤radiusMax);
+  `!atten 0.2..20`(衰减系数 K,默认 GLSL K=5.0;越小尾越长,0.5r 处约 44%..2% 亮度)。
+- **实现**:新 `LightTuneOverride`(三路覆盖)+`buildSpotBeam` 接入(bright 在 lv 后取值/绝对半径/cone.z 透传,
+  SSBO 96B 布局不动,保留槽此前恒 0)+GLSL `taclight_attenuation` 升三参(主包 composite/composite1/绿锥/surface
+  与前向 surface 全消费 `L.cone.z`,≤0 回退编译期默认)+`DebugCommandRelay` 三入口。TDD:`LightTuneContract` 22 项
+  (默认直通/越界拒绝不污染/SSBO cone.z 回环/收尾零残留)。
+- 契约:TemplateLibrary 37 / InlineCore 41 / ScenePlan 207,`AllContracts: ALL PASS`。
+- 本提交批量含坑99/100/101/102+证据包(forward-vox-uint/raw-albedo/shadow-fuzz/dual-leak)+SESSION 记录;
+  第三方 `.ref-packs` 与 tmp 中继脚本不进提交(红线/清理)。
+- 待用户:新构建重启双端后亲手扫参(`!bright/!dist/!atten`);下一步=合回主线(待执行)。
+
+## 09-04 · 前向体素取数精度修复：方形假阴影消除（已修待用户目验，未提交未 push）
+
+- **方形杂影定案=前向取数 float 精度丢失（坑102）**：用户体感报墙面/地面出现“不存在方块的
+  阴影”、杂乱方形阴影出现在不该有的位置。与坑100横贯硬带不同机制：旧
+  `taclight_vox_fetch` 用 `float(voxData[word])` 整字转 float 再除法剥槽——float 尾数仅 24 位，
+  字值超 2^24 即舍入（Node 实算：50331651→50331652、4294967295→4294967296、
+  50331649→50331648、16777217→16777216），空↔实心翻转=凭空多出/少掉整块方形阴影。
+  修法=uint 域内逐槽剥除（`w/4u` + `w%4u`，小值转 float 精确，全程整数域）；
+  slot=idx-word*16（与 Java VoxelField pack 同语义）。TDD：先加红断言
+  （/4u+%4u 必备、禁 float 整字除法路径）再实现。
+- **验证**：双端重拉（RESOLVED 进程缓存，!reload 换不上来），A/B 均注入 +7859；
+  B（gunless）wall_back 开关对照全图 meanDiff **29.58**/maxDiff 175/changed 26.3%；
+  热点 on mean **136.6**/p50 160.7/p90 182.4/**ge128=23255/ge200=0/ge250=0**——
+  锥池居中柔和、无死白；on 帧白砖墙面干净，无方形假阴影。
+  证据 `docs/evidence/2026-09-04-forward-vox-uint/`（README+off/on+log-excerpt+manifest，可复算）。
+- 契约：TemplateLibrary 37 / InlineCore **39**（+2 坑102 断言）/ ScenePlan 207，
+  `AllContracts: ALL PASS`。
+- 收尾状态：双端运行中（LAN 25560，B 灯开，包启用；收尾/交用户前按 §7 关灯+禁包）；
+  未提交未 push（等批准）；待用户目验（用户截图场景的方形杂影是否已消，本包为 wall_back 墙面验证）。
+
+## 09-04 · 调用点反照率污染修复+失焦弹菜单修复（已修待用户目验，未提交未 push）
+
+- **横贯硬边定案=调用点反照率污染（坑100）**：用户实机报灯锥区一条与灯无关的横向亮暗硬带
+  （Complementary 前向注入改动后出现）。机制=宿主 DoLighting 把太阳阴影/月光/火把乘进
+  color.rgb，调用点复用它作锥光 albedo = 宿主阴影二次放大。修法=DoLighting 调用前一行快照
+  `vec3 taclightRawAlbedo = color.rgb;`，调用点改用快照（entities/hand 保留 `* color.a`）；
+  注入 `+7859→+7903`（+44，快照行，日志实证）。
+- **验证**：B（gunless）wall_back 开关对照 meanDiff **21.73**/changed 22.5%/maxDiff 161；
+  on 帧锥池柔和居中、无横向硬切；热点 on mean **90.1**/p90 179.6/**ge250=0** 无死白。
+  证据 `docs/evidence/2026-09-04-raw-albedo/`（README+3帧+log-excerpt+manifest，可复算）。
+  TDD：先加红断言（调用点含快照名、禁 post-lighting color.rgb、禁 /2048.0）再实现。
+- **失焦弹菜单修复（坑101）**：B 失焦弹 GameMenu 而 A 不弹=run-observer/options.txt
+  pauseOnLostFocus:true（mp-setup 只管缺席新建不管已存在；MC 会回写默认 true）。
+  修法=当场改 false + build.gradle taclightMpSetup 加 else 分支幂等修理（UTF-8 无 BOM）；
+  实机 B 失焦 8 秒仍在游戏内（准星血条锥池俱在）。
+- 契约：TemplateLibrary 37 / InlineCore 37 / ScenePlan 207，`AllContracts: ALL PASS`。
+- 收尾状态：双端运行中（LAN 25560，B 灯开，包启用；收尾/交用户前按 §7 关灯+禁包）；
+  未提交未 push（等批准）；待用户目验（用户截图场景的横贯硬带是否已消，本包为 wall_back 墙面验证）。
+
+## 09-04 · 前向 DDA 掠边假阴影修复+back 关界面命令（已修待用户目验，未提交未 push）
+
+- **阴影破碎定案=前向 DDA 掠边假阴影（坑99）**：A 视角墙面左半块黑色锯齿咬痕+阶梯齿；
+  排除猪影/月影/灯位偏移后，机制=float 累积排序翻转（掠射末步进错邻格、墙体素即判 0）+ 零 FUZZ 硬归零，
+  前向 tie eps 1e-5 过松。修法=照搬主线配方（tie eps 1e-6 + 穿透软化带 0.35 字面量内联，前向零预处理指令红线），
+  墙后深穿遮挡基线不变（漏光 CLOSED 不受影响）。
+- **验证**：灯开修前→修后 meanDiff **1.62**/changed 3.0%；枪灯严格对照（handheld=false gun=true）
+  meanDiff **1.49**/changed **3.1%**/maxDiff 227 集中原咬痕区；post_on 黑齿消失只剩柔和左渐变；
+  热点 mean **84.4**/p90 169.2/**ge250=0** 无回归无死白。证据 `docs/evidence/2026-09-04-shadow-fuzz/`
+  （README+4帧+log-excerpt+manifest，可复算）。TDD：先加红断言（penLen+/0.35/T*=1.0-f/eps 1e-6）再实现。
+- **back 关界面命令**：`DebugCommandRelay` 新增 `!back`（=setScreen(null)，与“回到游戏”同入口），
+  补程序化缺口（坑96：此前菜单挡帧只能手点）；B 真实菜单事故中 RELAY back 日志确认自愈。
+- **教训入库**：坑97（按窗口标题杀进程误杀宿主→只看命令行，宿主只许优雅停）/ 坑98（中继一次一调用逐条验 log；
+  B 传送后必须 shot 目检机位；同机位重叠操作禁用）/ 小谜团记一笔（墙顶东沿 3 像素亮斑+猪排掉落物，场景卫生非渲染 bug，待拍板）。
+- 契约：TemplateLibrary 35 / InlineCore 37 / ScenePlan 207，`AllContracts: ALL PASS`。
+- 收尾状态：双端已由用户手动关闭（优雅退出，世界全存盘）；未提交未 push（等批准）；实例已关，目验需重开摆回约 8 分钟。
+
+## 09-04 · 发射10活体感+实体不透明+漏光复核（三项全绿，待用户体感/拍板）
+
+- **发射10锥池（活A=InteropA3，新角色）**：A侧on→off meanDiff **15.07**/changed **41.5%**；
+  hotspot mean 85.1/p90 180.5/**ge200仅2/ge250为0**（亮但无死白）；与03:3x轮（89.8/182.8）基本一致→
+  锥池亮度由SSBO锥主导，发射5→10几乎不动锥池、只补暖氛围。证据
+  `docs/evidence/2026-09-04-emission10-entity/`（README+4帧+log-excerpt+manifest，可复算）。
+- **玩家实体不透明CLOSED**：B贴脸看受照A（后脑/发片/躯干暖照实心、无透层）+猪/手部一致，`* color.a`修复成立。
+- **漏光复核**：活A照墙时B看墙背仍黑，verdict维持CLOSED；bench开/关灯双双avgFPS 59.8（vsync上限，零可感开销），无阴影伪影。
+- **新角色rollout通过**：InteropA3离线UUID文件`e4aea662…`逐字节验算一致，登录点世界出生点（无墙前机位现象，佐证v2§3纠错）；
+  B后加入者生存→重跑scene转创造（坑95已按v2§3重写：entity-id推理收回+删档=重置+真新玩家标准）。
+- 契约：Java核心全绿；FrameRecorder跨语言项红系本环境沙箱EPERM拦Node-spawn-Node（已定位，与代码无关，详见交接）。
+- 收尾状态：A灯开+双端包启用（留给用户体感，未执行§7关灯/禁包）；LAN 25560开；未提交未push（等批准）。
+
+## 09-04 · 双端墙体漏光验证：锥光不穿墙（反向验证闭环，待用户体感/拍板）
+
+- **判定=正结果**：活人B持灯照墙背，B侧on→off meanDiff **18.73**/changed **24.5%**（锥工作）；
+  A侧看对面on→off meanDiff **0.29**/changed **0.8%**=噪声。标量DDA遮挡成立，穿墙无锥池。
+  证据 `docs/evidence/2026-09-04-dual-leak/`（README+6帧+热图+log-excerpt+manifest，可复算）。
+- **穿墙亮区真凶**：前序“灯关还亮”=死客户端不吃S2C、A物品发射等级卡10（宿主heldLighting无遮挡直照），非SSBO锥漏。
+- **新坑94（cam机位≠灯方向，待立项）**：灯跟玩家头不跟相机；A相机yaw180头留出生朝向→锥照身后，A端墙面帧全降级为参考。B头/机一致→B侧结论有效。
+- **A端5连死**（06:41蜘蛛旧+09:53/10:09/10:16/10:21 fresh重生数分钟内死；和平已落盘Difficulty=0仍死→非怪；登录点恒为墙前机位可疑）。死亡调查按用户要求冻结，不阻塞本结论。
+- 契约：改动相关三组绿（TemplateLibrary/InlineCore/ScenePlan）；AllContracts尾部FrameRecorder+rec-analyze红系沙箱EPERM拦Node管道（环境限制，与代码无关）。未提交未push（等批准）。
+
+## 待办 tickets(用户 09-04 立)
+
+- **T1 枪灯手动开关**(用户要求先备忘不实现,键位未定):现状枪灯=每 tick TaCZ 探针
+  读主手枪 LASER 槽(装 taclight:gun_light=开,无=关),`!gun` 调试翻转会被探针覆盖。
+  需求=玩家可手动开关(无附件也能强制亮?与探针的优先级?键位待定)。涉及
+  ClientLightState.gunManual 旗+探针/S2C 覆盖规则(主线 09-03 8019aca 同款模式)。
+
+## 09-04 · Complementary r5.9 前向注入命中+锥池可见(用户问 iterationT 自适应曝光影响)
+
+- **状态=正结果**:`interop injected family=complementary (+4543 chars)` ×2(两份片元
+  半体:terrain 271068 + translucent 285528 变体),零崩溃,灯开后草地+土墙见柔和锥池
+  (近亮远暗),灯关即消失。证据 `docs/evidence/2026-09-04-complementary-inject/`
+  (README+comp_v2_off/on+log-excerpt-v2+manifest.sha256;旧 comp_off/on 留作零注入 AB 对照)。
+- **判定数字**(grass_low,hotspot bbox 280,190,560,340):off mean 21.2/p90 33.9/ge200 68;
+  on mean 89.8(×4.2)/p90 182.8/ge128 68→14185;全图 meanDiff 30.63/changed 228224/409920。
+- **本轮根因=单规则双锚点跨半体注定 miss**:patchSodium 6 入参按顶点/片元分半到达
+  (顶点半体 175k/246k 有顶点锚无 DoLighting;片元半体 271k/285k 有定义+调用点无顶点锚),
+  旧模板双锚点绑一条规则=恒一锚缺席=all-or-nothing 全 miss。修=片元单规则
+  (extension 开 SSBO + DoLighting 定义前文件域内联 + 调用后加性锥光)。
+- **版本定案**:SSBO 用 `#extension GL_ARB_shader_storage_buffer_object`(宿主同式),
+  不抬升 130→430(430 杀宿主 texture2D/varying 兼容路径);旧"注释锚被剥离"结论有误
+  (落盘两半体皆含 //Program//),坑91 已修正。
+- 契约 `AllContracts: ALL PASS`;新坑 **93**(版本抬升杀兼容路径)入册;坑91 结论修正。
+- 待用户体感:Complementary 下锥池是否自然、有无 AE 回压感;下一步候选=冻结回主线或
+  继续 entities/hand 钩子(地形锥池已闭环,按需再挂,保持混入面最小)。
+
+## 09-04 · Complementary r5.9 前向注入首轮(负结果,已超驰:见上条正结果)
+
+- **状态=负结果**:零崩溃、零注入——`interop injected` 日志从缺,off/on 截图逐位一致
+  (hotspot mean 21.9→32.7 系手持模型位移噪声,ge200 恒 68),SSBO handheld=true 有数但
+  画面无锥池。证据 `docs/evidence/2026-09-04-complementary-inject/`(README+off/on+
+  log-excerpt+manifest.sha256)。
+- **AE 对照(源码级,待实机确认)**:iterationT composite 注入在 AE 采样环内
+  (MotionBlur GetExposureTiles→colortex2.a→Final GetExposureValue 全局 exposure),
+  AE 回压手电;Complementary=手动 Lottes tonemap(TM_EXPOSURE=1.00,无自适应),
+  前向注入成功后预期不吃反馈。
+- **根因链**:①钩子 miss(patchComposite 不覆 gbuffers,已加 patchSodium 6 钩子);
+  ②gbuffers AST `missing ';' at '{'` 三连(减重 21k→4.4k 行号仍随动,函数体内声明与
+  AST 冲突;前向精简去 SSO/GGX/绿锥/体素 DDA,恒可见桩,遮挡交宿主);
+  ③当前卡点=`//Program//` 注释锚在 patchSodium 输入侧不存在(jcpp 剥离注释)→静默零
+  注入,已改顶点 main 体真分支锚(GetLightMapCoordinates,selectorCount=1),契约绿但
+  **实机未验证**(实例已停)。
+- 契约 `AllContracts: ALL PASS`(TemplateLibrary 29+InlineCore 34 含前向 18);
+  新坑 **90**(gbuffers AST 体内声明)/**91**(注释锚剥离)/**92**(双实例存档锁僵尸)入册。
+- 待用户拍板:是否继续投实机验证(重启单实例+off/on,预期有锥池+injected 日志);
+  或先冻结 Complementary,回主线。
+
+- **根因**:调用点直接加物理 radiance,宿主 composite 尾部 `/=MAIN_OUTPUT_FACTOR
+  (=2048)` + LinearToCurve——宿主内光照是"输出前量纲",高千倍饱和糊死。
+  修复=调用点 `(radiance×GAIN/2048)→shoulder3(T=0.55/Q=0.15,本家包同参)`。
+- **衰减压近场**:TACLIGHT_ATTEN_K 2.0→5.0(0.5r 处 50%→20%;端点/远场尾部不动,
+  只改中段肩部)。hotspot ge200:12473→334(−97%),饱和归零,草叶/砖墙/远景全可读。
+- **!lv 档位覆盖层**(LightLevelOverride+relay,10 项契约):CLIENT config 热改 toml
+  不回读——覆盖层供零重启体感扫参(lv d→intensity=6·2^-d,radius √自耦合);
+  实证 lv2/3/4 画面逐位一致(亮度由 shoulder 参数决定,SSBO 已在线性段外),
+  反推旧 radiance 在肩部之上 ≈2.6×。重启=覆盖清零。
+- 契约 `AllContracts: ALL PASS`;证据 `docs/evidence/2026-09-03-interop-true-flashlight/`。
+- 新坑:**坑88**(CLIENT config 游戏内热改 toml 不回读,重启才生效;亮度对照走 !lv
+  覆盖层)、**坑89**(`/` 行原版命令在 dev 客户端被本地预解析拒,scene 预设的
+  setWeatherParameters 才是可靠晴天路径)。
+- 待用户体感:最终柔和版是否自然(近亮远暗+远景可见);下一步候选=Complementary 族模板。
+
+## 09-03 03:1x · 里程碑2(方案C 运行时注入引擎)实机全链闭环,验收 1-7 全 PASS
+
+- **引擎上线实机**:mixin 挂 Oculus(oculus-1.8.0)`TransformPatcher.patchComposite`
+  4 个 String 入参 → `RuntimePackInjector.patchSource`(指纹=包名+关键文件哈希 →
+  模板 JSON(路线 P 格式:replaceFirst/insertBeforeLine/insertAfterLine+`<INLINE_CORE>`)
+  → iterationT 3.2.0 注入成功 `+20852 chars`,管线编译零报错。冻结午夜 smoke:
+  off=全黑夜景 / on=锥形光池,imgdiff meanDiff=36.43 maxDiff=242 changed=45.0%
+  (首轮 wj 对 37.30/40.8% 同量级互证)。验收 1-7 全 PASS:补丁包零静默禁用 /
+  injected 日志 / 灯开关像素差 / 视觉正确 / 本家包回归(原生链照常+零注入)/
+  未知包安全(零注入+一次性提示不刷屏)/ 幂等(连续两次 !reload 每次管线重建
+  注入恰一次,字节数恒定)。证据 `docs/evidence/2026-09-03-interop-runtime-inject/`
+  (README 判定表+timeline+composite-dump 运行时文本取证+manifest.sha256)。
+- **契约**:新增 65 项(TemplateLibrary/InlineCore 16/PatchExecutor 20/RuntimePackInjector/
+  PackFingerprint 等),探针清理后复跑 `AllContracts: ALL PASS`。
+- **新坑 4 条(坑位册 53-56)**:坑82 mixin 门控禁 Class.forName 目标类(prepare 期
+  抢先加载→零 mixin 缓存静默失效;字符串 targets 自守卫);坑83 patchComposite 输入=
+  jcpp 预处理文本(锚按运行时实测文本写/注入文本指令全解析+零 uniform/注入点在宿主
+  uniform 声明后);坑84 一次性亮帧异常归因存档(不可复现不阻塞,再遇先查首建灯态);
+  坑85 CHM 禁 null value+宿主管线回调必须 fail-safe(异常=原文返回零注入)。
+- **工具**:interop 三脚本(interop-session/stop/interop-smoke)落盘可复跑;
+  零重启模板迭代法(per-packName RESOLVED 缓存+手写 build/resources 模板+sed
+  oculus.properties+!reload)本轮 5 次 A/B 消融零重启完成。
+- **待用户**:体感验收 iterationT 注入观感(灯色/强度/tonemap 二次调色与离线派生包
+  时代的差异);下一步候选 = Complementary 族模板(需用户拍板优先级)。
+
+## 09-02 23:x · 里程碑2 批准开工;计划文档落定;系统维护暂停待就绪信号
+
+- 用户批准开工,并指明"多参考 Iris 官方 DH 兼容的已验证实现"。实施蓝图 =
+  `docs/方案C-运行时注入引擎计划.md`(架构/模板格式 v2/契约清单/实机验收 7 项/
+  风险 8 项/包升级跟版 SOP)。写文档阶段追加钉死的事实:patchComposite 调用方
+  字节码实锤 = CompositeRenderer(composite/deferred)+ FinalPassRenderer(final),
+  签名 (String×4, TextureStage, map);taclight_surface_lighting 签名
+  (fragView, albedo, n, roughness, metal, f0);外包 prelude 必须定义
+  TACLIGHT_LIGHT_GAIN(core 无兜底),TACLIGHT_OCCLUSION_AT 不定义=core 默认 1.0
+  保守(遮挡主路径=体素 DDA,包无关);内联文本 = math+core 拼接去 include 行。
+- **暂停**:电脑维护,不起实例/不跑构建;就绪信号后按计划 §9 顺序开工(契约红→引擎→
+  mixin→iterationT 冒烟→三重回归→证据包)。
+
+## 09-02 22:3x · 里程碑2(运行时注入引擎)调研收网,提案待批
+
+- **调研结论(网络案例+本地 jar 取证)**:①Iris 官方 DH 兼容就是"per-family GLSL 补丁"先例
+  (补丁文本按 dhTerrainVsh/Fsh 命名进 ShaderProperties,DH_SHADER 指令守门=未声明的包零改动;
+  坑:旧 OptiFine 式 option 指令曾让补丁判定反转失效,Iris PR #2493);②Euphoria Patches
+  (Complementary 补丁层)证明 per-family 维护可行但每包升级要跟,版本必须配对;③本项目
+  路线 P 的 PackPatcherTool(git 0a98400)已有成熟补丁格式:JSON+锚点唯一+marker 幂等+
+  addFiles/insertBefore/insertAfter/replace,当年实机在 Oculus 下加载成功。
+- **关键本地事实**:实例依赖实际是 **oculus-1.8.0**(Iris 1.7.x 移植,非传言的 1.7.0);
+  jar 里 `TransformPatcher.patchComposite` 为 public static=deferred/composite/final 统一
+  转换入口,即理想注入钩子(gbuffers 走 patchVanilla/patchSodium,不碰);DH 补丁机制
+  (iris/compat/dh/DHCompat)同在;glsl-transformer 在 classpath。自家包= `#version 430 core`
+  + `layout(std430, binding=7)` 源内直声明,实机已验证可行。
+- **提案(待用户批准,未动工)**:mixin patchComposite(Inject RETURN 改写返回 map)+
+  指纹(shaderPack 名+关键文件哈希)→ 模板库(路线 P JSON 格式复活,taclight_core 文本
+  内联免 #include);未知包=零注入+一次性提示(设计即安全,坏指纹自动降级)。
+  首目标=Complementary 族(冒烟可先复活 iterationT 旧模板)。代价:引擎~1天,
+  每族模板 0.5-1 天且包升级需跟。风险:patchComposite 调用路径需冒烟实证、#version
+  升级个别包不兼容(该族标不支持)、注入后 Iris 静默禁包(注入后预校验)、tonemap
+  位置错=二次调色(像素判定防)、Oculus 升级需重验(混入面仅 1 类 1 方法)。
+
+## 09-02 21:2x · interop 实机回归闭环(像素恒等)+ 独立实例与程序化测试通道
+
+- **实机回归(上一条目的待办,已闭环)**:独立实例 run-interop 上,基线包
+  (c3bb689)vs 重构包(5302eab)同场景同机位冻结午夜对照,**干净四对
+  imgdiff:草地开/关灯逐位零差异(changed=0/409920),走廊开/关灯各仅
+  4px(0.001%)且为 3×2 固定点、开/关灯同位同幅=与光影无关的外来元素**。
+  热重载 ×3 全部 `RELAY Iris.reload() ok` 零编译错误。证据
+  `docs/evidence/2026-09-02-interop-live-regression/`(8 图+imgdiff 输出+
+  manifest.sha256)。**方案 C 第一里程碑(核心剥离)实机零回归,可合并。**
+- **独立实例(run-interop)**:build.gradle 新增 `clientInterop` run 配置
+  (parents=client;quickPlay 靠继承勿复写,坑73)+ `syncShaderPackInterop`;
+  世界 = PROBE 存档克隆(停更存档零写入风险);`ops.json`(InteropA level 4,
+  UUID=playerdata 文件名,坑74);启动 = `gradlew-interop.cmd runClientInterop
+  -PtaclightQuickPlay=interop -PtaclightUser=InteropA`(gradle 缓存复用主仓,
+  坑61)。里程碑 2 运行时注入的换包测试就在此实例做。
+- **测试驱动程序化(用户明令,坑76)**:drive.ps1 postkey 会前台激活目标窗口
+  → MC 抓鼠标+抢用户焦点(用户实测被锁鼠标)。改为:中继新增 `!shot`
+  (Screenshot.grab 直读主帧缓冲,与 F2 像素等价);`/` 行改走
+  `sendUnsignedCommand`(绕过 dev 客户端不完整命令树本地预解析,原版命令
+  /time /gamerule 全通,坑74);中继批发同 tick 多命令会被服务端反刷屏踢出
+  (坑72,一条一写 ≥0.9s);单机 GUI 不吃后台键盘(坑75,恢复=杀进程
+  quickPlay 重启)。AllContracts ALL PASS 复验。
+- 分支:`interop/core-extract` @ 5302eab(git worktree wt-interop)。
+
+## 09-02 08:3x · interop 核心剥离:照明核心与包私有编码分层(方案 C 第一里程碑)
+
+- **背景与决策**:为让玩家用其他光影包时保留锥形照明,方案 C 定型为**运行时注入**
+  (模组内 patch 引擎把核心 GLSL 注入玩家所选光影包;未知包系提示不支持),
+  替代"事前工具生成修改包"。第一里程碑 = 把跨包可移植的照明核心从本包私有
+  编码中切出。HandheldMoon 调研结论支撑路线决策:动态光照路线(CPU chunk
+  重建 churn + 0-15 级灰度量化 + 泛洪漏光)视觉上限是硬的,只配做兜底不做主线。
+- **新分层**(pack/shaders/lib/):
+  `taclight_math.glsl`(IGN/HG 公开数学,core 与 style 共用)→
+  `taclight_core.glsl`(**零依赖照明核心**:SSBO 契约+坐标换算五函数+衰减/软膝/
+  肩部/GGX+SSO+体素 DDA+绿锥+表面照明主循环 `taclight_surface_lighting()`;
+  仅依赖 Iris 标准 uniform+depthtex1+SSBO,**禁止 colortex 字面量**)→
+  `taclight_adapter.glsl`(本包私有:colortex3.a 遮挡系数经
+  `TACLIGHT_OCCLUSION_AT` 宏注入 core,默认回退保守 1.0;量纲标定
+  `TACLIGHT_LIGHT_GAIN` 移入——移植到其他包时**整文件替换+重标定**)。
+  `taclight_common.glsl` 改纯聚合头(adapter→core→gbuffer→style),
+  对 composite 家族接口零变化;gbuffers/final 零改动。
+- **契约**:新增 `ShaderCoreContract`(31 项)钉死分层边界(core 零依赖/
+  宏注入点/聚合顺序 adapter 先于 core/无残留双份定义/消费 pass 不残留照明门);
+  `VoxelDdaContract` 的 GLSL 文本断言跟代码迁至 core(断言内容不变)。
+  先红(旧结构上 FAIL 实证)后绿:**AllContracts ALL PASS(495 checks)**。
+- **实机回归(待做)**:双实例当前被并行任务占用(08:15 场景布防中),
+  待空闲后 sync+!reload+截图回归;行为预期零变化(纯重构,逐行搬运)。
+- 分支:`interop/core-extract`(git worktree wt-interop,与其他任务隔离)。
 
 ## 09-02 07:0x · 遮挡静态回归关闭 + 枪灯坑60修复(姿态跟随实机验证);配件适配提案就绪
 

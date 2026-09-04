@@ -1,6 +1,8 @@
 package dev.taclight;
 
 import dev.taclight.channel.LookTraceContract;
+import dev.taclight.channel.LightLevelOverrideContract;
+import dev.taclight.channel.LightTuneContract;
 import dev.taclight.channel.MotionCaptureContract;
 import dev.taclight.channel.FrameRecorderContract;
 import dev.taclight.channel.MultiLightCollectorContract;
@@ -23,6 +25,11 @@ import dev.taclight.pose.TpLightResolverContract;
 import dev.taclight.scene.ScenePlanContract;
 import dev.taclight.sync.LightStatePersistenceContract;
 import dev.taclight.sync.PlayerLightSyncContract;
+import dev.taclight.shader.ShaderCoreContract;
+import dev.taclight.interop.InlineCoreContract;
+import dev.taclight.interop.PackFingerprintContract;
+import dev.taclight.interop.PatchExecutorContract;
+import dev.taclight.interop.TemplateLibraryContract;
 import dev.taclight.tacz.GunLaserReaderContract;
 import dev.taclight.tacz.GunLightAllowContract;
 
@@ -39,8 +46,22 @@ public class AllContracts {
         VoxelFieldContract.main(args);
         System.out.println("== VoxelDdaContract ==");
         VoxelDdaContract.main(args);
+        System.out.println("== ShaderCoreContract ==");
+        ShaderCoreContract.main(args);
+        System.out.println("== PatchExecutorContract ==");
+        PatchExecutorContract.main(args);
+        System.out.println("== TemplateLibraryContract ==");
+        TemplateLibraryContract.main(args);
+        System.out.println("== PackFingerprintContract ==");
+        PackFingerprintContract.main(args);
+        System.out.println("== InlineCoreContract ==");
+        InlineCoreContract.main(args);
         System.out.println("== UploaderSemanticContract ==");
         UploaderSemanticContract.main(args);
+        System.out.println("== LightLevelOverrideContract ==");
+        LightLevelOverrideContract.main(args);
+        System.out.println("== LightTuneContract ==");
+        LightTuneContract.main(args);
         System.out.println("== MuzzlePoseMathContract ==");
         MuzzlePoseMathContract.main(args);
         System.out.println("== MuzzlePoseStoreContract ==");

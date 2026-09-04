@@ -1,0 +1,17 @@
+151:[049月2026 03:22:09.952] [Render thread/INFO] [Oculus/]: Creating pipeline for dimension NamespacedId{namespace='minecraft', name='overworld'}
+319:[049月2026 03:22:12.786] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] LIGHT-SYNC-ACK handheld=false gun=false
+321:[049月2026 03:22:12.930] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+4543 chars)
+322:[049月2026 03:22:12.970] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] interop injected family=complementary pack=ComplementaryReimagined (+4543 chars)
+330:[049月2026 03:24:49.246] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] RELAY exec: /taclight scene grass
+333:[049月2026 03:24:50.249] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] RELAY exec: /taclight cam goto grass_low
+336:[049月2026 03:24:51.249] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] RELAY exec: /taclight light off InteropA
+337:[049月2026 03:24:51.252] [Server thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] LIGHT-SYNC InteropA handheld=false gun=false (cmd:off@target)
+338:[049月2026 03:24:51.265] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] LIGHT-SYNC-ACK handheld=false gun=false
+340:[049月2026 03:25:04.243] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] RELAY exec: !shot
+342:[049月2026 03:25:07.753] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] RELAY exec: /taclight light on InteropA
+343:[049月2026 03:25:07.753] [Server thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] LIGHT-SYNC InteropA handheld=true gun=false (cmd:on@target)
+344:[049月2026 03:25:07.769] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] LIGHT-SYNC-ACK handheld=true gun=false
+346:[049月2026 03:25:20.749] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] RELAY exec: !shot
+348:[049月2026 03:25:23.745] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] RELAY exec: /taclight light off InteropA
+349:[049月2026 03:25:23.745] [Server thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] LIGHT-SYNC InteropA handheld=false gun=false (cmd:off@target)
+350:[049月2026 03:25:23.760] [Render thread/INFO] [dev.taclight.TacLightMod/]: [TacLight] LIGHT-SYNC-ACK handheld=false gun=false
