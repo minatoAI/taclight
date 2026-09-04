@@ -20,7 +20,8 @@ import org.spongepowered.asm.mixin.Mixin;
 public abstract class GunItemLightProviderMixin implements IrisItemLightProvider {
     @Override
     public int getLightEmission(Player player, ItemStack stack) {
-        return hasOurLight(stack) ? 15 : 0;
+        // 2026-09-04 用户体感:15→5 暖底基本消失→10 折中(与手电一致);锥形主光走 SSBO 不受影响。
+        return hasOurLight(stack) ? 10 : 0;
     }
 
     @Override

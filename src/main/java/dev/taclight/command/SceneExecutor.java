@@ -61,10 +61,17 @@ final class SceneExecutor {
         for (Entity e : doomed) e.discard();
 
         // ---- 3 环境锁:午夜 + 停昼夜 + 停刷怪 + 晴 ----
+        // 2026-09-04 双端漏光环境防干扰三件套(实机双端被蜘蛛咬死):
+        // 和平(已刷怪清仇恨/停新仇恨) + 预设怪 NoAI(原地不动) + 双玩家创造(免伤)。
+        // 注意:和平会清掉本次新刷的猪以外的旧怪 —— 清实体在前,spawn 在后,顺序已有保障。
         level.setDayTime(18000);
         level.getGameRules().getRule(net.minecraft.world.level.GameRules.RULE_DAYLIGHT).set(false, level.getServer());
         level.getGameRules().getRule(net.minecraft.world.level.GameRules.RULE_DOMOBSPAWNING).set(false, level.getServer());
         level.setWeatherParameters(6000, 6000, false, false);
+        level.getServer().setDifficulty(net.minecraft.world.Difficulty.PEACEFUL, true);
+        for (net.minecraft.server.level.ServerPlayer p : level.getServer().getPlayerList().getPlayers()) {
+            p.setGameMode(net.minecraft.world.level.GameType.CREATIVE);
+        }
 
         // ---- 4 实体 ----
         int spawned = 0;
@@ -81,7 +88,10 @@ final class SceneExecutor {
                 continue;
             }
             e.moveTo(s.x(), s.y(), s.z(), 0.0f, 0.0f);
-            if (e instanceof Mob mob) mob.setPersistenceRequired(); // 防消失,保机位确定性
+            if (e instanceof Mob mob) {
+                mob.setPersistenceRequired(); // 防消失,保机位确定性
+                mob.setNoAi(true);            // 2026-09-04 防干扰:原地不动,不咬玩家
+            }
             level.addFreshEntity(e);
             spawned++;
         }

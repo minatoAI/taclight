@@ -99,10 +99,12 @@ public class TemplateLibraryContract {
         check(t.packHash.containsKey("shaders/program/gbuffers_terrain.glsl")
                         && t.packHash.get("shaders/program/gbuffers_terrain.glsl").matches("[0-9a-f]{16}"),
                 "packHash 含 gbuffers_terrain.glsl 的 16 位 sha256 前缀");
-        check(t.files.size() == 1
-                        && "shaders/program/gbuffers_terrain.glsl".equals(t.files.get(0).file),
-                "Complementary 模板只动 program/gbuffers_terrain.glsl(前向注入,片元半体单规则;"
-                        + "运行时 patchSodium 6 入参按顶点/片元分半到达,顶点半体无调用点则跳过)");
+        check(t.files.size() == 3
+                        && "shaders/program/gbuffers_terrain.glsl".equals(t.files.get(0).file)
+                        && "shaders/program/gbuffers_entities.glsl".equals(t.files.get(1).file)
+                        && "shaders/program/gbuffers_hand.glsl".equals(t.files.get(2).file),
+                "Complementary 模板三文件:terrain(地形)+entities(实体)+hand(手部);"
+                        + "实体/手部走 patchVanilla,地形走 patchSodium(2026-09-04 半透明修复)");
         TemplateLibrary.FileRule fRule = t.files.get(0);
         // 片元半体:版本行后 extension 开 SSBO + DoLighting 定义前文件域内联 + 调用点后加性锥光。
         // 2026-09-04 落盘取证:patchSodium 输入 #version 130 双空格 + DoLighting 定义在
@@ -137,6 +139,17 @@ public class TemplateLibraryContract {
                 "调用点 = DoLighting 后 color.rgb(已照亮)×GAIN×shoulder3(本家同参,无 2048 除法)");
         check(!callOp.contains("/ 2048.0"),
                 "调用点无 /2048(Complementary 前向光照无 iterationT 式输出前除法)");
+        // 2026-09-04 实体半透明修复:entities/hand 调用点须乘 color.a(alpha 门)——
+        // 地形 alpha 恒 1 行为不变;半透处锥光跟压,不再有透层感。影子由宿主 DoLighting 给出。
+        for (int fi = 1; fi <= 2; fi++) {
+            TemplateLibrary.FileRule er = t.files.get(fi);
+            check(er.selectorCount != null && er.selectorCount == 1 && er.ops.size() == 3,
+                    "实体/手部规则形态 = selector 唯一 + 3 算子(" + er.file + ")");
+            String ecall = er.ops.get(2).content;
+            check(ecall.contains("taclight_surface_lighting(viewPos, color.rgb, normalize(normalM)")
+                            && ecall.contains("* color.a"),
+                    "实体/手部调用点乘 color.a: " + er.file);
+        }
     }
 
     private static void inlineCoreThroughTemplate() {

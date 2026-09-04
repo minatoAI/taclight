@@ -83,6 +83,8 @@ public class InlineCoreContract {
         String fwd = TemplateLibrary.inlineCoreTextForward();
         check(fwd.contains("inline-core-forward"),
                 "前向精简块含 marker(幂等锚)");
+        check(fwd.contains("const float TACLIGHT_ATTEN_K = 2.0;"),
+                "前向精简 prelude K=2.0(2026-09-04 用户体感:远射,中段抬起不涨峰值;完整版保持 5.0)");
         for (String anchor : new String[]{
                 "layout(std430, binding = 7)", "vec3 taclight_world_to_scene(",
                 "vec3 taclight_scene_to_view(", "vec3 taclight_view_to_world(",
@@ -91,17 +93,20 @@ public class InlineCoreContract {
                 "vec3 taclight_surface_lighting(vec3 fragView"}) {
             check(fwd.contains(anchor), "前向精简含锚点: " + anchor);
         }
-        // 禁入项:gbuffers_terrain AST 高危面(SSO 主循环/自体豁免常数/GGX/绿锥宏/
-        // 体素 DDA 函数体——实机三连 missing ';' at '{' 20:54/21:06/21:26;
-        // 注:SSBO 声明块自带 voxData[] 注释(纯声明,零语句),故只查 DDA 索引语句
-        // voxData[..] 带下标者(声明 `voxData[]` 不带下标,不在黑名单内)
+        // 禁入项:gbuffers AST 高危面(SSO 主循环/自体豁免常数/GGX/绿锥宏/
+        // 整数位运算 DDA ——实机三连 missing ';' at '{' 20:54/21:06/21:26;
+        // 标量 DDA(float/int 步进,2026-09-04 穿墙修复)允许进前向:无 ivec3/bvec3/
+        // 位运算(idx>>4 同款行),分类/衰减与完整版同源。
+        // 注:SSBO 声明块注释含 idx>>4 字样(纯注释,零语句),故只查 DDA 索引语句
+        // `voxData[idx >> 4]` 带空格下标者(声明 `voxData[]`/标量 `voxData[word]` 不在黑名单内)
         check(!fwd.contains("taclight_sample_shadow")
                         && !fwd.contains("TACLIGHT_SSO_SELF_FREE")
                         && !fwd.contains("taclight_ggx")
                         && !fwd.contains("GREEN_CONE")
-                        && fwd.replace("voxData[]", "").contains("voxData") == false
-                        && !fwd.contains("ivec3(cell") && !fwd.contains("bvec3"),
-                "前向精简不含 SSO/GGX/绿锥/体素 DDA 体(与 composite 完整版区分开)");
+                        && !fwd.contains("voxData[idx >> 4]")
+                        && !fwd.contains("ivec3(") && !fwd.contains("bvec3")
+                        && !fwd.contains("taclight_sso("),
+                "前向精简不含 SSO/GGX/绿锥/整数位运算 DDA(标量 DDA 除外)");
         check(fwd.lines().noneMatch(l -> l.trim().startsWith("#")),
                 "前向精简零预处理指令行(坑80 同理适用 gbuffers AST)");
         check(fwd.lines().noneMatch(l -> l.trim().startsWith("uniform")),
@@ -122,9 +127,12 @@ public class InlineCoreContract {
             check(extractFn(full, fn).equals(extractFn(fwd, fn)),
                     "前向/完整版同函数逐词一致: " + fn);
         }
-        check(extractFn(fwd, "float taclight_vox_transmit(").replaceAll("\\s+", "")
-                        .equals("floattaclight_vox_transmit(vec3worldA,vec3worldB){return1.0;}"),
-                "前向 vox_transmit = 单行恒可见桩(无 DDA,宿主阴影主管遮挡)");
+        check(extractFn(fwd, "float taclight_vox_fetch(").replaceAll("\\s+", "").contains("voxData[word]"),
+                "前向标量取数 taclight_vox_fetch 经 voxData[word] 读 2bit 分类(无位运算)");
+        String fwdVox = extractFn(fwd, "float taclight_vox_transmit(").replaceAll("\\s+", "");
+        check(fwdVox.contains("voxOrigin.w<=0.0") && fwdVox.contains("taclight_vox_fetch(")
+                        && fwdVox.contains("return0.0") && fwdVox.contains("T*=0.40") && fwdVox.contains("T*=0.75"),
+                "前向 vox_transmit = 标量 DDA(栅格无效 -1/实心 0/树叶 0.4/植被 0.75,2026-09-04 穿墙修复)");
     }
 
     /** 按签名抽取函数体(花括号配平),契约级白盒比对。 */

@@ -89,4 +89,45 @@ public class TransformPatcherMixin {
     private static String taclightInteropSodium5(String value) {
         return RuntimePackInjector.patchSource(value);
     }
+
+    // 实体/手部前向注入(2026-09-04 用户实机:灯照玩家实体有半透明感——
+    // patchSodium 只覆地形,gbuffers_entities/hand 走 patchVanilla(6×String,
+    // 取证上轮 javap:patchVanilla/patchDHTerrain/patchDHGeneric 皆 6×String);
+    // 实体/手部与地形同式 DoLighting 调用尾,alpha 门乘 color.a——地形 alpha 恒 1
+    // 行为不变,半透处锥光跟压,不再有透层感;影子由宿主 DoLighting 阴影乘子自然给出)。
+    @ModifyVariable(method = "patchVanilla", argsOnly = true, ordinal = 0,
+            at = @At("HEAD"), remap = false, require = 0)
+    private static String taclightInteropVanilla0(String value) {
+        return RuntimePackInjector.patchSource(value);
+    }
+
+    @ModifyVariable(method = "patchVanilla", argsOnly = true, ordinal = 1,
+            at = @At("HEAD"), remap = false, require = 0)
+    private static String taclightInteropVanilla1(String value) {
+        return RuntimePackInjector.patchSource(value);
+    }
+
+    @ModifyVariable(method = "patchVanilla", argsOnly = true, ordinal = 2,
+            at = @At("HEAD"), remap = false, require = 0)
+    private static String taclightInteropVanilla2(String value) {
+        return RuntimePackInjector.patchSource(value);
+    }
+
+    @ModifyVariable(method = "patchVanilla", argsOnly = true, ordinal = 3,
+            at = @At("HEAD"), remap = false, require = 0)
+    private static String taclightInteropVanilla3(String value) {
+        return RuntimePackInjector.patchSource(value);
+    }
+
+    @ModifyVariable(method = "patchVanilla", argsOnly = true, ordinal = 4,
+            at = @At("HEAD"), remap = false, require = 0)
+    private static String taclightInteropVanilla4(String value) {
+        return RuntimePackInjector.patchSource(value);
+    }
+
+    @ModifyVariable(method = "patchVanilla", argsOnly = true, ordinal = 5,
+            at = @At("HEAD"), remap = false, require = 0)
+    private static String taclightInteropVanilla5(String value) {
+        return RuntimePackInjector.patchSource(value);
+    }
 }

@@ -196,7 +196,7 @@ public final class TemplateLibrary {
         String slim = slimForwardCore(directiveFree(coreNoInclude));
         String prelude = "// TACLIGHT interop prelude-forward(gbuffers 前向精简版,SSO/GGX 不进前向)\n"
                 + "const float TACLIGHT_LIGHT_GAIN = 2.2;\n"
-                + "const float TACLIGHT_ATTEN_K = 5.0;\n"
+                + "const float TACLIGHT_ATTEN_K = 2.0;\n"
                 + "const float TACLIGHT_KNEE_GAIN = 2.0;\n"
                 + "const float TACLIGHT_VOX_FUZZ = 0.35;\n";
         r = "/* " + PatchExecutor.MARKER + " inline-core-forward (injected by TacLight interop) */\n"
@@ -293,13 +293,75 @@ public final class TemplateLibrary {
         return joined + "\n" + FORWARD_VOX_STUB + FORWARD_SURFACE;
     }
 
-    /** 前向 surface:漫反射单项 + 锥判定 + 距离衰减(无体素 DDA,恒可见)。
-     * 无 SSO(屏参/depthtex 在 gbuffers 地形 AST 下高危)/无 GGX(高次幂)/无体素
-     * DDA(ivec3/bvec3/位运算在 gbuffers_terrain AST 下 `missing ';' at '{'`
-     * 三连崩溃 20:54/21:06/21:26,SLIM 减重后行号仍随动;前向遮挡由宿主
-     * DoLighting 阴影主管,此处只做加性锥光)。 */
+    /** 前向 surface:漫反射单项 + 锥判定 + 距离衰减 + 标量体素 DDA 遮挡。
+     * 无 SSO(屏参/depthtex 在 gbuffers 地形 AST 下高危)/无 GGX(高次幂)。
+     * 体素 DDA 用纯 float/int 标量步进(Amanatides-Woo,无 ivec3/bvec3/位运算——
+     * 完整版三连崩溃 `missing ';' at '{'` 20:54/21:06/21:26 的 AST 高危面;前向
+     * 穿墙漏光 2026-09-04 用户实机:恒可见桩 return 1.0 致墙后也亮,宿主 DoLighting
+     * 只管太阳阴影不管 SSBO 灯,故 DDA 必须回前向)。分类/衰减与完整版同源
+     * (实心一票否决/树叶 0.4/植被 0.75)。掠边软化带暂不搬(影缘比自研包硬一档)。 */
     private static final String FORWARD_VOX_STUB =
-            "float taclight_vox_transmit(vec3 worldA, vec3 worldB) { return 1.0; }\n";
+            "float taclight_vox_fetch(vec3 cellCoords, vec3 dim) {\n"
+            + "    if (cellCoords.x < 0.0 || cellCoords.y < 0.0 || cellCoords.z < 0.0) return -1.0;\n"
+            + "    if (cellCoords.x >= dim.x || cellCoords.y >= dim.y || cellCoords.z >= dim.z) return -1.0;\n"
+            + "    int ix = int(floor(cellCoords.x));\n"
+            + "    int iy = int(floor(cellCoords.y));\n"
+            + "    int iz = int(floor(cellCoords.z));\n"
+            + "    int idx = ix + iy * int(dim.x) + iz * int(dim.x) * int(dim.y);\n"
+            + "    int word = idx / 16;\n"
+            + "    int bit = (idx - word * 16) * 2;\n"
+            + "    float w = float(voxData[word]);\n"
+            + "    float div = 1.0;\n"
+            + "    for (int b = 0; b < 16; b++) { if (b >= bit) break; div *= 4.0; }\n"
+            + "    float code = mod(floor(w / div), 4.0);\n"
+            + "    return code;\n"
+            + "}\n"
+            + "float taclight_vox_transmit(vec3 worldA, vec3 worldB) {\n"
+            + "    if (voxOrigin.w <= 0.0) return -1.0;\n"
+            + "    vec3 a = worldA - voxOrigin.xyz;\n"
+            + "    vec3 b = worldB - voxOrigin.xyz;\n"
+            + "    vec3 dim = vec3(float(voxMeta.x), float(voxMeta.y), float(voxMeta.z));\n"
+            + "    if (a.x < 0.0 || a.y < 0.0 || a.z < 0.0) return -1.0;\n"
+            + "    if (a.x >= dim.x || a.y >= dim.y || a.z >= dim.z) return -1.0;\n"
+            + "    if (b.x < 0.0 || b.y < 0.0 || b.z < 0.0) return -1.0;\n"
+            + "    if (b.x >= dim.x || b.y >= dim.y || b.z >= dim.z) return -1.0;\n"
+            + "    vec3 dv = b - a;\n"
+            + "    float len = length(dv);\n"
+            + "    if (len < 0.0001) return 1.0;\n"
+            + "    vec3 dir = dv / len;\n"
+            + "    float cx = floor(a.x); float cy = floor(a.y); float cz = floor(a.z);\n"
+            + "    float lx = floor(b.x - dir.x * 0.001);\n"
+            + "    float ly = floor(b.y - dir.y * 0.001);\n"
+            + "    float lz = floor(b.z - dir.z * 0.001);\n"
+            + "    float sx = dir.x > 0.0 ? 1.0 : (dir.x < 0.0 ? -1.0 : 0.0);\n"
+            + "    float sy = dir.y > 0.0 ? 1.0 : (dir.y < 0.0 ? -1.0 : 0.0);\n"
+            + "    float sz = dir.z > 0.0 ? 1.0 : (dir.z < 0.0 ? -1.0 : 0.0);\n"
+            + "    float ax = abs(dir.x); float ay = abs(dir.y); float az = abs(dir.z);\n"
+            + "    float tdx = ax > 0.000000001 ? 1.0 / ax : 1000000000.0;\n"
+            + "    float tdy = ay > 0.000000001 ? 1.0 / ay : 1000000000.0;\n"
+            + "    float tdz = az > 0.000000001 ? 1.0 / az : 1000000000.0;\n"
+            + "    float tmx = ax > 0.000000001 ? (dir.x > 0.0 ? (cx + 1.0 - a.x) : (a.x - cx)) * tdx : 1000000000.0;\n"
+            + "    float tmy = ay > 0.000000001 ? (dir.y > 0.0 ? (cy + 1.0 - a.y) : (a.y - cy)) * tdy : 1000000000.0;\n"
+            + "    float tmz = az > 0.000000001 ? (dir.z > 0.0 ? (cz + 1.0 - a.z) : (a.z - cz)) * tdz : 1000000000.0;\n"
+            + "    float T = 1.0;\n"
+            + "    for (int guard = 0; guard < 384; guard++) {\n"
+            + "        float tNext = min(tmx, min(tmy, tmz));\n"
+            + "        float stepX = 0.0; float stepY = 0.0; float stepZ = 0.0;\n"
+            + "        float eps = max(0.000001, abs(tNext) * 0.00001);\n"
+            + "        if (abs(tmx - tNext) <= eps) { stepX = sx; tmx += tdx; }\n"
+            + "        if (abs(tmy - tNext) <= eps) { stepY = sy; tmy += tdy; }\n"
+            + "        if (abs(tmz - tNext) <= eps) { stepZ = sz; tmz += tdz; }\n"
+            + "        cx += stepX; cy += stepY; cz += stepZ;\n"
+            + "        if (cx < 0.0 || cy < 0.0 || cz < 0.0) return T;\n"
+            + "        if (cx >= dim.x || cy >= dim.y || cz >= dim.z) return T;\n"
+            + "        if (cx == lx && cy == ly && cz == lz) return T;\n"
+            + "        float code = taclight_vox_fetch(vec3(cx + 0.5, cy + 0.5, cz + 0.5), dim);\n"
+            + "        if (code >= 2.5) return 0.0;\n"
+            + "        else if (code >= 1.5) T *= 0.40;\n"
+            + "        else if (code >= 0.5) T *= 0.75;\n"
+            + "    }\n"
+            + "    return T;\n"
+            + "}\n";
     private static final String FORWARD_SURFACE =
             "vec3 taclight_surface_lighting(vec3 fragView, vec3 albedo, vec3 n,\n"
             + "                               float roughness, float metal, vec3 f0) {\n"

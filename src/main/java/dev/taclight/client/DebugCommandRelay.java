@@ -110,6 +110,28 @@ public final class DebugCommandRelay {
             ClientEvents.dumpDiag();
             return;
         }
+        if (line.equals("!lan") || line.startsWith("!lan ")) {
+            // 直调服务端开 LAN(2026-09-04 双端漏光环境:/publish 走客户端命令树被
+            // 本地预解析拒"未知或不完整的命令";此处绕过命令分发器,直接调集成服
+            // publishServer,与暂停菜单"对局域网开放"同入口;固定端口 25560,
+            // 观察者 B 直连 127.0.0.1:25560。传 0 走随机端口实测 getPort()=0 未绑定)。
+            try {
+                var server = mc.getSingleplayerServer();
+                if (server == null) {
+                    TacLightMod.LOGGER.warn("[TacLight] RELAY lan: 非单人集成服,无服务端可开");
+                } else if (!server.isPublished()) {
+                    boolean ok = server.publishServer(
+                            net.minecraft.world.level.GameType.SURVIVAL, false, 25560);
+                    TacLightMod.LOGGER.info("[TacLight] RELAY lan -> {} (port={})", ok, 25560);
+                } else {
+                    TacLightMod.LOGGER.info("[TacLight] RELAY lan: 已开放(port={})",
+                            server.getPort());
+                }
+            } catch (Throwable t) {
+                TacLightMod.LOGGER.warn("[TacLight] RELAY lan failed: {}", t.toString());
+            }
+            return;
+        }
         if (line.startsWith("!bench")) {
             ClientEvents.startBench();
             return;

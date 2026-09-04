@@ -1,5 +1,35 @@
 # TacLight Changelog
 
+## 09-04 · 发射10活体感+实体不透明+漏光复核（三项全绿，待用户体感/拍板）
+
+- **发射10锥池（活A=InteropA3，新角色）**：A侧on→off meanDiff **15.07**/changed **41.5%**；
+  hotspot mean 85.1/p90 180.5/**ge200仅2/ge250为0**（亮但无死白）；与03:3x轮（89.8/182.8）基本一致→
+  锥池亮度由SSBO锥主导，发射5→10几乎不动锥池、只补暖氛围。证据
+  `docs/evidence/2026-09-04-emission10-entity/`（README+4帧+log-excerpt+manifest，可复算）。
+- **玩家实体不透明CLOSED**：B贴脸看受照A（后脑/发片/躯干暖照实心、无透层）+猪/手部一致，`* color.a`修复成立。
+- **漏光复核**：活A照墙时B看墙背仍黑，verdict维持CLOSED；bench开/关灯双双avgFPS 59.8（vsync上限，零可感开销），无阴影伪影。
+- **新角色rollout通过**：InteropA3离线UUID文件`e4aea662…`逐字节验算一致，登录点世界出生点（无墙前机位现象，佐证v2§3纠错）；
+  B后加入者生存→重跑scene转创造（坑95已按v2§3重写：entity-id推理收回+删档=重置+真新玩家标准）。
+- 契约：Java核心全绿；FrameRecorder跨语言项红系本环境沙箱EPERM拦Node-spawn-Node（已定位，与代码无关，详见交接）。
+- 收尾状态：A灯开+双端包启用（留给用户体感，未执行§7关灯/禁包）；LAN 25560开；未提交未push（等批准）。
+
+## 09-04 · 双端墙体漏光验证：锥光不穿墙（反向验证闭环，待用户体感/拍板）
+
+- **判定=正结果**：活人B持灯照墙背，B侧on→off meanDiff **18.73**/changed **24.5%**（锥工作）；
+  A侧看对面on→off meanDiff **0.29**/changed **0.8%**=噪声。标量DDA遮挡成立，穿墙无锥池。
+  证据 `docs/evidence/2026-09-04-dual-leak/`（README+6帧+热图+log-excerpt+manifest，可复算）。
+- **穿墙亮区真凶**：前序“灯关还亮”=死客户端不吃S2C、A物品发射等级卡10（宿主heldLighting无遮挡直照），非SSBO锥漏。
+- **新坑94（cam机位≠灯方向，待立项）**：灯跟玩家头不跟相机；A相机yaw180头留出生朝向→锥照身后，A端墙面帧全降级为参考。B头/机一致→B侧结论有效。
+- **A端5连死**（06:41蜘蛛旧+09:53/10:09/10:16/10:21 fresh重生数分钟内死；和平已落盘Difficulty=0仍死→非怪；登录点恒为墙前机位可疑）。死亡调查按用户要求冻结，不阻塞本结论。
+- 契约：改动相关三组绿（TemplateLibrary/InlineCore/ScenePlan）；AllContracts尾部FrameRecorder+rec-analyze红系沙箱EPERM拦Node管道（环境限制，与代码无关）。未提交未push（等批准）。
+
+## 待办 tickets(用户 09-04 立)
+
+- **T1 枪灯手动开关**(用户要求先备忘不实现,键位未定):现状枪灯=每 tick TaCZ 探针
+  读主手枪 LASER 槽(装 taclight:gun_light=开,无=关),`!gun` 调试翻转会被探针覆盖。
+  需求=玩家可手动开关(无附件也能强制亮?与探针的优先级?键位待定)。涉及
+  ClientLightState.gunManual 旗+探针/S2C 覆盖规则(主线 09-03 8019aca 同款模式)。
+
 ## 09-04 · Complementary r5.9 前向注入命中+锥池可见(用户问 iterationT 自适应曝光影响)
 
 - **状态=正结果**:`interop injected family=complementary (+4543 chars)` ×2(两份片元
