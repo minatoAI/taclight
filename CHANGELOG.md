@@ -1,5 +1,12 @@
 ## 09-05 · 主线合回 interop/core-extract(无快进合并,冲突已解,未 push)
 
+- **合并后端到端验收(用户要求"合并后能不能正常用",evidence/2026-09-05-merge-e2e/)**:
+  jar 重建(build/libs/taclight-0.10.0.jar,269KB,refmap/mixins/模板/类全在,内网需
+  -Dcheck.certs=false)+ 真实客户端(run/ 主机,ComplementaryReimagined)零模组级错误:
+  loading/NET/CMDS/SSBO/mixin gate 全绿,**injected family=complementary (+8010 chars)×5**;
+  灯 off/on 服务端真源+ACK+像素 meanDiff 11.66/changed 17.7%(锥池目检确认);
+  三旋钮实机 `!bright 10`/`!dist 24`/`!atten 2` RELAY 回显+像素生效,off 全部回默认。
+  ("无 TacLight 注入"提示=已知过期误报,注入日志已证命中。)
 - **合并**:`master(4d6f09e)` ← `interop/core-extract`(含 935548a 三旋钮+坑99-102 批量),基 `c3bb689`。
   冲突 3 处,全部"双留"零语义丢失:`build.gradle`(generateRefmap+copyInlineCore 两个 Task 并存);
   `taclight.mixins.json`(client 侧 7 项并集,补 TransformPatcherMixin+GunModelRenderProbeMixin 等);
