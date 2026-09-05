@@ -1,3 +1,15 @@
+## 09-05 · !beamonly 只看光束开关(未 push)
+
+- **用户需求**:单独观察体积光形态。SSBO 头部 flags bit2(`FLAG_BEAM_ONLY=4`,契约守卫与
+  HAS_DATA/DEBUG/TIMING 无冲突)→ composite.fsh 的 M1 表面照明分支整支跳过(1 行门),
+  composite1 体积束照常;`!beamonly on|off|status`,重启清零,knob.ps1/knob.bat 已同步。
+- 契约 LightTune 42→**51** 项,`AllContracts: ALL PASS`;实机(6m+亮30+beam0.5)on vs off
+  meanDiff **11.7**/changed **12.2%**——on 态墙砖平黑(照明关断),白色光球=体积束顺视
+  积分+bloom;off 态光池内可见被照墙砖。证据 docs/evidence/2026-09-05-beam-density-knob/
+  (追加 A-beamonly-off/on.png + README)。
+- 观感配方:`beamonly on` + `beam 0.5` + `bright 10~15`,退 6m;侧视角见柱形、顺视角为
+  光雾球(g=0.55 前向散射特性)。
+
 ## 09-05 · !beam 第五旋钮:体积光束密度(丁达尔效果强度,未 push)
 
 - **背景**:用户体感"没有丁达尔效应"。判定:功能早已存在(composite1 32 步 raymarch + HG

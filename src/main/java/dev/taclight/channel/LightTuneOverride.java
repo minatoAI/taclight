@@ -28,6 +28,7 @@ public final class LightTuneOverride {
     private static volatile boolean kneeActive;
     private static volatile float beamValue;
     private static volatile boolean beamActive;
+    private static volatile boolean beamOnlyActive;
 
     private LightTuneOverride() {}
 
@@ -162,5 +163,26 @@ public final class LightTuneOverride {
     public static float beamDensityOr(float configDensity) {
         if (!beamActive) return configDensity;
         return beamValue;
+    }
+
+    /** relay 入口:返回状态串(供日志)。 */
+    public static String configureBeamonly(String arg) {
+        if (arg.isEmpty() || arg.equals("status")) {
+            return beamOnlyActive ? "beamonly=on(表面照明已关,只留体积束)" : "beamonly=off";
+        }
+        if (arg.equals("on")) {
+            beamOnlyActive = true;
+            return "beamonly=on(表面照明已关,只留体积束)";
+        }
+        if (arg.equals("off")) {
+            beamOnlyActive = false;
+            return "beamonly=off";
+        }
+        return "bad arg " + arg + " (want on/off/status)";
+    }
+
+    /** onFrame 调用:true → 头部 flags 置 FLAG_BEAM_ONLY(GLSL 跳过 M1 表面照明)。 */
+    public static boolean beamOnly() {
+        return beamOnlyActive;
     }
 }

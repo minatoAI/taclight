@@ -98,8 +98,8 @@ void main() {
                 glow += taclight_debug_green_cone(lights[i], fragView) * vec3(0.15, 1.0, 0.30);
             }
             color += glow * 1.8;
-        } else {
-            // ---- M1 真实表面照明 ----
+        } else if ((flags & TACLIGHT_FLAG_BEAM_ONLY) == 0u) {
+            // ---- M1 真实表面照明(beamonly 位置位时整支跳过:只留 composite1 体积束)----
             vec4 g1 = texture(colortex1, texcoord);
             vec4 g2 = texture(colortex2, texcoord);
             vec3 albedo = pow(g2.rgb, vec3(2.2));   // 线性域照明:albedo 一并解码

@@ -50,6 +50,8 @@ public final class SpotlightBufferLayout {
     public static final int FLAG_HAS_DATA = 1;
     /** bit1: 霓虹调试模式(K 键)——GLSL 用纯绿锥形光渲染,肉眼分辨通道。 */
     public static final int FLAG_DEBUG = 1 << 1;
+    /** bit2: 只看光束(!beamonly)——GLSL 跳过 M1 表面照明,composite1 体积束照常(2026-09-05)。 */
+    public static final int FLAG_BEAM_ONLY = 1 << 2;
     /** bit3: 时序探针(G0 风格)——GLSL 在表面 pass 用 atomicOr 写回 reserved。 */
     public static final int FLAG_TIMING_PROBE = 1 << 3;
 

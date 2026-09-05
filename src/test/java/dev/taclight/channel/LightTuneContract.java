@@ -7,7 +7,8 @@ import dev.taclight.channel.ClientSpotlightUploader.LightParams;
  * {@code !bright} 直接亮度(绝对强度) / {@code !dist} 绝对照距 /
  * {@code !atten} 衰减系数 K(经 SSBO cone.z 逐灯透传) /
  * {@code !knee} 近场软肩 G(经 SSBO cone.w 逐灯透传,0=恒等直通) /
- * {@code !beam} 体积光密度(经 SSBO vlParams.y 直接换值,0=完全关光束,off=回 config 默认)。
+ * {@code !beam} 体积光密度(经 SSBO vlParams.y 直接换值,0=完全关光束,off=回 config 默认) /
+ * {@code !beamonly} 只看光束(头部 flags bit2,跳过 M1 表面照明,composite1 体积束照常)。
  * 默认全关 = 零行为变化;越界/非法拒绝不污染;收尾全关(零残留)。
  */
 public class LightTuneContract {
@@ -17,6 +18,7 @@ public class LightTuneContract {
         LightTuneOverride.configureAtten("off");
         LightTuneOverride.configureKnee("off");
         LightTuneOverride.configureBeam("off");
+        LightTuneOverride.configureBeamonly("off");
 
         // ---- 默认:各路直通 ----
         check(Math.abs(LightTuneOverride.brightnessFor(6.0f) - 6.0f) < 1e-6, "默认亮度直通");
@@ -82,6 +84,38 @@ public class LightTuneContract {
         String bmNaN = LightTuneOverride.configureBeam("fog");
         check(bmNaN.startsWith("bad arg"), "beam 非法输入拒绝: " + bmNaN);
 
+        // ---- beamonly:只看光束(2026-09-05,头部 flags bit2 → GLSL 跳过 M1 表面照明) ----
+        check(!LightTuneOverride.beamOnly(), "默认 beamonly=false(零行为变化)");
+        String bo1 = LightTuneOverride.configureBeamonly("on");
+        check(bo1.contains("on"), "beamonly on 回显: " + bo1);
+        check(LightTuneOverride.beamOnly(), "beamonly on 生效");
+        String boSt = LightTuneOverride.configureBeamonly("status");
+        check(boSt.contains("on"), "beamonly status 回显当前态: " + boSt);
+        String bo0 = LightTuneOverride.configureBeamonly("off");
+        check(bo0.contains("off"), "beamonly off 回显: " + bo0);
+        check(!LightTuneOverride.beamOnly(), "beamonly off 生效");
+        String boBad = LightTuneOverride.configureBeamonly("yes");
+        check(boBad.startsWith("bad arg"), "beamonly 非法输入拒绝: " + boBad);
+        check(!LightTuneOverride.beamOnly(), "非法输入不污染当前态");
+        // bit2 空闲无冲突(布局常量守卫:动 flags 位必须先过这关)
+        check(dev.taclight.channel.SpotlightBufferLayout.FLAG_BEAM_ONLY == 4
+                        && (SpotlightBufferLayout.FLAG_BEAM_ONLY
+                            & (SpotlightBufferLayout.FLAG_HAS_DATA
+                               | SpotlightBufferLayout.FLAG_DEBUG
+                               | SpotlightBufferLayout.FLAG_TIMING_PROBE)) == 0,
+                "FLAG_BEAM_ONLY=bit2(4)与既有 flags 无冲突");
+        try {
+            String core = java.nio.file.Files.readString(
+                    java.nio.file.Path.of("pack/shaders/lib/taclight_core.glsl"));
+            check(core.contains("#define TACLIGHT_FLAG_BEAM_ONLY"), "GLSL:taclight_core 定义 BEAM_ONLY 位");
+            String comp = java.nio.file.Files.readString(
+                    java.nio.file.Path.of("pack/shaders/composite.fsh"));
+            check(comp.contains("(flags & TACLIGHT_FLAG_BEAM_ONLY) == 0u"),
+                    "GLSL:composite M1 分支有 beamonly 门(跳过表面照明)");
+        } catch (Exception e) {
+            throw new AssertionError("FAIL GLSL 源读取: " + e);
+        }
+
         // ---- buildSpotBeam 集成 ----
         LightParams p = new LightParams(36.0f, 96.0f, 6.0f, 0.848f, 0.951f, 0.05f);
         SpotlightData tuned = ClientSpotlightUploader.buildSpotBeam(
@@ -108,6 +142,7 @@ public class LightTuneContract {
         LightTuneOverride.configureAtten("off");
         LightTuneOverride.configureKnee("off");
         LightTuneOverride.configureBeam("off");
+        LightTuneOverride.configureBeamonly("off");
         SpotlightData clean = ClientSpotlightUploader.buildSpotBeam(
                 0, 0, 0, 0, 0, -1, p, 1.0f);
         check(Math.abs(clean.intensity() - 6.0f) < 1e-4
@@ -117,7 +152,7 @@ public class LightTuneContract {
                 "收尾关闭:强度/半径/atten/knee 全回默认(零残留)");
         check(Math.abs(clean.density() - 0.05f) < 1e-4, "收尾关闭:density 回 config 默认 0.05");
 
-        System.out.println("LightTuneContract: ALL PASS (42 checks)");
+        System.out.println("LightTuneContract: ALL PASS (51 checks)");
     }
 
     private static void check(boolean cond, String what) {

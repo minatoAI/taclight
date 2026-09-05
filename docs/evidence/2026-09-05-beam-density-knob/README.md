@@ -28,3 +28,15 @@
 
 - A-beam0-off.png / A-beam035.png / A-beam07.png:三档同机位对比(A 端第一人称)。
 - 复算:node tools/imgdiff.js A-beam0-off.png A-beam035.png --json → meanDiff≈17.0。
+
+## 追加:!beamonly 只看光束开关(同日第二轮)
+
+- 用户需求:单独观察体积光形态。SSBO 头部 flags bit2(FLAG_BEAM_ONLY=4,契约守卫与
+  HAS_DATA/DEBUG/TIMING 无冲突)→ composite.fsh M1 表面照明分支整支跳过
+  (`else if ((flags & TACLIGHT_FLAG_BEAM_ONLY) == 0u)`),composite1 体积束照常。
+- 契约 LightTune 42→**51** 项 ALL PASS(含 GLSL 源两处断言)。
+- 实机(6m+亮30+atten2+dist96+beam0.5):on vs off meanDiff **11.7**/changed **12.2%**
+  ——on 态墙砖失去照明(平黑反照率),白色光球 = 体积束顺视积分 + bloom;off 态光池内
+  可见被照墙砖纹理。A-beamonly-off.png / A-beamonly-on.png。
+- 推荐观感配方:`beamonly on` + `beam 0.5` + `bright 10~15`,退 6m;侧视角(ObserverB
+  看 Dev)见柱形,顺视角为光雾球(g=0.55 前向散射特性)。

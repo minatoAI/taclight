@@ -122,6 +122,7 @@ public final class ClientSpotlightUploader {
         }
         collectRemoteLights(mc, eye, cfg, lights);
         int extraFlags = ClientLightState.debugMode() ? SpotlightBufferLayout.FLAG_DEBUG : 0;
+        if (LightTuneOverride.beamOnly()) extraFlags |= SpotlightBufferLayout.FLAG_BEAM_ONLY;
         // 体素遮挡栅格(09-01 深夜④ DDA):墙后漏光立项,与灯数据同缓冲上传;
         // 禁用/无灯 → null,GLSL 逐光线回退屏幕空间 SSO。
         var voxelGrid = dev.taclight.client.VoxelGrid.update(mc, lights);

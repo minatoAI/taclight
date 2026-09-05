@@ -37,6 +37,7 @@
 // ---- 头部 flags 位(与 SpotlightBufferLayout.java 逐位一致)----
 #define TACLIGHT_FLAG_HAS_DATA     1u   // bit0
 #define TACLIGHT_FLAG_DEBUG        2u   // bit1 K 键绿锥调试(doc06 §2.10)
+#define TACLIGHT_FLAG_BEAM_ONLY    4u   // bit2 !beamonly 只看光束(跳过表面照明,2026-09-05)
 #define TACLIGHT_FLAG_TIMING_PROBE 8u   // bit3 reserved 回读探针(DEBUG 构建才置位)
 
 // ---- 每灯 96B · 6×vec4(std430,与 Java writeLight 写序一致)----
