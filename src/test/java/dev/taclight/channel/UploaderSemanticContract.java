@@ -135,7 +135,53 @@ public class UploaderSemanticContract {
         check(anchorTp.y == 122.62 && anchorTp.x == 2004.0 && anchorTp.z == 3.5,
                 "灯锚值 = 玩家眼位(无 bob 分量,坐标原样)");
 
-        System.out.println("UploaderSemanticContract: ALL PASS (32 checks)");
+        // ---- 8) 贴墙穿墙修复:灯头出实心钳制(2026-09-05)----
+        // 根因:持枪贴墙时枪口灯位被推进墙体素格,DDA 起点格豁免跳过灯所在墙格 →
+        // 整墙对该灯透明。钳制 = 灯落实心格 → 沿 −dir 退到首个非实心格。
+        java.util.List<SpotlightData> wl = new java.util.ArrayList<>();
+        // 灯位 (0.2,0.5,5.5) 落墙格 z=5(实心),dir=(0,0,1)
+        SpotlightData wallLamp = new SpotlightData(0.2f, 0.5f, 5.5f, 18f,
+                1f, 0.96f, 0.88f, 6f, 0f, 0f, 1f, 1.0f, 0.848f, 0.951f,
+                5.0f, 2.0f, 0.55f, 0.35f, 1f, 0f, -1f, 0f, 1f, 0f);
+        wl.add(wallLamp);
+        VoxelField.Box wbox = new VoxelField.Box(0, 0, 0, 8, 8, 8);
+        int[] wdata = new int[VoxelField.VOX_MAX_UINTS];
+        VoxelField.pack(wbox, 0, 0, 5, VoxelField.CODE_SOLID, wdata);
+        VoxelField.Snapshot wsnap = new VoxelField.Snapshot(
+                wbox.ox, wbox.oy, wbox.oz, wbox.dx, wbox.dy, wbox.dz, wdata, 7L);
+        ClientSpotlightUploader.clampLightsOutOfSolid(wl, wsnap);
+        SpotlightData wallMoved = wl.get(0);
+        check((int) Math.floor(wallMoved.posZ()) == 4, "墙内灯头退到墙前空气格");
+        check(Float.compare(wallMoved.radius(), 18f) == 0
+                && Float.compare(wallMoved.intensity(), 6f) == 0
+                && Float.compare(wallMoved.coneReservedZ(), 5.0f) == 0
+                && Float.compare(wallMoved.coneReservedW(), 2.0f) == 0,
+                "钳制只换灯位三坐标,半径/亮度/cone.z/cone.w 逐位保留");
+        // cookie = 灯→胶囊中心偏移:灯位退了 Δ,偏移必须 += Δ(胶囊中心世界位不动)。
+        SpotlightData cappedLamp = wallLamp.withSelfCapsule(1.0f, 2.0f, 3.0f, 0.45f);
+        java.util.List<SpotlightData> cl = new java.util.ArrayList<>();
+        cl.add(cappedLamp);
+        ClientSpotlightUploader.clampLightsOutOfSolid(cl, wsnap);
+        SpotlightData cappedMoved = cl.get(0);
+        float cdz = wallLamp.posZ() - cappedMoved.posZ();
+        check(Math.abs(cappedMoved.cookieB() - (3.0f + cdz)) < 1e-5
+                && Math.abs(cappedMoved.cookieR() - 1.0f) < 1e-6
+                && Math.abs(cappedMoved.cookieA() - 0.45f) < 1e-6,
+                "cookie 偏移按位移量平移(胶囊世界中心不动)");
+        // fail-safe:快照 null / 灯在空气格 → 原样
+        java.util.List<SpotlightData> nl = new java.util.ArrayList<>();
+        nl.add(wallLamp);
+        ClientSpotlightUploader.clampLightsOutOfSolid(nl, null);
+        check(nl.get(0) == wallLamp, "快照 null 原样(禁用栅格零回归)");
+        java.util.List<SpotlightData> al = new java.util.ArrayList<>();
+        SpotlightData airLamp = new SpotlightData(0.2f, 0.5f, 4.5f, 18f,
+                1f, 0.96f, 0.88f, 6f, 0f, 0f, 1f, 1.0f, 0.848f, 0.951f,
+                0f, 0f, 0.55f, 0.35f, 1f, 0f, -1f, 0f, 1f, 0f);
+        al.add(airLamp);
+        ClientSpotlightUploader.clampLightsOutOfSolid(al, wsnap);
+        check(Float.compare(al.get(0).posZ(), 4.5f) == 0, "空气格灯位原样(正常持灯零影响)");
+
+        System.out.println("UploaderSemanticContract: ALL PASS (38 checks)");
     }
 
     private static void check(boolean cond, String what) {

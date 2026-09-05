@@ -52,7 +52,29 @@ public class VoxelFieldContract {
         VoxelField.Box box3 = VoxelField.boxFor(List.of(L0));
         check(box3.dx >= 1 && box3.dy >= 1 && box3.dz >= 1, "小半径盒非退化");
 
-        System.out.println("VoxelFieldContract: ALL PASS (14 checks)");
+        // ---- 6. 出实心钳制(2026-09-05 贴墙穿墙根因):灯落实心格 → 沿 −dir 退到首个非实心格 ----
+        VoxelField.Box wb = new VoxelField.Box(0, 0, 0, 8, 8, 8);
+        int[] wdata = new int[VoxelField.VOX_MAX_UINTS];
+        VoxelField.pack(wb, 0, 0, 5, VoxelField.CODE_SOLID, wdata); // 墙格 z=5
+        double[] out = VoxelField.clampOutOfSolid(wb, wdata, 0.2, 0.5, 5.5, 0, 0, 1);
+        check((int) Math.floor(out[2]) == 4, "墙内灯头退到墙前空气格(z=5.x→4.x)");
+        check(Math.abs(out[0] - 0.2) < 1e-9 && Math.abs(out[1] - 0.5) < 1e-9, "只沿 −dir 回退,x/y 不动");
+        double[] free = VoxelField.clampOutOfSolid(wb, wdata, 0.2, 0.5, 4.5, 0, 0, 1);
+        check(free[2] == 4.5, "空气格灯位原样(fail-safe 零回归)");
+        double[] zero = VoxelField.clampOutOfSolid(wb, wdata, 0.2, 0.5, 5.5, 0, 0, 0);
+        check(zero[2] == 5.5, "零方向原样(防除零,无 NaN)");
+        VoxelField.Box deep = new VoxelField.Box(0, 0, 0, 64, 8, 8);
+        int[] ddata = new int[VoxelField.VOX_MAX_UINTS];
+        for (int i = 0; i < 64; i++) VoxelField.pack(deep, i, 0, 0, VoxelField.CODE_SOLID, ddata);
+        double[] stuck = VoxelField.clampOutOfSolid(deep, ddata, 32.5, 0.5, 0.5, 1, 0, 0);
+        check(stuck[0] == 32.5, "2m 无出路原样(fail-safe,行为与今日一致)");
+        double[] veg = VoxelField.clampOutOfSolid(wb, wdata, 0.2, 0.5, 5.5, 0, 0, 1);
+        VoxelField.pack(wb, 0, 0, 5, VoxelField.CODE_LEAF, wdata);
+        double[] leaf = VoxelField.clampOutOfSolid(wb, wdata, 0.2, 0.5, 5.5, 0, 0, 1);
+        check(leaf[2] == 5.5, "树叶格不管(单格透射误差小,保持 scope 最小)");
+        check(veg[2] < 5.0, "对照:同坐标实心格确被钳制(排除测试本身假阳性)");
+
+        System.out.println("VoxelFieldContract: ALL PASS (21 checks)");
     }
 
     private static void check(boolean cond, String what) {

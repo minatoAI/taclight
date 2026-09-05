@@ -67,6 +67,8 @@ public class ShaderCoreContract {
                 "vec3 taclight_view_to_world(vec3 viewPos)",
                 "float taclight_attenuation(float dist, float radius, float kOverride)",
                 "float taclight_soft_knee(float x)",
+                "float taclight_soft_knee(float x, float gOverride)",
+                "vec3 taclight_soft_knee3(vec3 x, float gOverride)",
                 "vec3 taclight_shoulder3(vec3 x, float t, float head)",
                 "vec3 taclight_ggx(vec3 n, vec3 v, vec3 l, float roughness, vec3 f0)",
                 "float taclight_sso(vec3 fragView, vec3 lightView, TacLightSpot L)",
@@ -94,6 +96,8 @@ public class ShaderCoreContract {
                 "style 经 include 复用 math(传递可见给 final),不再重复定义");
 
         // ---- 边界 7:消费 pass 不残留灯循环本体 ----
+        check(core.contains("taclight_soft_knee3(") && core.contains("L.cone.w"),
+                "surface 主循环消费 cone.w(!knee 经 SSBO 透传,0=恒等回退)");
         check(composite.contains("taclight_surface_lighting(fragView, albedo, n, roughness, metal, f0)"),
                 "composite 表面照明经 core 接口调用(本 pass 只做 G-Buffer 解码)");
         check(!composite.contains("if (dist > radius || radius < 1e-3) continue;")

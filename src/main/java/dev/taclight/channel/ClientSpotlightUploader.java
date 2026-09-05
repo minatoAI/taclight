@@ -125,6 +125,7 @@ public final class ClientSpotlightUploader {
         // 体素遮挡栅格(09-01 深夜④ DDA):墙后漏光立项,与灯数据同缓冲上传;
         // 禁用/无灯 → null,GLSL 逐光线回退屏幕空间 SSO。
         var voxelGrid = dev.taclight.client.VoxelGrid.update(mc, lights);
+        clampLightsOutOfSolid(lights, voxelGrid);
         LightBuffer.upload(lights, extraFlags, voxelGrid);
         if (FrameRecorder.active()) {
             long t = System.nanoTime() / 1_000_000L;
@@ -454,6 +455,30 @@ public final class ClientSpotlightUploader {
                 SELF_CAP_RADIUS);
     }
 
+    /** 灯头出实心钳制(2026-09-05 贴墙穿墙根因):栅格快照同帧复用,灯落实心格 →
+     *  沿 −dir 退到首个非实心格。只换灯位三坐标,其余 21 字段逐位保留;
+     *  自体胶囊 cookie 是"灯→胶囊中心"偏移,按位移量平移(cookie += 旧灯位−新灯位)。
+     *  快照 null(禁用/无栅格) → 原样 fail-safe,行为与今日一致。 */
+    static void clampLightsOutOfSolid(List<SpotlightData> lights, VoxelField.Snapshot snap) {
+        if (snap == null || lights.isEmpty()) return;
+        VoxelField.Box b = new VoxelField.Box((int) snap.ox(), (int) snap.oy(), (int) snap.oz(),
+                snap.dx(), snap.dy(), snap.dz());
+        for (int i = 0; i < lights.size(); i++) {
+            SpotlightData l = lights.get(i);
+            double[] p = VoxelField.clampOutOfSolid(b, snap.data(),
+                    l.posX(), l.posY(), l.posZ(), l.dirX(), l.dirY(), l.dirZ());
+            if (p[0] == l.posX() && p[1] == l.posY() && p[2] == l.posZ()) continue;
+            float nx = (float) p[0], ny = (float) p[1], nz = (float) p[2];
+            lights.set(i, new SpotlightData(nx, ny, nz, l.radius(),
+                    l.red(), l.green(), l.blue(), l.intensity(),
+                    l.dirX(), l.dirY(), l.dirZ(), l.type(),
+                    l.cosOuter(), l.cosInner(), l.coneReservedZ(), l.coneReservedW(),
+                    l.anisotropy(), l.density(), l.beam(), l.vlReservedW(),
+                    l.cookieR() + (l.posX() - nx), l.cookieG() + (l.posY() - ny),
+                    l.cookieB() + (l.posZ() - nz), l.cookieA()));
+        }
+    }
+
     /** 参考亮度:radius 配置语义的锚点;亮度-距离按反平方等照度律耦合(d ∝ √I,doc06 §8.7)。 */
     public static final float INTENSITY_REFERENCE = 6.0f;
 
@@ -473,7 +498,8 @@ public final class ClientSpotlightUploader {
      *  亮度-距离耦合:有效半径 = radius × √(finalIntensity/6.0),钳制 ≤ radiusMax ——
      *  未来"挡位"只需改亮度,照距自动 √ 缩放(用户需求:亮度和距离正相关)。
      *  2026-09-04 三旋钮(体感调参):!bright 在 !lv 之后取值(绝对亮度,互斥以后写者为准);
-     *  !dist 覆盖本耦合(绝对照距);!atten 经 cone.z 逐灯透传(0=GLSL 回退编译期默认)。 */
+     *  !dist 覆盖本耦合(绝对照距);!atten 经 cone.z 逐灯透传(0=GLSL 回退编译期默认)。
+     *  2026-09-05 第四旋钮 !knee 经 cone.w 逐灯透传(0=GLSL 恒等直通=表面路径今日行为)。 */
     public static SpotlightData buildSpotBeam(double wx, double wy, double wz,
                                               double dx, double dy, double dz,
                                               LightParams p, float intensityMult) {
@@ -488,11 +514,12 @@ public final class ClientSpotlightUploader {
                 (float) dx, (float) dy, (float) dz,
                 p.cosOuter, p.cosInner, p.beamDensity, 1.0f);
         float k = LightTuneOverride.attenK();
-        if (k == 0.0f) return plain;
+        float g = LightTuneOverride.kneeG();
+        if (k == 0.0f && g == 0.0f) return plain;
         return new SpotlightData(plain.posX(), plain.posY(), plain.posZ(), plain.radius(),
                 plain.red(), plain.green(), plain.blue(), plain.intensity(),
                 plain.dirX(), plain.dirY(), plain.dirZ(), plain.type(),
-                plain.cosOuter(), plain.cosInner(), k, plain.coneReservedW(),
+                plain.cosOuter(), plain.cosInner(), k, g,
                 plain.anisotropy(), plain.density(), plain.beam(), plain.vlReservedW(),
                 plain.cookieR(), plain.cookieG(), plain.cookieB(), plain.cookieA());
     }

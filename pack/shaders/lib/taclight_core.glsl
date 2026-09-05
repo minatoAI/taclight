@@ -162,9 +162,23 @@ float taclight_soft_knee(float x) {
     return x / (1.0 + TACLIGHT_KNEE_GAIN * x);
 }
 
-/** knee 的逐通道版本(表面照明 radiance 是 vec3)。 */
+/** !knee 覆盖版(gOverride 经 SSBO cone.w 逐灯透传,0=回退编译期默认 G)。
+ *  语义:g>0 用之,否则 TACLIGHT_KNEE_GAIN —— 调试绿锥侧语义。 */
+float taclight_soft_knee(float x, float gOverride) {
+    float g = gOverride > 0.0 ? gOverride : TACLIGHT_KNEE_GAIN;
+    return x / (1.0 + g * x);
+}
+
+/** knee 的逐通道版本(表面照明 radiance 是 vec3,逐灯贡献非线性后累加)。 */
 vec3 taclight_soft_knee3(vec3 x) {
     return x / (1.0 + TACLIGHT_KNEE_GAIN * x);
+}
+
+/** !knee 覆盖版(逐通道)。语义:g<=0 恒等(不施加)——
+ *  与标量版不同:surface 默认 cone.w=0 即"无膝"(旧行为),仅在 !knee 开启时压缩。 */
+vec3 taclight_soft_knee3(vec3 x, float gOverride) {
+    if (gOverride <= 0.0) return x;
+    return x / (1.0 + gOverride * x);
 }
 
 // ----------------------------------------------------------------------------
@@ -384,7 +398,8 @@ float taclight_debug_green_cone(TacLightSpot L, vec3 fragView) {
     // 内锥(cosY)全亮,外锥(cosX)全灭:spot = smoothstep(cosOut, cosIn, cosAng)
     float spot = smoothstep(L.cone.x, L.cone.y, cosAng);
     // 软肩压缩:近场压暗、远场几乎不动(实机调优 2026-08-27,详见上方注释)
-    return taclight_soft_knee(spot * taclight_attenuation(dist, radius, L.cone.z));
+    // !knee 覆盖经 cone.w 透传(0=编译期默认 G,调试锥旧行为不变)。
+    return taclight_soft_knee(spot * taclight_attenuation(dist, radius, L.cone.z), L.cone.w);
 }
 
 // ----------------------------------------------------------------------------
@@ -438,7 +453,9 @@ vec3 taclight_surface_lighting(vec3 fragView, vec3 albedo, vec3 n,
         float atten = taclight_attenuation(dist, radius, L.cone.z);
         vec3 diffuse = albedo * (ndl * (1.0 - metal));
         vec3 spec = taclight_ggx(n, -normalize(fragView), l, roughness, f0) * (ndl * TACLIGHT_SPEC_DAMP);
-        radiance += (diffuse + spec) * lc * (spot * atten * vis);
+        // 近场软膝(2026-09-05,用户第四旋钮 !knee):默认 cone.w=0 恒等(旧行为);
+        // 开启后逐灯贡献先膝压再累加(非线性必须在求和前施加,否则近缘混合失真)。
+        radiance += taclight_soft_knee3((diffuse + spec) * lc * (spot * atten * vis), L.cone.w);
     }
     return radiance;
 }

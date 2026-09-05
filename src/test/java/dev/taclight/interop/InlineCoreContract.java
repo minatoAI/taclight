@@ -98,6 +98,11 @@ public class InlineCoreContract {
                 "前向 attenuation 三参签名(与主包同源,逐灯 K)");
         check(fwd.contains("L.cone.z"),
                 "前向 surface 消费 cone.z 逐灯 K(!atten 透传)");
+        // 2026-09-05 第四旋钮:近场软膝 2-arg 同源 + surface 消费 cone.w(0=恒等)。
+        check(fwd.contains("vec3 taclight_soft_knee3(vec3 x, float gOverride)"),
+                "前向 soft_knee3 双参签名(与主包同源,!knee 逐灯透传)");
+        check(fwd.contains("L.cone.w"),
+                "前向 surface 消费 cone.w(!knee,0=恒等回退)");
         // 禁入项:gbuffers AST 高危面(SSO 主循环/自体豁免常数/GGX/绿锥宏/
         // 整数位运算 DDA ——实机三连 missing ';' at '{' 20:54/21:06/21:26;
         // 标量 DDA(float/int 步进,2026-09-04 穿墙修复)允许进前向:无 ivec3/bvec3/

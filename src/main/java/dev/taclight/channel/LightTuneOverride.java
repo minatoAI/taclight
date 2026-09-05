@@ -1,15 +1,18 @@
 package dev.taclight.channel;
 
 /**
- * 手电三旋钮覆盖层(2026-09-04,用户体感调参"手动调出符合感受的效果"):
- * {@code !bright} 绝对亮度 / {@code !dist} 绝对照距 / {@code !atten} 衰减系数 K。
+ * 手电四旋钮覆盖层(2026-09-04 三旋钮用户体感调参,2026-09-05 加 !knee):
+ * {@code !bright} 绝对亮度 / {@code !dist} 绝对照距 / {@code !atten} 衰减系数 K /
+ * {@code !knee} 近场软肩 G(经 SSBO cone.w 逐灯透传)。
  * <p>Forge CLIENT config 热改 toml 不回读(瞬时读仍是旧值,见 {@link LightLevelOverride}),
- * 故三路均为纯内存覆盖,重启实例 = 覆盖清零 = 回 config 默认。
- * <p>默认全关 = {@link #brightnessFor}/{@link #radiusFor} 直通、{@link #attenK} 返回 0
- * (GLSL 侧 cone.z ≤ 0 回退编译期 {@code TACLIGHT_ATTEN_K} 默认)。
- * 衰减 K 经 SSBO cone.z 逐灯透传(保留槽,此前恒 0)——半径 r 仍走原通道,零布局变化。
+ * 故四路均为纯内存覆盖,重启实例 = 覆盖清零 = 回 config 默认。
+ * <p>默认全关 = {@link #brightnessFor}/{@link #radiusFor} 直通、{@link #attenK}/
+ * {@link #kneeG} 返回 0(GLSL 侧 cone.z/w ≤ 0 回退编译期默认 = 今日行为,零变化)。
+ * 衰减 K 经 SSBO cone.z、软肩 G 经 cone.w 逐灯透传(保留槽,此前恒 0)——
+ * 半径 r 仍走原通道,零布局变化。
  * <p>范围:bright 0.5..30(同 INTENSITY define 域)/dist 4..96(同 RADIUS 域)/
- * atten 0.2..20(0.5r 处约 44%..2% 亮度,5.0=当前主包标定)。
+ * atten 0.2..20(0.5r 处约 44%..2% 亮度,5.0=当前主包标定)/
+ * knee 0.2..8(近场压暗强度,2.0=当前主包标定;0.2≈趋平/压缩最弱,越大近场压得越狠)。
  */
 public final class LightTuneOverride {
     private static volatile float brightValue = 6.0f;
@@ -18,6 +21,8 @@ public final class LightTuneOverride {
     private static volatile boolean distActive;
     private static volatile float attenValue;
     private static volatile boolean attenActive;
+    private static volatile float kneeValue;
+    private static volatile boolean kneeActive;
 
     private LightTuneOverride() {}
 
@@ -82,6 +87,27 @@ public final class LightTuneOverride {
         }
     }
 
+    /** relay 入口:返回状态串(供日志)。 */
+    public static String configureKnee(String arg) {
+        if (arg.isEmpty() || arg.equals("status")) {
+            return kneeActive ? ("kneeG=" + kneeValue) : "off(GLSL 默认 G=2.0)";
+        }
+        if (arg.equals("off")) {
+            kneeActive = false;
+            kneeValue = 0.0f;
+            return "off(GLSL 默认 G=2.0)";
+        }
+        try {
+            float v = Float.parseFloat(arg);
+            if (v < 0.2f || v > 8.0f) return "range 0.2..8, got " + arg;
+            kneeValue = v;
+            kneeActive = true;
+            return "kneeG=" + v;
+        } catch (NumberFormatException e) {
+            return "bad arg " + arg + " (want 0.2..8/off/status)";
+        }
+    }
+
     /** buildSpotBeam 调用:有覆盖 → 绝对亮度替换(与 !lv 档位互斥,后写者胜由调用序决定)。 */
     public static float brightnessFor(float base) {
         if (!brightActive) return base;
@@ -98,5 +124,11 @@ public final class LightTuneOverride {
     public static float attenK() {
         if (!attenActive) return 0.0f;
         return attenValue;
+    }
+
+    /** buildSpotBeam 调用:有覆盖 → 逐灯软肩 G;0 = cone.w 留 0,GLSL 恒等直通(今日行为)。 */
+    public static float kneeG() {
+        if (!kneeActive) return 0.0f;
+        return kneeValue;
     }
 }

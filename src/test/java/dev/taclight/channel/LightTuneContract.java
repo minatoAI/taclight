@@ -3,9 +3,10 @@ package dev.taclight.channel;
 import dev.taclight.channel.ClientSpotlightUploader.LightParams;
 
 /**
- * 手电三旋钮覆盖层契约(2026-09-04,用户体感调参):
+ * 手电四旋钮覆盖层契约(2026-09-04 三旋钮,2026-09-05 加 !knee):
  * {@code !bright} 直接亮度(绝对强度) / {@code !dist} 绝对照距 /
- * {@code !atten} 衰减系数 K(经 SSBO cone.z 逐灯透传)。
+ * {@code !atten} 衰减系数 K(经 SSBO cone.z 逐灯透传) /
+ * {@code !knee} 近场软肩 G(经 SSBO cone.w 逐灯透传,0=恒等直通)。
  * 默认全关 = 零行为变化;越界/非法拒绝不污染;收尾全关(零残留)。
  */
 public class LightTuneContract {
@@ -13,6 +14,7 @@ public class LightTuneContract {
         LightTuneOverride.configureBright("off");
         LightTuneOverride.configureDist("off");
         LightTuneOverride.configureAtten("off");
+        LightTuneOverride.configureKnee("off");
 
         // ---- 默认:三路直通 ----
         check(Math.abs(LightTuneOverride.brightnessFor(6.0f) - 6.0f) < 1e-6, "默认亮度直通");
@@ -48,6 +50,18 @@ public class LightTuneContract {
         check(aBad.startsWith("range"), "atten 越界拒绝: " + aBad);
         check(Math.abs(LightTuneOverride.attenK() - 1.0f) < 1e-6, "越界不污染当前值");
 
+        // ---- knee:逐灯近场软肩 G(2026-09-05 第四旋钮,SSBO cone.w 透传) ----
+        // 0 = cone.w 留 0,GLSL 恒等直通(表面路径今日无 knee,零行为变化)。
+        check(LightTuneOverride.kneeG() == 0.0f, "默认 kneeG=0(GLSL 恒等直通,零行为变化)");
+        String k1 = LightTuneOverride.configureKnee("3.0");
+        check(k1.contains("3.0"), "knee 3.0 回显: " + k1);
+        check(Math.abs(LightTuneOverride.kneeG() - 3.0f) < 1e-6, "knee 覆盖生效");
+        String kBad = LightTuneOverride.configureKnee("20");
+        check(kBad.startsWith("range"), "knee 越界拒绝: " + kBad);
+        check(Math.abs(LightTuneOverride.kneeG() - 3.0f) < 1e-6, "越界不污染当前值");
+        String kNaN = LightTuneOverride.configureKnee("soft");
+        check(kNaN.startsWith("bad arg"), "knee 非法输入拒绝: " + kNaN);
+
         // ---- buildSpotBeam 集成 ----
         LightParams p = new LightParams(36.0f, 96.0f, 6.0f, 0.848f, 0.951f, 0.05f);
         SpotlightData tuned = ClientSpotlightUploader.buildSpotBeam(
@@ -55,10 +69,12 @@ public class LightTuneContract {
         check(Math.abs(tuned.intensity() - 12.0f) < 1e-4, "集成:强度=bright 绝对值 12");
         check(Math.abs(tuned.radius() - 24.0f) < 1e-4, "集成:半径=dist 绝对值 24(不跟亮度走)");
         check(Math.abs(tuned.coneReservedZ() - 1.0f) < 1e-6, "集成:cone.z=atten K 1.0 透传");
+        check(Math.abs(tuned.coneReservedW() - 3.0f) < 1e-6, "集成:cone.w=knee G 3.0 透传");
         java.nio.ByteBuffer buf = SpotlightBufferLayout.newBuffer(1);
         SpotlightBufferLayout.writeLight(buf, 0, tuned);
         SpotlightData read = SpotlightBufferLayout.readLight(buf, 0);
         check(Math.abs(read.coneReservedZ() - 1.0f) < 1e-6, "cone.z 经 SSBO 读写回环");
+        check(Math.abs(read.coneReservedW() - 3.0f) < 1e-6, "cone.w 经 SSBO 读写回环");
 
         // ---- 默认灯 cone.z=0(GLSL 回退) ----
         SpotlightData plain = SpotlightData.spot(1f, 2f, 3f, 24f,
@@ -69,14 +85,16 @@ public class LightTuneContract {
         LightTuneOverride.configureBright("off");
         LightTuneOverride.configureDist("off");
         LightTuneOverride.configureAtten("off");
+        LightTuneOverride.configureKnee("off");
         SpotlightData clean = ClientSpotlightUploader.buildSpotBeam(
                 0, 0, 0, 0, 0, -1, p, 1.0f);
         check(Math.abs(clean.intensity() - 6.0f) < 1e-4
                         && Math.abs(clean.radius() - 36.0f) < 1e-4
-                        && clean.coneReservedZ() == 0.0f,
-                "收尾关闭:强度/半径/atten 全回默认(零残留)");
+                        && clean.coneReservedZ() == 0.0f
+                        && clean.coneReservedW() == 0.0f,
+                "收尾关闭:强度/半径/atten/knee 全回默认(零残留)");
 
-        System.out.println("LightTuneContract: ALL PASS (22 checks)");
+        System.out.println("LightTuneContract: ALL PASS (31 checks)");
     }
 
     private static void check(boolean cond, String what) {

@@ -95,6 +95,44 @@ public final class VoxelField {
         return (data[idx >> 4] >> ((idx & 15) * 2)) & 3;
     }
 
+    /** 出实心步进(沿 −dir 回退的单步距离)。 */
+    public static final double DESOLIDIFY_STEP = 0.05;
+    /** 出实心最大回退(超过仍无出路 = 原样 fail-safe,行为与今日一致)。 */
+    public static final double DESOLIDIFY_MAX = 2.0;
+
+    /**
+     * 灯头出实心钳制(2026-09-05 贴墙穿墙根因:持枪贴墙时枪口灯位被推进墙体素格,
+     * DDA 起点格豁免跳过灯所在墙格 → 整墙对该灯透明,光照到墙后)。
+     * 灯位落实心格 → 沿 −dir 退到首个非实心格,恢复"DDA 起点格必为空气"前提。
+     * 纯函数(JVM 可测,无 MC 依赖);盒外/格内非实心/零方向/2m 内无出路 →
+     * 原样返回(fail-safe 零回归)。注意:只认 CODE_SOLID,树叶/植被格不管
+     * (单格透射误差小,保持本次 scope 最小)。
+     */
+    public static double[] clampOutOfSolid(Box b, int[] data,
+                                           double x, double y, double z,
+                                           double dx, double dy, double dz) {
+        double len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (!(len > 1e-6)) return new double[]{x, y, z};
+        double nx = dx / len, ny = dy / len, nz = dz / len;
+        if (codeAt(b, data, x, y, z) != CODE_SOLID) return new double[]{x, y, z};
+        for (double d = DESOLIDIFY_STEP; d <= DESOLIDIFY_MAX + 1e-9; d += DESOLIDIFY_STEP) {
+            double px = x - nx * d, py = y - ny * d, pz = z - nz * d;
+            int c = codeAt(b, data, px, py, pz);
+            if (c < 0) return new double[]{x, y, z}; // 出盒:占用未知,原样 fail-safe
+            if (c != CODE_SOLID) return new double[]{px, py, pz};
+        }
+        return new double[]{x, y, z};
+    }
+
+    /** 世界坐标 → 体素分类码;−1 = 盒外(占用未知)。 */
+    private static int codeAt(Box b, int[] data, double x, double y, double z) {
+        int lx = (int) Math.floor(x) - b.ox;
+        int ly = (int) Math.floor(y) - b.oy;
+        int lz = (int) Math.floor(z) - b.oz;
+        if (lx < 0 || ly < 0 || lz < 0 || lx >= b.dx || ly >= b.dy || lz >= b.dz) return -1;
+        return unpack(b, lx, ly, lz, data);
+    }
+
     private static int floorI(double v) { return (int) Math.floor(v); }
     private static int ceilI(double v) { return (int) Math.ceil(v); }
 }

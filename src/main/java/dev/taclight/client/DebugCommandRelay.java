@@ -196,6 +196,15 @@ public final class DebugCommandRelay {
                     dev.taclight.channel.LightTuneOverride.configureAtten(arg));
             return;
         }
+        if (line.startsWith("!knee")) {
+            // 2026-09-05 用户体感第四旋钮:近场软肩 G(越大近场压得越狠、远场几乎不动;
+            // 2.0=主包标定,近暗远亮;0.2≈趋平/压缩最弱)。经 SSBO cone.w 逐灯透传
+            // (0=GLSL 恒等直通=今日行为),零重启生效。范围 0.2..8。
+            String arg = line.length() > 5 ? line.substring(5).trim() : "";
+            TacLightMod.LOGGER.info("[TacLight] RELAY knee -> {}",
+                    dev.taclight.channel.LightTuneOverride.configureKnee(arg));
+            return;
+        }
         if (line.startsWith("!gun")) {
             boolean next = !ClientLightState.gunLightOn();
             ClientLightState.setGunLightManual(next);
