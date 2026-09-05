@@ -42,6 +42,8 @@ import java.nio.file.StandardCopyOption;
  *       vlParams.x 逐灯透传;0=纯侧面丁达尔(正对光源零体积叠加),off=回默认 0.04。</li>
  *   <li>{@code !beamcap} —— 体积光重叠软上限倍率第七旋钮(2026-09-05):0.25..8,经
  *       vlParams.z 透传(GLSL cap=2.0×m);单灯恒等,多灯重叠渐近封顶。</li>
+ *   <li>{@code !cone} —— 锥角收窄第八旋钮(2026-09-05 "接近平行光"):外锥半角 2..45 度,
+ *       内锥=外×0.5,Java 侧直改 cosOuter/cosInner;off=回 config 默认 8/4。</li>
  *   <li>{@code !looktrace} / {@code !mcap} —— 消融探针 / 运动门控采集开关(09-01,
  *       布防后被观察角色朝向/位置变化自动连拍+逐帧信号,静止自停)。</li>
  *  </ul></p>
@@ -249,6 +251,15 @@ public final class DebugCommandRelay {
             String arg = line.length() > 5 ? line.substring(5).trim() : "";
             TacLightMod.LOGGER.info("[TacLight] RELAY scat -> {}",
                     dev.taclight.channel.LightTuneOverride.configureScat(arg));
+            return;
+        }
+        if (line.startsWith("!cone")) {
+            // 2026-09-05 第八旋钮:锥角收窄(用户定案"接近平行光")。外锥半角度数,
+            // 内锥=外×0.5,Java 侧直改 cosOuter/cosInner(SSBO/GLSL 零改动)。
+            // 用法:!cone 8 / !cone status / !cone off;范围 2..45,off=回 config 默认 8/4。
+            String arg = line.length() > 5 ? line.substring(5).trim() : "";
+            TacLightMod.LOGGER.info("[TacLight] RELAY cone -> {}",
+                    dev.taclight.channel.LightTuneOverride.configureCone(arg));
             return;
         }
         if (line.startsWith("!gun")) {

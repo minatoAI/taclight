@@ -1,27 +1,30 @@
 package dev.taclight.channel;
 
 /**
- * 手电六旋钮覆盖层(2026-09-04 三旋钮用户体感调参,2026-09-05 加 !knee/!beam/!beamonly/!scat):
+ * 手电八旋钮覆盖层(2026-09-04 三旋钮,2026-09-05 加 !knee/!beam/!beamonly/!scat/!beamcap/!cone):
  * {@code !bright} 绝对亮度 / {@code !dist} 绝对照距 / {@code !atten} 衰减系数 K /
- * {@code !knee} 近场软肩 G(经 SSBO cone.w 逐灯透传) /
+ * {@code !knee} 近场软肩 G(经 SSBO cone.w 逐灯透传;2026-09-05 用户实测"光路内反光
+ * 刺眼"定案默认开:{@link #DEFAULT_KNEE_G}=2.0,off=回默认——近场 HDR 值不再直通 bloom) /
  * {@code !beam} 体积光束密度(经 SSBO vlParams.y 直接换值,GLSL 零改动) /
  * {@code !scat} 体积光轴向底亮份额 f(经 SSBO vlParams.x 直接换值,GLSL 零改动;
  * 侧面相位 phase=NORM·(f+(1−f)·sin²θ):0=纯侧面丁达尔,off=回编译期默认 0.04——
  * 2026-09-05 用户定案:体积光只为侧面视角服务,正对/沿轴调低防与表面光叠加刺眼) /
  * {@code !beamcap} 体积光重叠软上限倍率 m(经 SSBO vlParams.z 透传,GLSL cap=2.0×m:
  * 低于半帽点恒等=单灯观感零变化,多灯重叠亮度指数肩部渐近 cap 不许无限叠加——
- * 2026-09-05 用户需求:两灯同照刺眼;0.25=压得最狠,8≈基本不限,off=回 m=1)。
+ * 2026-09-05 用户需求:两灯同照刺眼;0.25=压得最狠,8≈基本不限,off=回 m=1) /
+ * {@code !cone} 锥角收窄(2026-09-05 用户定案"接近平行光"):外锥半角(度),内锥=外×0.5,
+ * Java 侧直改 cosOuter/cosInner,SSBO/GLSL 零改动;0 哨兵=直通 config 默认 外8/内4。
  * <p>Forge CLIENT config 热改 toml 不回读(瞬时读仍是旧值,见 {@link LightLevelOverride}),
- * 故四路均为纯内存覆盖,重启实例 = 覆盖清零 = 回 config 默认。
- * <p>默认全关 = {@link #brightnessFor}/{@link #radiusFor} 直通、{@link #attenK}/
- * {@link #kneeG} 返回 0(GLSL 侧 cone.z/w ≤ 0 回退编译期默认 = 今日行为,零变化)。
- * 衰减 K 经 SSBO cone.z、软肩 G 经 cone.w 逐灯透传(保留槽,此前恒 0)——
- * 半径 r 仍走原通道,零布局变化。
- * <p>范围:bright 0.5..30(同 INTENSITY define 域)/dist 4..96(同 RADIUS 域)/
+ * 故各路均为纯内存覆盖,重启实例 = 覆盖清零 = 回 config 默认。
+ * <p>默认:bright/dist 直通、attenK 回 0(GLSL 回退编译期默认)、kneeG 回
+ * {@link #DEFAULT_KNEE_G}(默认即开)、coneDeg 回 0(直通 config 8/4)。
+ * 衰减 K 经 SSBO cone.z、软肩 G 经 cone.w 逐灯透传(保留槽)——半径 r 仍走原通道,零布局变化。
+ * <p>范围:bright 0.5..30(同 INTENSITY 域)/dist 4..96(同 RADIUS 域)/
  * atten 0.2..20(0.5r 处约 44%..2% 亮度,5.0=当前主包标定)/
  * knee 0.2..8(近场压暗强度,2.0=当前主包标定;0.2≈趋平/压缩最弱,越大近场压得越狠)/
  * beam 0..1(体积密度 = 丁达尔效果强度,0=完全关光束做开关对比,off=回 config 默认 0.05;
- * 与 atten/knee 的 0 哨兵语义不同——密度是消费值本身,显式 0 就是关,不回退)。
+ * 与 atten/knee 的 0 哨兵语义不同——密度是消费值本身,显式 0 就是关,不回退)/
+ * cone 2..45(度,外半角;off=回 config 默认 8/4)。
  */
 public final class LightTuneOverride {
     private static volatile float brightValue = 6.0f;
@@ -39,6 +42,8 @@ public final class LightTuneOverride {
     private static volatile boolean scatActive;
     private static volatile float beamCapValue;
     private static volatile boolean beamCapActive;
+    private static volatile float coneValue;
+    private static volatile boolean coneActive;
 
     private LightTuneOverride() {}
 
@@ -106,12 +111,12 @@ public final class LightTuneOverride {
     /** relay 入口:返回状态串(供日志)。 */
     public static String configureKnee(String arg) {
         if (arg.isEmpty() || arg.equals("status")) {
-            return kneeActive ? ("kneeG=" + kneeValue) : "off(GLSL 默认 G=2.0)";
+            return kneeActive ? ("kneeG=" + kneeValue) : "off(默认 G=2.0,默认即开)";
         }
         if (arg.equals("off")) {
             kneeActive = false;
             kneeValue = 0.0f;
-            return "off(GLSL 默认 G=2.0)";
+            return "off(默认 G=2.0,默认即开)";
         }
         try {
             float v = Float.parseFloat(arg);
@@ -163,9 +168,13 @@ public final class LightTuneOverride {
         return attenValue;
     }
 
-    /** buildSpotBeam 调用:有覆盖 → 逐灯软肩 G;0 = cone.w 留 0,GLSL 恒等直通(今日行为)。 */
+    /** 表面照明近场软肩默认 G(2026-09-05 用户实测"站在光路内反光刺眼"定案默认开,
+     *  与编译期标定 TACLIGHT_KNEE_GAIN 同值;!knee off 回此默认——off≠恒等)。 */
+    public static final float DEFAULT_KNEE_G = 2.0f;
+
+    /** buildSpotBeam 调用:有覆盖 → 逐灯软肩 G;默认回 {@link #DEFAULT_KNEE_G}(默认即开)。 */
     public static float kneeG() {
-        if (!kneeActive) return 0.0f;
+        if (!kneeActive) return DEFAULT_KNEE_G;
         return kneeValue;
     }
 
@@ -235,6 +244,36 @@ public final class LightTuneOverride {
     public static float beamCapM() {
         if (!beamCapActive) return 0.0f;
         return beamCapValue;
+    }
+
+    /** relay 入口:返回状态串(供日志)。锥角收窄(2026-09-05 用户定案"接近平行光"):
+     *  外锥半角(度),内锥=外×0.5;旧默认 32/18 在 30m 外光斑半径 ≈18.7m(远距离
+     *  范围过大),新默认 8/4 在 30m 外 ≈4.2m。off=直通 config 默认 外8/内4。 */
+    public static String configureCone(String arg) {
+        if (arg.isEmpty() || arg.equals("status")) {
+            return coneActive ? ("cone=" + coneValue + "(inner=" + (coneValue * 0.5f) + ")")
+                              : "off(默认 config 外8/内4)";
+        }
+        if (arg.equals("off")) {
+            coneActive = false;
+            coneValue = 0.0f;
+            return "off(默认 config 外8/内4)";
+        }
+        try {
+            float v = Float.parseFloat(arg);
+            if (v < 2.0f || v > 45.0f) return "range 2..45, got " + arg;
+            coneValue = v;
+            coneActive = true;
+            return "cone=" + v + "(inner=" + (v * 0.5f) + ")";
+        } catch (NumberFormatException e) {
+            return "bad arg " + arg + " (want 2..45/off/status)";
+        }
+    }
+
+    /** buildSpotBeam 调用:>0 = 外锥半角覆盖(内锥=外×0.5);0 = 直通 config 默认。 */
+    public static float coneDeg() {
+        if (!coneActive) return 0.0f;
+        return coneValue;
     }
 
     /** relay 入口:返回状态串(供日志)。 */

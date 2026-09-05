@@ -505,7 +505,10 @@ public final class ClientSpotlightUploader {
      *  2026-09-05 第六旋钮 !scat 直接换 vlParams.x 轴向底亮份额 f(GLSL 零改动;
      *  侧面相位 phase=NORM·(f+(1−f)·sin²θ):0=纯侧面丁达尔,off=回编译期默认 0.06)。
      *  2026-09-05 第七旋钮 !beamcap 经 vlParams.z 透传软上限倍率 m(GLSL cap=2.0×m:
-     *  单灯恒等、多灯重叠渐近封顶不许无限叠加)。 */
+     *  单灯恒等、多灯重叠渐近封顶不许无限叠加)。
+     *  2026-09-05 第八旋钮 !cone 锥角收窄("接近平行光"):Java 侧直改 cosOuter/cosInner
+     *  (内锥=外×0.5),SSBO/GLSL 零改动;第四旋钮 !knee 默认开(DEFAULT_KNEE_G=2.0,
+     *  治"光路内反光刺眼")→ g 恒 >0,恒走重排路径回写 cone.w。 */
     public static SpotlightData buildSpotBeam(double wx, double wy, double wz,
                                               double dx, double dy, double dz,
                                               LightParams p, float intensityMult) {
@@ -514,11 +517,18 @@ public final class ClientSpotlightUploader {
                 p.radius * (float) Math.sqrt(Math.max(p.intensity * intensityMult, 1e-3f) / INTENSITY_REFERENCE),
                 p.radiusMax);
         radius = Math.min(radius, p.radiusMax);
+        float coneDeg = LightTuneOverride.coneDeg();
+        float cosOut = p.cosOuter;
+        float cosIn = p.cosInner;
+        if (coneDeg > 0.0f) {
+            cosOut = (float) Math.cos(Math.toRadians(coneDeg));
+            cosIn = (float) Math.cos(Math.toRadians(coneDeg * 0.5f));
+        }
         SpotlightData plain = SpotlightData.spotBeam(
                 (float) wx, (float) wy, (float) wz, radius,
                 R, G, B, intensity,
                 (float) dx, (float) dy, (float) dz,
-                p.cosOuter, p.cosInner, LightTuneOverride.beamDensityOr(p.beamDensity), 1.0f);
+                cosOut, cosIn, LightTuneOverride.beamDensityOr(p.beamDensity), 1.0f);
         float k = LightTuneOverride.attenK();
         float g = LightTuneOverride.kneeG();
         float scat = LightTuneOverride.scatOr(plain.sideFloor());

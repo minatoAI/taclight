@@ -27,8 +27,10 @@ public final class TacLightConfig {
         // atten(3m)≈0.92,光斑恢复衰减层次。室外远照场景调大 radius 即可(√ 亮度耦合不变)。
         RADIUS = builder.comment("reference radius (blocks) @ intensity 6.0; effective radius scales as sqrt(intensity/6.0)").defineInRange("radius", 36.0, 4.0, RADIUS_MAX);
         INTENSITY = builder.comment("light intensity").defineInRange("intensity", 6.0, 0.5, 30.0);
-        CONE_OUTER_DEG = builder.comment("outer half-angle in degrees").defineInRange("coneOuterDeg", 32.0, 5.0, 60.0);
-        CONE_INNER_DEG = builder.comment("inner half-angle in degrees").defineInRange("coneInnerDeg", 18.0, 2.0, 55.0);
+        // 锥角(2026-09-05 用户定案"接近平行光"):旧 32/18 在 30m 外光斑半径 ≈18.7m,
+        // 远距离范围过大;8/4 在 30m 外 ≈4.2m、20m 外 ≈2.8m。运行时微调用中继 !cone。
+        CONE_OUTER_DEG = builder.comment("outer half-angle in degrees (8 = near-parallel beam)").defineInRange("coneOuterDeg", 8.0, 5.0, 60.0);
+        CONE_INNER_DEG = builder.comment("inner half-angle in degrees (= full-brightness core)").defineInRange("coneInnerDeg", 4.0, 2.0, 55.0);
         BEAM_DENSITY = builder.comment("volumetric beam density (0 = off)").defineInRange("beamDensity", 0.05, 0.0, 1.0);
         GUN_MULTIPLIER = builder.comment("gun-mounted light intensity multiplier").defineInRange("gunMultiplier", 1.1, 0.1, 3.0);
         // M5 多人:远程玩家灯的收集护栏(旁观视角与多人调试方案.md §4.3)

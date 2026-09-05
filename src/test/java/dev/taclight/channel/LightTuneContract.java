@@ -3,10 +3,11 @@ package dev.taclight.channel;
 import dev.taclight.channel.ClientSpotlightUploader.LightParams;
 
 /**
- * 手电七旋钮覆盖层契约(2026-09-04 三旋钮,2026-09-05 加 !knee/!beam/!beamonly/!scat/!beamcap):
+ * 手电八旋钮覆盖层契约(2026-09-04 三旋钮,2026-09-05 加 !knee/!beam/!beamonly/!scat/!beamcap/!cone):
  * {@code !bright} 直接亮度(绝对强度) / {@code !dist} 绝对照距 /
  * {@code !atten} 衰减系数 K(经 SSBO cone.z 逐灯透传) /
- * {@code !knee} 近场软肩 G(经 SSBO cone.w 逐灯透传,0=恒等直通) /
+ * {@code !knee} 近场软肩 G(经 SSBO cone.w 逐灯透传;2026-09-05 用户实测"光路内
+ * 反光刺眼"定案默认开:off=回默认 G=2.0,不再有恒等档) /
  * {@code !beam} 体积光密度(经 SSBO vlParams.y 直接换值,0=完全关光束,off=回 config 默认) /
  * {@code !beamonly} 只看光束(头部 flags bit2,跳过 M1 表面照明,composite1 体积束照常) /
  * {@code !scat} 体积光轴向底亮份额 f(经 SSBO vlParams.x 直接换值,GLSL 侧面相位
@@ -15,8 +16,10 @@ import dev.taclight.channel.ClientSpotlightUploader.LightParams;
  * {@code !beamcap} 体积光重叠软上限倍率 m(经 SSBO vlParams.z 透传,GLSL cap=2.0×m:
  * 低于半帽点恒等=单灯观感零变化,多灯重叠亮度指数肩部渐近 cap 不许无限叠加;
  * 0.25=压得最狠,8≈基本不限,off=回 m=1 默认)。
- * 旋钮默认全关 = 零覆盖行为(beamcap 关=m=1,GLSL 默认 cap=2.0 恒生效,属功能本身);
- * 越界/非法拒绝不污染;收尾全关(零残留)。
+ * {@code !cone} 锥角(2026-09-05 用户定案"接近平行光"):外锥半角(度),内锥=外×0.5,
+ * Java 侧直改 cosOuter/cosInner(SSBO/GLSL 零改动);0 哨兵=直通 config 默认 外8/内4。
+ * 旋钮默认全关 = 零覆盖行为(beamcap 关=m=1,GLSL 默认 cap=2.0 恒生效,属功能本身;
+ * knee 例外:默认即开 G=2.0,off 也是回 2.0);越界/非法拒绝不污染;收尾全关(零残留)。
  */
 public class LightTuneContract {
     public static void main(String[] args) {
@@ -62,8 +65,9 @@ public class LightTuneContract {
         check(Math.abs(LightTuneOverride.attenK() - 1.0f) < 1e-6, "越界不污染当前值");
 
         // ---- knee:逐灯近场软肩 G(2026-09-05 第四旋钮,SSBO cone.w 透传) ----
-        // 0 = cone.w 留 0,GLSL 恒等直通(表面路径今日无 knee,零行为变化)。
-        check(LightTuneOverride.kneeG() == 0.0f, "默认 kneeG=0(GLSL 恒等直通,零行为变化)");
+        // 2026-09-05 用户实测"站在光路内反光刺眼"定案:默认开 G=2.0(与编译期标定
+        // TACLIGHT_KNEE_GAIN 同值),off=回默认(不再有恒等档;近场 HDR 值不再直通 bloom)。
+        check(Math.abs(LightTuneOverride.kneeG() - 2.0f) < 1e-6, "默认 kneeG=2.0(近场软膝默认开,治正对眩光)");
         String k1 = LightTuneOverride.configureKnee("3.0");
         check(k1.contains("3.0"), "knee 3.0 回显: " + k1);
         check(Math.abs(LightTuneOverride.kneeG() - 3.0f) < 1e-6, "knee 覆盖生效");
@@ -72,6 +76,9 @@ public class LightTuneContract {
         check(Math.abs(LightTuneOverride.kneeG() - 3.0f) < 1e-6, "越界不污染当前值");
         String kNaN = LightTuneOverride.configureKnee("soft");
         check(kNaN.startsWith("bad arg"), "knee 非法输入拒绝: " + kNaN);
+        check(LightTuneOverride.configureKnee("off").contains("2.0"), "knee off 回显默认 G=2.0");
+        check(Math.abs(LightTuneOverride.kneeG() - 2.0f) < 1e-6, "knee off 生效(回默认 2.0,off≠恒等)");
+        LightTuneOverride.configureKnee("3.0");   // 供后续集成段断言 cone.w=3.0 透传
 
         // ---- beam:体积光密度(2026-09-05 第五旋钮,SSBO vlParams.y 直接换值) ----
         // 0=完全关光束(A/B 开关对比);off=回 config 默认 0.05。密度是消费值本身,
@@ -157,6 +164,24 @@ public class LightTuneContract {
         check(LightTuneOverride.beamCapM() == 0.0f, "beamcap off 生效(回默认槽位 1.0)");
         LightTuneOverride.configureBeamcap("2.0");
 
+        // ---- cone:锥角收窄(2026-09-05 用户定案"接近平行光",第八旋钮) ----
+        // 外锥半角(度)直改 cosOuter,内锥=外×0.5;旧默认 32/18 在 30m 外光斑半径
+        // ≈18.7m(远距离范围过大)。0 哨兵=未激活(直通 config 默认 外8/内4)。
+        check(LightTuneOverride.coneDeg() == 0.0f, "默认 coneDeg=0(直通 config 外8/内4)");
+        check(LightTuneOverride.configureCone("status").contains("off"), "cone 默认 off 回显: "
+                + LightTuneOverride.configureCone("status"));
+        String cn8 = LightTuneOverride.configureCone("8");
+        check(cn8.contains("cone=8.0"), "cone 8 回显: " + cn8);
+        check(Math.abs(LightTuneOverride.coneDeg() - 8.0f) < 1e-6, "cone 覆盖生效");
+        check(LightTuneOverride.configureCone("60").startsWith("range"), "cone 越界拒绝(>45): "
+                + LightTuneOverride.configureCone("60"));
+        check(LightTuneOverride.configureCone("1").startsWith("range"), "cone 越界拒绝(<2)");
+        check(Math.abs(LightTuneOverride.coneDeg() - 8.0f) < 1e-6, "cone 越界不污染当前值");
+        check(LightTuneOverride.configureCone("wide").startsWith("bad arg"), "cone 非法输入拒绝");
+        check(LightTuneOverride.configureCone("off").contains("off"), "cone off 回显");
+        check(LightTuneOverride.coneDeg() == 0.0f, "cone off 生效(直通 config)");
+        LightTuneOverride.configureCone("6");
+
         try {
             String core = java.nio.file.Files.readString(
                     java.nio.file.Path.of("pack/shaders/lib/taclight_core.glsl"));
@@ -183,6 +208,16 @@ public class LightTuneContract {
                     "GLSL:composite1 软上限倍率消费 vlParams.z(beamcap 透传消费点)");
             check(comp1.contains("(1.0 - exp("),
                     "GLSL:composite1 肩部为指数渐近(软压缩,非硬截断)");
+            check(comp1.contains("taclight_vox_transmit(L.posRadius.xyz, spWorld)"),
+                    "GLSL:composite1 体积采样灯侧体素遮挡(灯→采样点 DDA,与表面照明同栅格;穿墙漏光修复)");
+            check(comp1.contains("visVox") && comp1.contains("visVox <= 0.003"),
+                    "GLSL:composite1 遮挡透射率乘入体积累加(-1=栅格无效回退可见)");
+            String cfgSrc = java.nio.file.Files.readString(
+                    java.nio.file.Path.of("src/main/java/dev/taclight/config/TacLightConfig.java"));
+            check(cfgSrc.contains("\"coneOuterDeg\", 8.0"),
+                    "config 锥角默认外半角 8°(接近平行光,旧 32 远距离光斑过大)");
+            check(cfgSrc.contains("\"coneInnerDeg\", 4.0"),
+                    "config 锥角默认内半角 4°(=外×0.5,与 !cone 旋钮同比例)");
         } catch (Exception e) {
             throw new AssertionError("FAIL GLSL 源读取: " + e);
         }
@@ -198,6 +233,10 @@ public class LightTuneContract {
         check(Math.abs(tuned.density() - 0.35f) < 1e-4, "集成:vlParams.y=beam 密度 0.35 覆盖(config 0.05 被换)");
         check(Math.abs(tuned.sideFloor() - 0.1f) < 1e-6, "集成:vlParams.x=scat 轴向底亮 0.1 覆盖(0.04 被换)");
         check(Math.abs(tuned.beam() - 2.0f) < 1e-6, "集成:vlParams.z=beamcap 倍率 2.0 覆盖(默认 1.0 被换)");
+        float cos6 = (float) Math.cos(Math.toRadians(6.0));
+        float cos3 = (float) Math.cos(Math.toRadians(3.0));
+        check(Math.abs(tuned.cosOuter() - cos6) < 1e-5, "集成:cosOuter=cone 覆盖外半角 6°");
+        check(Math.abs(tuned.cosInner() - cos3) < 1e-5, "集成:cosInner=cone×0.5=3°(内外同比例收窄)");
         java.nio.ByteBuffer buf = SpotlightBufferLayout.newBuffer(1);
         SpotlightBufferLayout.writeLight(buf, 0, tuned);
         SpotlightData read = SpotlightBufferLayout.readLight(buf, 0);
@@ -220,19 +259,23 @@ public class LightTuneContract {
         LightTuneOverride.configureBeamonly("off");
         LightTuneOverride.configureScat("off");
         LightTuneOverride.configureBeamcap("off");
+        LightTuneOverride.configureCone("off");
         SpotlightData clean = ClientSpotlightUploader.buildSpotBeam(
                 0, 0, 0, 0, 0, -1, p, 1.0f);
         check(Math.abs(clean.intensity() - 6.0f) < 1e-4
                         && Math.abs(clean.radius() - 36.0f) < 1e-4
                         && clean.coneReservedZ() == 0.0f
-                        && clean.coneReservedW() == 0.0f,
-                "收尾关闭:强度/半径/atten/knee 全回默认(零残留)");
+                        && Math.abs(clean.coneReservedW() - 2.0f) < 1e-6,
+                "收尾关闭:强度/半径/atten 回默认,knee 回默认 G=2.0(默认即开)");
+        check(Float.compare(clean.cosOuter(), p.cosOuter) == 0
+                        && Float.compare(clean.cosInner(), p.cosInner) == 0,
+                "收尾关闭:cone off 锥角直通 LightParams(外8/内4 来自 config)");
         check(Math.abs(clean.density() - 0.05f) < 1e-4, "收尾关闭:density 回 config 默认 0.05");
         check(Math.abs(clean.sideFloor() - SpotlightData.BEAM_SIDE_FLOOR) < 1e-6,
                 "收尾关闭:vlParams.x 回编译期默认 floor 0.04");
         check(Math.abs(clean.beam() - 1.0f) < 1e-6, "收尾关闭:vlParams.z 回默认倍率 1.0");
 
-        System.out.println("LightTuneContract: ALL PASS (93 checks)");
+        System.out.println("LightTuneContract: ALL PASS (113 checks)");
     }
 
     private static void check(boolean cond, String what) {
