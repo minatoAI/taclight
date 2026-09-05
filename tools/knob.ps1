@@ -27,7 +27,7 @@ $File = Join-Path $Project (Join-Path $RunDir 'taclight-cmds.txt')
 $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 # 容错:裸旋钮名(忘了 ! 前缀)自动补 ! —— 09-05 实机教训:用户输 "knee 6" 被中继
 # 判未知行静默忽略,表现为"调了没反应"。/ 开头(服务端命令)与已带 ! 的不碰。
-$KnobWords = '^(bright|dist|atten|knee|light|gun|neon|selflight|lv|diag|bench|shot|reload|voxel|bob|psnap|bsnap|extrap|sweep|rec|mcap|looktrace|tpfb|tproe|back|lan)(\s|$)'
+$KnobWords = '^(bright|beam|dist|atten|knee|light|gun|neon|selflight|lv|diag|bench|shot|reload|voxel|bob|psnap|bsnap|extrap|sweep|rec|mcap|looktrace|tpfb|tproe|back|lan)(\s|$)'
 
 function Send([string]$line) {
   $line = $line.Trim()
@@ -46,6 +46,7 @@ Write-Output ("knob({0}) -> {1}" -f $Side, $File)
 Write-Output "输入旋钮命令后回车发送(例: !bright 12),Ctrl+C 退出。"
 Write-Output "  !bright <0.5..30>   亮度        !dist <4..96>    照距(格)"
 Write-Output "  !atten  <0.2..20>   衰减K       !knee <0.2..8>   近场软膝(off=关)"
+Write-Output "  !beam   <0..1>      体积光密度(0=关光束,off=回默认0.05)"
 Write-Output "  无参=status  off=回默认   !light 手电开关   !shot 截图"
 while ($true) {
   $line = Read-Host 'knob'

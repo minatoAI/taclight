@@ -499,7 +499,8 @@ public final class ClientSpotlightUploader {
      *  未来"挡位"只需改亮度,照距自动 √ 缩放(用户需求:亮度和距离正相关)。
      *  2026-09-04 三旋钮(体感调参):!bright 在 !lv 之后取值(绝对亮度,互斥以后写者为准);
      *  !dist 覆盖本耦合(绝对照距);!atten 经 cone.z 逐灯透传(0=GLSL 回退编译期默认)。
-     *  2026-09-05 第四旋钮 !knee 经 cone.w 逐灯透传(0=GLSL 恒等直通=表面路径今日行为)。 */
+     *  2026-09-05 第四旋钮 !knee 经 cone.w 逐灯透传(0=GLSL 恒等直通=表面路径今日行为)。
+     *  2026-09-05 第五旋钮 !beam 直接换 vlParams.y 体积密度(GLSL 零改动;0=关光束,off=回 config 默认)。 */
     public static SpotlightData buildSpotBeam(double wx, double wy, double wz,
                                               double dx, double dy, double dz,
                                               LightParams p, float intensityMult) {
@@ -512,7 +513,7 @@ public final class ClientSpotlightUploader {
                 (float) wx, (float) wy, (float) wz, radius,
                 R, G, B, intensity,
                 (float) dx, (float) dy, (float) dz,
-                p.cosOuter, p.cosInner, p.beamDensity, 1.0f);
+                p.cosOuter, p.cosInner, LightTuneOverride.beamDensityOr(p.beamDensity), 1.0f);
         float k = LightTuneOverride.attenK();
         float g = LightTuneOverride.kneeG();
         if (k == 0.0f && g == 0.0f) return plain;

@@ -34,6 +34,8 @@ import java.nio.file.StandardCopyOption;
   *   <li>{@code !bright} / {@code !dist} / {@code !atten} —— 手电三旋钮(2026-09-04,
   *       用户体感自助调参):绝对亮度 / 绝对照距 / 衰减系数 K。内存覆盖,重启清零;
   *       无参=status,{@code off}=回默认(用法见各命令日志回显)。</li>
+  *   <li>{@code !beam} —— 体积光束密度第五旋钮(2026-09-05,丁达尔效果强度):
+  *       0..1;0=完全关光束(开关对比),off=回 config 默认 0.05;vlParams.y 直接换值。</li>
  *   <li>{@code !looktrace} / {@code !mcap} —— 消融探针 / 运动门控采集开关(09-01,
  *       布防后被观察角色朝向/位置变化自动连拍+逐帧信号,静止自停)。</li>
  *  </ul></p>
@@ -203,6 +205,16 @@ public final class DebugCommandRelay {
             String arg = line.length() > 5 ? line.substring(5).trim() : "";
             TacLightMod.LOGGER.info("[TacLight] RELAY knee -> {}",
                     dev.taclight.channel.LightTuneOverride.configureKnee(arg));
+            return;
+        }
+        if (line.startsWith("!beam")) {
+            // 2026-09-05 用户体感第五旋钮:体积光束密度(丁达尔效果强度)。经 SSBO
+            // vlParams.y 逐灯直接换值,GLSL 零改动;0=完全关光束(A/B 开关对比),
+            // off=回 config 默认 beamDensity=0.05。范围 0..1,零重启生效,重启清零。
+            // 注意 !bench 前缀不冲突(分支匹配互不前缀包含)。
+            String arg = line.length() > 5 ? line.substring(5).trim() : "";
+            TacLightMod.LOGGER.info("[TacLight] RELAY beam -> {}",
+                    dev.taclight.channel.LightTuneOverride.configureBeam(arg));
             return;
         }
         if (line.startsWith("!gun")) {

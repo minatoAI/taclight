@@ -3,10 +3,11 @@ package dev.taclight.channel;
 import dev.taclight.channel.ClientSpotlightUploader.LightParams;
 
 /**
- * 手电四旋钮覆盖层契约(2026-09-04 三旋钮,2026-09-05 加 !knee):
+ * 手电五旋钮覆盖层契约(2026-09-04 三旋钮,2026-09-05 加 !knee/!beam):
  * {@code !bright} 直接亮度(绝对强度) / {@code !dist} 绝对照距 /
  * {@code !atten} 衰减系数 K(经 SSBO cone.z 逐灯透传) /
- * {@code !knee} 近场软肩 G(经 SSBO cone.w 逐灯透传,0=恒等直通)。
+ * {@code !knee} 近场软肩 G(经 SSBO cone.w 逐灯透传,0=恒等直通) /
+ * {@code !beam} 体积光密度(经 SSBO vlParams.y 直接换值,0=完全关光束,off=回 config 默认)。
  * 默认全关 = 零行为变化;越界/非法拒绝不污染;收尾全关(零残留)。
  */
 public class LightTuneContract {
@@ -15,8 +16,9 @@ public class LightTuneContract {
         LightTuneOverride.configureDist("off");
         LightTuneOverride.configureAtten("off");
         LightTuneOverride.configureKnee("off");
+        LightTuneOverride.configureBeam("off");
 
-        // ---- 默认:三路直通 ----
+        // ---- 默认:各路直通 ----
         check(Math.abs(LightTuneOverride.brightnessFor(6.0f) - 6.0f) < 1e-6, "默认亮度直通");
         check(Math.abs(LightTuneOverride.radiusFor(36.0f, 96.0f) - 36.0f) < 1e-6, "默认半径直通");
         check(LightTuneOverride.attenK() == 0.0f, "默认 attenK=0(GLSL 回退编译期默认)");
@@ -62,6 +64,24 @@ public class LightTuneContract {
         String kNaN = LightTuneOverride.configureKnee("soft");
         check(kNaN.startsWith("bad arg"), "knee 非法输入拒绝: " + kNaN);
 
+        // ---- beam:体积光密度(2026-09-05 第五旋钮,SSBO vlParams.y 直接换值) ----
+        // 0=完全关光束(A/B 开关对比);off=回 config 默认 0.05。密度是消费值本身,
+        // 与 atten/knee 的 0 哨兵语义不同:显式 0 就是关,不回退。
+        check(Math.abs(LightTuneOverride.beamDensityOr(0.05f) - 0.05f) < 1e-6, "默认 beamDensity 直通(config 值)");
+        String bm0 = LightTuneOverride.configureBeam("0");
+        check(bm0.contains("beam=0.0"), "beam 0 回显: " + bm0);
+        check(LightTuneOverride.beamDensityOr(0.05f) == 0.0f, "beam 0 = 完全关闭光束(显式零≠回默认)");
+        String bm35 = LightTuneOverride.configureBeam("0.35");
+        check(bm35.contains("0.35"), "beam 0.35 回显: " + bm35);
+        check(Math.abs(LightTuneOverride.beamDensityOr(0.05f) - 0.35f) < 1e-6, "beam 覆盖生效(与 config 值无关)");
+        String bmHi = LightTuneOverride.configureBeam("2.0");
+        check(bmHi.startsWith("range"), "beam 越界拒绝(>1): " + bmHi);
+        check(Math.abs(LightTuneOverride.beamDensityOr(0.05f) - 0.35f) < 1e-6, "越界不污染当前值");
+        String bmNeg = LightTuneOverride.configureBeam("-0.1");
+        check(bmNeg.startsWith("range"), "beam 越界拒绝(<0): " + bmNeg);
+        String bmNaN = LightTuneOverride.configureBeam("fog");
+        check(bmNaN.startsWith("bad arg"), "beam 非法输入拒绝: " + bmNaN);
+
         // ---- buildSpotBeam 集成 ----
         LightParams p = new LightParams(36.0f, 96.0f, 6.0f, 0.848f, 0.951f, 0.05f);
         SpotlightData tuned = ClientSpotlightUploader.buildSpotBeam(
@@ -70,6 +90,7 @@ public class LightTuneContract {
         check(Math.abs(tuned.radius() - 24.0f) < 1e-4, "集成:半径=dist 绝对值 24(不跟亮度走)");
         check(Math.abs(tuned.coneReservedZ() - 1.0f) < 1e-6, "集成:cone.z=atten K 1.0 透传");
         check(Math.abs(tuned.coneReservedW() - 3.0f) < 1e-6, "集成:cone.w=knee G 3.0 透传");
+        check(Math.abs(tuned.density() - 0.35f) < 1e-4, "集成:vlParams.y=beam 密度 0.35 覆盖(config 0.05 被换)");
         java.nio.ByteBuffer buf = SpotlightBufferLayout.newBuffer(1);
         SpotlightBufferLayout.writeLight(buf, 0, tuned);
         SpotlightData read = SpotlightBufferLayout.readLight(buf, 0);
@@ -86,6 +107,7 @@ public class LightTuneContract {
         LightTuneOverride.configureDist("off");
         LightTuneOverride.configureAtten("off");
         LightTuneOverride.configureKnee("off");
+        LightTuneOverride.configureBeam("off");
         SpotlightData clean = ClientSpotlightUploader.buildSpotBeam(
                 0, 0, 0, 0, 0, -1, p, 1.0f);
         check(Math.abs(clean.intensity() - 6.0f) < 1e-4
@@ -93,8 +115,9 @@ public class LightTuneContract {
                         && clean.coneReservedZ() == 0.0f
                         && clean.coneReservedW() == 0.0f,
                 "收尾关闭:强度/半径/atten/knee 全回默认(零残留)");
+        check(Math.abs(clean.density() - 0.05f) < 1e-4, "收尾关闭:density 回 config 默认 0.05");
 
-        System.out.println("LightTuneContract: ALL PASS (31 checks)");
+        System.out.println("LightTuneContract: ALL PASS (42 checks)");
     }
 
     private static void check(boolean cond, String what) {

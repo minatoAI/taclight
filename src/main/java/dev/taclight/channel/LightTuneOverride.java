@@ -1,9 +1,10 @@
 package dev.taclight.channel;
 
 /**
- * 手电四旋钮覆盖层(2026-09-04 三旋钮用户体感调参,2026-09-05 加 !knee):
+ * 手电五旋钮覆盖层(2026-09-04 三旋钮用户体感调参,2026-09-05 加 !knee/!beam):
  * {@code !bright} 绝对亮度 / {@code !dist} 绝对照距 / {@code !atten} 衰减系数 K /
- * {@code !knee} 近场软肩 G(经 SSBO cone.w 逐灯透传)。
+ * {@code !knee} 近场软肩 G(经 SSBO cone.w 逐灯透传) /
+ * {@code !beam} 体积光束密度(经 SSBO vlParams.y 直接换值,GLSL 零改动)。
  * <p>Forge CLIENT config 热改 toml 不回读(瞬时读仍是旧值,见 {@link LightLevelOverride}),
  * 故四路均为纯内存覆盖,重启实例 = 覆盖清零 = 回 config 默认。
  * <p>默认全关 = {@link #brightnessFor}/{@link #radiusFor} 直通、{@link #attenK}/
@@ -12,7 +13,9 @@ package dev.taclight.channel;
  * 半径 r 仍走原通道,零布局变化。
  * <p>范围:bright 0.5..30(同 INTENSITY define 域)/dist 4..96(同 RADIUS 域)/
  * atten 0.2..20(0.5r 处约 44%..2% 亮度,5.0=当前主包标定)/
- * knee 0.2..8(近场压暗强度,2.0=当前主包标定;0.2≈趋平/压缩最弱,越大近场压得越狠)。
+ * knee 0.2..8(近场压暗强度,2.0=当前主包标定;0.2≈趋平/压缩最弱,越大近场压得越狠)/
+ * beam 0..1(体积密度 = 丁达尔效果强度,0=完全关光束做开关对比,off=回 config 默认 0.05;
+ * 与 atten/knee 的 0 哨兵语义不同——密度是消费值本身,显式 0 就是关,不回退)。
  */
 public final class LightTuneOverride {
     private static volatile float brightValue = 6.0f;
@@ -23,6 +26,8 @@ public final class LightTuneOverride {
     private static volatile boolean attenActive;
     private static volatile float kneeValue;
     private static volatile boolean kneeActive;
+    private static volatile float beamValue;
+    private static volatile boolean beamActive;
 
     private LightTuneOverride() {}
 
@@ -120,6 +125,27 @@ public final class LightTuneOverride {
         return Math.min(distValue, radiusMax);
     }
 
+    /** relay 入口:返回状态串(供日志)。 */
+    public static String configureBeam(String arg) {
+        if (arg.isEmpty() || arg.equals("status")) {
+            return beamActive ? ("beam=" + beamValue) : "off(config 默认 density=0.05)";
+        }
+        if (arg.equals("off")) {
+            beamActive = false;
+            beamValue = 0.0f;
+            return "off(config 默认 density=0.05)";
+        }
+        try {
+            float v = Float.parseFloat(arg);
+            if (v < 0.0f || v > 1.0f) return "range 0..1, got " + arg;
+            beamValue = v;
+            beamActive = true;
+            return "beam=" + v;
+        } catch (NumberFormatException e) {
+            return "bad arg " + arg + " (want 0..1/off/status)";
+        }
+    }
+
     /** buildSpotBeam 调用:有覆盖 → 逐灯 K;0 = cone.z 留 0,GLSL 回退编译期默认。 */
     public static float attenK() {
         if (!attenActive) return 0.0f;
@@ -130,5 +156,11 @@ public final class LightTuneOverride {
     public static float kneeG() {
         if (!kneeActive) return 0.0f;
         return kneeValue;
+    }
+
+    /** buildSpotBeam 调用:有覆盖 → 逐灯体积密度替换(0=完全关光束;off 回 config 默认)。 */
+    public static float beamDensityOr(float configDensity) {
+        if (!beamActive) return configDensity;
+        return beamValue;
     }
 }
