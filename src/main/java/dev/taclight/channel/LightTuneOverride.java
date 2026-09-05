@@ -1,10 +1,12 @@
 package dev.taclight.channel;
 
 /**
- * 手电五旋钮覆盖层(2026-09-04 三旋钮用户体感调参,2026-09-05 加 !knee/!beam):
+ * 手电六旋钮覆盖层(2026-09-04 三旋钮用户体感调参,2026-09-05 加 !knee/!beam/!beamonly/!scat):
  * {@code !bright} 绝对亮度 / {@code !dist} 绝对照距 / {@code !atten} 衰减系数 K /
  * {@code !knee} 近场软肩 G(经 SSBO cone.w 逐灯透传) /
- * {@code !beam} 体积光束密度(经 SSBO vlParams.y 直接换值,GLSL 零改动)。
+ * {@code !beam} 体积光束密度(经 SSBO vlParams.y 直接换值,GLSL 零改动) /
+ * {@code !scat} 体积光散射各向异性 g(经 SSBO vlParams.x 直接换值,GLSL 零改动;
+ * 0=完全各向同性侧视最亮,off=回编译期默认 0.55——侧视丁达尔可见性主旋钮)。
  * <p>Forge CLIENT config 热改 toml 不回读(瞬时读仍是旧值,见 {@link LightLevelOverride}),
  * 故四路均为纯内存覆盖,重启实例 = 覆盖清零 = 回 config 默认。
  * <p>默认全关 = {@link #brightnessFor}/{@link #radiusFor} 直通、{@link #attenK}/
@@ -29,6 +31,8 @@ public final class LightTuneOverride {
     private static volatile float beamValue;
     private static volatile boolean beamActive;
     private static volatile boolean beamOnlyActive;
+    private static volatile float scatValue;
+    private static volatile boolean scatActive;
 
     private LightTuneOverride() {}
 
@@ -163,6 +167,39 @@ public final class LightTuneOverride {
     public static float beamDensityOr(float configDensity) {
         if (!beamActive) return configDensity;
         return beamValue;
+    }
+
+    /** relay 入口:返回状态串(供日志)。 */
+    public static String configureScat(String arg) {
+        if (arg.isEmpty() || arg.equals("status")) {
+            return scatActive ? ("scat=" + scatValue) : "off(GLSL 默认 g=0.55)";
+        }
+        if (arg.equals("off")) {
+            scatActive = false;
+            scatValue = 0.0f;
+            return "off(GLSL 默认 g=0.55)";
+        }
+        try {
+            float v = Float.parseFloat(arg);
+            if (v < 0.0f || v > 0.9f) return "range 0..0.9, got " + arg;
+            scatValue = v;
+            scatActive = true;
+            return "scat=" + v;
+        } catch (NumberFormatException e) {
+            return "bad arg " + arg + " (want 0..0.9/off/status)";
+        }
+    }
+
+    /** buildSpotBeam 调用:有覆盖 → 逐灯 HG 各向异性 g 换值(0=完全各向同性雾球,侧视最亮;
+     *  off 回编译期默认 0.55。与 !beam 同族:0 是合法消费值,不走 0 哨兵)。 */
+    public static float scatOr(float configAnisotropy) {
+        if (!scatActive) return configAnisotropy;
+        return scatValue;
+    }
+
+    /** buildSpotBeam 调用:scat 覆盖是否激活(决定是否需要重排 SSBO 灯数据)。 */
+    public static boolean scatActive() {
+        return scatActive;
     }
 
     /** relay 入口:返回状态串(供日志)。 */

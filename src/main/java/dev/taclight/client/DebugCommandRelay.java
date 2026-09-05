@@ -36,8 +36,10 @@ import java.nio.file.StandardCopyOption;
   *       无参=status,{@code off}=回默认(用法见各命令日志回显)。</li>
   *   <li>{@code !beam} —— 体积光束密度第五旋钮(2026-09-05,丁达尔效果强度):
   *       0..1;0=完全关光束(开关对比),off=回 config 默认 0.05;vlParams.y 直接换值。</li>
-  *   <li>{@code !beamonly} —— 只看光束(2026-09-05):头部 flags bit2,GLSL 跳过 M1 表面
-  *       照明,composite1 体积束照常——单独观察体积光形态用。on/off/status。</li>
+ *   <li>{@code !beamonly} —— 只看光束(2026-09-05):头部 flags bit2,GLSL 跳过 M1 表面
+ *       照明,composite1 体积束照常——单独观察体积光形态用。on/off/status。</li>
+ *   <li>{@code !scat} —— 体积光散射各向异性 g 第六旋钮(2026-09-05):0..0.9,经
+ *       vlParams.x 逐灯透传;0=各向同性侧视最亮,off=回默认 0.55。</li>
  *   <li>{@code !looktrace} / {@code !mcap} —— 消融探针 / 运动门控采集开关(09-01,
  *       布防后被观察角色朝向/位置变化自动连拍+逐帧信号,静止自停)。</li>
  *  </ul></p>
@@ -226,6 +228,16 @@ public final class DebugCommandRelay {
             String arg = line.length() > 5 ? line.substring(5).trim() : "";
             TacLightMod.LOGGER.info("[TacLight] RELAY beam -> {}",
                     dev.taclight.channel.LightTuneOverride.configureBeam(arg));
+            return;
+        }
+        if (line.startsWith("!scat")) {
+            // 2026-09-05 第六旋钮:体积光散射各向异性 g(侧视丁达尔可见性主旋钮)。
+            // 经 SSBO vlParams.x 逐灯直接换值,GLSL 零改动;0=完全各向同性(雾球,
+            // 侧视最亮),off=回编译期默认 g=0.55(前向散射,顺轴亮/侧视暗 16~27×)。
+            // 范围 0..0.9,零重启生效,重启清零。与其他 !s* 分支互不前缀包含。
+            String arg = line.length() > 5 ? line.substring(5).trim() : "";
+            TacLightMod.LOGGER.info("[TacLight] RELAY scat -> {}",
+                    dev.taclight.channel.LightTuneOverride.configureScat(arg));
             return;
         }
         if (line.startsWith("!gun")) {

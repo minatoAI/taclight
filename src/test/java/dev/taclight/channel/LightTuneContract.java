@@ -3,12 +3,14 @@ package dev.taclight.channel;
 import dev.taclight.channel.ClientSpotlightUploader.LightParams;
 
 /**
- * 手电五旋钮覆盖层契约(2026-09-04 三旋钮,2026-09-05 加 !knee/!beam):
+ * 手电六旋钮覆盖层契约(2026-09-04 三旋钮,2026-09-05 加 !knee/!beam/!beamonly/!scat):
  * {@code !bright} 直接亮度(绝对强度) / {@code !dist} 绝对照距 /
  * {@code !atten} 衰减系数 K(经 SSBO cone.z 逐灯透传) /
  * {@code !knee} 近场软肩 G(经 SSBO cone.w 逐灯透传,0=恒等直通) /
  * {@code !beam} 体积光密度(经 SSBO vlParams.y 直接换值,0=完全关光束,off=回 config 默认) /
- * {@code !beamonly} 只看光束(头部 flags bit2,跳过 M1 表面照明,composite1 体积束照常)。
+ * {@code !beamonly} 只看光束(头部 flags bit2,跳过 M1 表面照明,composite1 体积束照常) /
+ * {@code !scat} 体积光散射各向异性 g(经 SSBO vlParams.x 直接换值,0=各向同性侧视最亮,
+ * off=回编译期默认 0.55;侧视丁达尔可见性主旋钮,见 evidence/2026-09-05-beam-visibility-diagnosis)。
  * 默认全关 = 零行为变化;越界/非法拒绝不污染;收尾全关(零残留)。
  */
 public class LightTuneContract {
@@ -104,6 +106,28 @@ public class LightTuneContract {
                                | SpotlightBufferLayout.FLAG_DEBUG
                                | SpotlightBufferLayout.FLAG_TIMING_PROBE)) == 0,
                 "FLAG_BEAM_ONLY=bit2(4)与既有 flags 无冲突");
+
+        // ---- scat:体积光散射各向异性 g(2026-09-05 第六旋钮,SSBO vlParams.x 直接换值) ----
+        // 语义与 !beam 同族(换消费值本身):显式 0=完全各向同性(侧视最亮),
+        // off=回编译期默认 BEAM_ANISOTROPY=0.55。0.55 下侧/背视相位暗 16~27×,
+        // 是"侧面看不到丁达尔"的主因(证据 evidence/2026-09-05-beam-visibility-diagnosis/)。
+        check(LightTuneOverride.configureScat("status").contains("g=0.55"),
+                "scat 默认 off 回显: " + LightTuneOverride.configureScat("status"));
+        check(LightTuneOverride.scatOr(0.55f) == 0.55f, "默认 scat 直通(编译期默认 g=0.55)");
+        String sc03 = LightTuneOverride.configureScat("0.3");
+        check(sc03.contains("scat=0.3"), "scat 0.3 回显: " + sc03);
+        check(Math.abs(LightTuneOverride.scatOr(0.55f) - 0.3f) < 1e-6, "scat 覆盖生效");
+        check(LightTuneOverride.configureScat("0").contains("scat=0.0"), "scat 0 回显(显式各向同性)");
+        check(LightTuneOverride.scatOr(0.55f) == 0.0f, "scat 0 = 完全各向同性(显式零≠回默认)");
+        check(LightTuneOverride.configureScat("0.95").startsWith("range"), "scat 越界拒绝(>0.9): "
+                + LightTuneOverride.configureScat("0.95"));
+        check(Math.abs(LightTuneOverride.scatOr(0.55f) - 0.0f) < 1e-6, "scat 越界不污染当前值");
+        check(LightTuneOverride.configureScat("-0.1").startsWith("range"), "scat 越界拒绝(<0)");
+        check(LightTuneOverride.configureScat("abc").startsWith("bad arg"), "scat 非法输入拒绝");
+        check(LightTuneOverride.configureScat("off").contains("g=0.55"), "scat off 回显");
+        check(LightTuneOverride.scatOr(0.55f) == 0.55f, "scat off 生效(回编译期默认)");
+        LightTuneOverride.configureScat("0.1");
+
         try {
             String core = java.nio.file.Files.readString(
                     java.nio.file.Path.of("pack/shaders/lib/taclight_core.glsl"));
@@ -112,6 +136,12 @@ public class LightTuneContract {
                     java.nio.file.Path.of("pack/shaders/composite.fsh"));
             check(comp.contains("(flags & TACLIGHT_FLAG_BEAM_ONLY) == 0u"),
                     "GLSL:composite M1 分支有 beamonly 门(跳过表面照明)");
+            String comp1 = java.nio.file.Files.readString(
+                    java.nio.file.Path.of("pack/shaders/composite1.fsh"));
+            check(comp1.contains("TACLIGHT_VL_STEPS 64"),
+                    "GLSL:composite1 步数 64(细锥采样,侧视可见性,32 步会跨过细锥)");
+            check(comp1.contains("L.vlParams.x"),
+                    "GLSL:composite1 HG 相位消费 vlParams.x(scat 透传消费点)");
         } catch (Exception e) {
             throw new AssertionError("FAIL GLSL 源读取: " + e);
         }
@@ -125,11 +155,13 @@ public class LightTuneContract {
         check(Math.abs(tuned.coneReservedZ() - 1.0f) < 1e-6, "集成:cone.z=atten K 1.0 透传");
         check(Math.abs(tuned.coneReservedW() - 3.0f) < 1e-6, "集成:cone.w=knee G 3.0 透传");
         check(Math.abs(tuned.density() - 0.35f) < 1e-4, "集成:vlParams.y=beam 密度 0.35 覆盖(config 0.05 被换)");
+        check(Math.abs(tuned.anisotropy() - 0.1f) < 1e-6, "集成:vlParams.x=scat g 0.1 覆盖(0.55 被换)");
         java.nio.ByteBuffer buf = SpotlightBufferLayout.newBuffer(1);
         SpotlightBufferLayout.writeLight(buf, 0, tuned);
         SpotlightData read = SpotlightBufferLayout.readLight(buf, 0);
         check(Math.abs(read.coneReservedZ() - 1.0f) < 1e-6, "cone.z 经 SSBO 读写回环");
         check(Math.abs(read.coneReservedW() - 3.0f) < 1e-6, "cone.w 经 SSBO 读写回环");
+        check(Math.abs(read.anisotropy() - 0.1f) < 1e-6, "anisotropy 经 SSBO 读写回环");
 
         // ---- 默认灯 cone.z=0(GLSL 回退) ----
         SpotlightData plain = SpotlightData.spot(1f, 2f, 3f, 24f,
@@ -143,6 +175,7 @@ public class LightTuneContract {
         LightTuneOverride.configureKnee("off");
         LightTuneOverride.configureBeam("off");
         LightTuneOverride.configureBeamonly("off");
+        LightTuneOverride.configureScat("off");
         SpotlightData clean = ClientSpotlightUploader.buildSpotBeam(
                 0, 0, 0, 0, 0, -1, p, 1.0f);
         check(Math.abs(clean.intensity() - 6.0f) < 1e-4
@@ -151,8 +184,10 @@ public class LightTuneContract {
                         && clean.coneReservedW() == 0.0f,
                 "收尾关闭:强度/半径/atten/knee 全回默认(零残留)");
         check(Math.abs(clean.density() - 0.05f) < 1e-4, "收尾关闭:density 回 config 默认 0.05");
+        check(Math.abs(clean.anisotropy() - SpotlightData.BEAM_ANISOTROPY) < 1e-6,
+                "收尾关闭:anisotropy 回编译期默认 0.55");
 
-        System.out.println("LightTuneContract: ALL PASS (51 checks)");
+        System.out.println("LightTuneContract: ALL PASS (68 checks)");
     }
 
     private static void check(boolean cond, String what) {

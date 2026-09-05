@@ -1,3 +1,19 @@
+## 09-05 晚 · !scat 第六旋钮 + raymarch 64 步:侧视丁达尔改进落地(未 push)
+
+- 用户确认 beamonly 下体积光存在但"侧面太弱",批准改进(散射方向+采样)。
+- **`!scat <0..0.9>`**:SSBO vlParams.x 逐灯直接换值,GLSL 零改动(表面照明不消费该槽,
+  只影响光束形态);**0=完全各向同性(侧视最亮),off=回编译期默认 0.55**(与 !beam 同族,
+  0 是合法消费值非哨兵)。LightTune 51→**68** 项,`AllContracts: ALL PASS`;同能单变量
+  A/B(g=0.55 vs 0,beam1.0+亮30+atten0.5)meanDiff **5.46**/changed **12.6%**(噪声底 0.48)。
+- **TACLIGHT_VL_STEPS 32→64**(composite1):远背景视线步长 3m→1.5m,近场细锥不再被
+  步进跨过;成本 ~0.25→~0.5ms/帧量级(32 步 0.25ms 基准外推,待正式验收 !bench 实测)。
+- **实机定案(稳定 B 机位:Dev 灯横穿 B 视野、墙做背景)**:beam 1.0+亮30+atten 0.5+
+  scat 0 = **清晰离散光锥**;beam 0.6+亮12+atten 2+scat 0.15 = 仍可见(淡)——推荐日常配方。
+  此前 A 端 yaw63 机位全黑=病态工况(光束背景=无限远虚空+仅近端 2.5m 细锥入画),非缺陷。
+  证据 docs/evidence/2026-09-05-beam-scat-knob/。
+- **观察要领**:从侧面 3~5m 看光束、让墙/地面当背景;A 端已留推荐配方(beamonly on +
+  beam 0.6 + bright 12 + atten 2 + scat 0.15)。更细"一根柱"→ 窄锥角另立项。
+
 ## 09-05 · 体积光可见性诊断:!beamonly 后"看不到丁达尔"定案(未 push)
 
 - **用户报**:Dev(A 端)视角观察 ObserverB 的灯,`!beamonly on` 后无体积光,问是开关

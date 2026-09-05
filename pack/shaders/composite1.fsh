@@ -18,7 +18,9 @@
 in vec2 texcoord;
 layout(location = 0) out vec4 taclightVL;
 
-#define TACLIGHT_VL_STEPS 32   // F5(2026-08-30):24→32,条纹更细
+#define TACLIGHT_VL_STEPS 64   // 2026-09-05:32→64,细锥采样翻倍(32 步对远背景视线步长
+                               // 1~3m 会把近场细锥整段跨过=侧视不可见三因之一,证据
+                               // evidence/2026-09-05-beam-visibility-diagnosis/)
 // 色调管线 v2:colortex0/合成改线性域后,光束在 final 中直接线性相加(旧域等效
 // 贡献 ≈ b^2.2,新域 = b 本身);1.4→0.32 为同观感重校(核心亮度以 B0 截图对齐)。
 #define TACLIGHT_BEAM_GAIN 0.5
