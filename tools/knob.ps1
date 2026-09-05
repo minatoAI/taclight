@@ -2,10 +2,13 @@
 # 游戏内没有 ! 命令聊天入口(dev 命令树不完整),中继文件是唯一输入通道;本脚本
 # 让你在游戏旁边开个终端就能自助调参,不用等 AI 代写。
 #
-# 用法(在 taclight/ 目录下):
+# 用法(推荐:双击 tools\knob.bat 弹专用调参窗口,免去 PowerShell 启动/引号问题):
 #   交互模式(逐行输入,回车即发): powershell -NoProfile -ExecutionPolicy Bypass -File tools\knob.ps1
 #   输入到观察者 B 端:             powershell ... -File tools\knob.ps1 -Side B
 #   单发一条(脚本用):            powershell ... -File tools\knob.ps1 -Text "!bright 12"
+#                                  或 cmd 直发: tools\knob.bat knee 8(自动补 !)
+# 注意:本脚本必须在它自己的 "knob:" 提示符下输入;在 PowerShell 命令提示符下输
+# "!knee 8" 会被当成"要运行的程序"而报"无法识别"(09-05 用户实机踩坑)。
 #
 # 旋钮速查(客户端本地,零重启生效,重启清零):
 #   !bright <0.5..30>  绝对亮度      无参=status  off=回默认
