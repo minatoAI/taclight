@@ -23,7 +23,11 @@ layout(location = 0) out vec4 taclightVL;
                                // evidence/2026-09-05-beam-visibility-diagnosis/)
 // 色调管线 v2:colortex0/合成改线性域后,光束在 final 中直接线性相加(旧域等效
 // 贡献 ≈ b^2.2,新域 = b 本身);1.4→0.32 为同观感重校(核心亮度以 B0 截图对齐)。
-#define TACLIGHT_BEAM_GAIN 0.5
+#define TACLIGHT_BEAM_GAIN 1.0   // 2026-09-05:0.5→1.0,侧视轮廓仍嫌暗(用户实测)——
+                                 // 全角度体积光亮度×2;重叠眩光由下方 BEAM_CAP 软上限兜底
+// 软上限默认帽(线性域),vlParams.z 倍率 m 相乘(!beamcap 旋钮透传):低于半帽点恒等
+// =单灯观感零变化;多灯重叠亮度指数肩部渐近 cap——不许无限叠加刺眼(2026-09-05 用户需求)。
+#define TACLIGHT_BEAM_CAP 2.0
 #define TACLIGHT_VL_MAX_DIST 96.0   // 天空像素的 march 终点(= radiusMax)
 
 void main() {
@@ -82,6 +86,14 @@ void main() {
             }
         }
         vl *= TACLIGHT_BEAM_GAIN / float(TACLIGHT_VL_STEPS);
+        // 多灯重叠软上限:分量级指数肩部——分量 ≤半帽点恒等(单灯观感零变化),
+        // >半帽点渐近 cap;倍率 m 来自 vlParams.z(全局旋钮,所有灯同值,取槽 0)。
+        // 坑105:GLSL 关系运算符不支持 vec3 与 float 混用(C1020 静默禁包),
+        // 必须用 min+exp 分量级写法,不能用 vl<=sh 三元。
+        float cap = TACLIGHT_BEAM_CAP * lights[0].vlParams.z;
+        float sh = cap * 0.5;
+        vec3 over = max(vl - vec3(sh), vec3(0.0));
+        vl = min(vl, vec3(sh) + (cap - sh) * (1.0 - exp(-over / (cap - sh))));
     }
     taclightVL = vec4(vl, 1.0);
 }

@@ -40,6 +40,8 @@ import java.nio.file.StandardCopyOption;
  *       照明,composite1 体积束照常——单独观察体积光形态用。on/off/status。</li>
  *   <li>{@code !scat} —— 体积光散射各向异性 g 第六旋钮(2026-09-05):0..0.9,经
  *       vlParams.x 逐灯透传;0=各向同性侧视最亮,off=回默认 0.55。</li>
+ *   <li>{@code !beamcap} —— 体积光重叠软上限倍率第七旋钮(2026-09-05):0.25..8,经
+ *       vlParams.z 透传(GLSL cap=2.0×m);单灯恒等,多灯重叠渐近封顶。</li>
  *   <li>{@code !looktrace} / {@code !mcap} —— 消融探针 / 运动门控采集开关(09-01,
  *       布防后被观察角色朝向/位置变化自动连拍+逐帧信号,静止自停)。</li>
  *  </ul></p>
@@ -218,6 +220,15 @@ public final class DebugCommandRelay {
             String arg = line.length() > 9 ? line.substring(9).trim() : "";
             TacLightMod.LOGGER.info("[TacLight] RELAY beamonly -> {}",
                     dev.taclight.channel.LightTuneOverride.configureBeamonly(arg));
+            return;
+        }
+        if (line.startsWith("!beamcap")) {
+            // 2026-09-05 第七旋钮:体积光重叠软上限倍率 m(GLSL cap=2.0×m,低于半帽点
+            // 恒等=单灯观感零变化,多灯重叠指数肩部渐近封顶,不许亮度无限叠加刺眼)。
+            // 0.25=压得最狠,8≈基本不限,off=回 m=1。必须排在 !beam 之前(startsWith 前缀包含)。
+            String arg = line.length() > 8 ? line.substring(8).trim() : "";
+            TacLightMod.LOGGER.info("[TacLight] RELAY beamcap -> {}",
+                    dev.taclight.channel.LightTuneOverride.configureBeamcap(arg));
             return;
         }
         if (line.startsWith("!beam")) {

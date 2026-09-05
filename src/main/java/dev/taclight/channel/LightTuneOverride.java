@@ -6,7 +6,10 @@ package dev.taclight.channel;
  * {@code !knee} 近场软肩 G(经 SSBO cone.w 逐灯透传) /
  * {@code !beam} 体积光束密度(经 SSBO vlParams.y 直接换值,GLSL 零改动) /
  * {@code !scat} 体积光散射各向异性 g(经 SSBO vlParams.x 直接换值,GLSL 零改动;
- * 0=完全各向同性侧视最亮,off=回编译期默认 0.55——侧视丁达尔可见性主旋钮)。
+ * 0=完全各向同性侧视最亮,off=回编译期默认 0.55——侧视丁达尔可见性主旋钮) /
+ * {@code !beamcap} 体积光重叠软上限倍率 m(经 SSBO vlParams.z 透传,GLSL cap=2.0×m:
+ * 低于半帽点恒等=单灯观感零变化,多灯重叠亮度指数肩部渐近 cap 不许无限叠加——
+ * 2026-09-05 用户需求:两灯同照刺眼;0.25=压得最狠,8≈基本不限,off=回 m=1)。
  * <p>Forge CLIENT config 热改 toml 不回读(瞬时读仍是旧值,见 {@link LightLevelOverride}),
  * 故四路均为纯内存覆盖,重启实例 = 覆盖清零 = 回 config 默认。
  * <p>默认全关 = {@link #brightnessFor}/{@link #radiusFor} 直通、{@link #attenK}/
@@ -33,6 +36,8 @@ public final class LightTuneOverride {
     private static volatile boolean beamOnlyActive;
     private static volatile float scatValue;
     private static volatile boolean scatActive;
+    private static volatile float beamCapValue;
+    private static volatile boolean beamCapActive;
 
     private LightTuneOverride() {}
 
@@ -200,6 +205,35 @@ public final class LightTuneOverride {
     /** buildSpotBeam 调用:scat 覆盖是否激活(决定是否需要重排 SSBO 灯数据)。 */
     public static boolean scatActive() {
         return scatActive;
+    }
+
+    /** relay 入口:返回状态串(供日志)。m 是 GLSL 软上限 cap=2.0×m 的倍率:
+     *  越小重叠眩光压得越狠,越大越接近无上限;off=回 m=1(GLSL 默认)。 */
+    public static String configureBeamcap(String arg) {
+        if (arg.isEmpty() || arg.equals("status")) {
+            return beamCapActive ? ("beamcap=" + beamCapValue + "x") : "off(软上限 cap=2.0 线性)";
+        }
+        if (arg.equals("off")) {
+            beamCapActive = false;
+            beamCapValue = 0.0f;
+            return "off(软上限 cap=2.0 线性)";
+        }
+        try {
+            float v = Float.parseFloat(arg);
+            if (v < 0.25f || v > 8.0f) return "range 0.25..8, got " + arg;
+            beamCapValue = v;
+            beamCapActive = true;
+            return "beamcap=" + v + "x";
+        } catch (NumberFormatException e) {
+            return "bad arg " + arg + " (want 0.25..8/off/status)";
+        }
+    }
+
+    /** buildSpotBeam 调用:有覆盖 → vlParams.z 软上限倍率(GLSL cap=TACLIGHT_BEAM_CAP×m);
+     *  0 = 未激活(槽位保持 spotBeam 写入的默认 1.0,零行为变化)。 */
+    public static float beamCapM() {
+        if (!beamCapActive) return 0.0f;
+        return beamCapValue;
     }
 
     /** relay 入口:返回状态串(供日志)。 */

@@ -3,15 +3,19 @@ package dev.taclight.channel;
 import dev.taclight.channel.ClientSpotlightUploader.LightParams;
 
 /**
- * 手电六旋钮覆盖层契约(2026-09-04 三旋钮,2026-09-05 加 !knee/!beam/!beamonly/!scat):
+ * 手电七旋钮覆盖层契约(2026-09-04 三旋钮,2026-09-05 加 !knee/!beam/!beamonly/!scat/!beamcap):
  * {@code !bright} 直接亮度(绝对强度) / {@code !dist} 绝对照距 /
  * {@code !atten} 衰减系数 K(经 SSBO cone.z 逐灯透传) /
  * {@code !knee} 近场软肩 G(经 SSBO cone.w 逐灯透传,0=恒等直通) /
  * {@code !beam} 体积光密度(经 SSBO vlParams.y 直接换值,0=完全关光束,off=回 config 默认) /
  * {@code !beamonly} 只看光束(头部 flags bit2,跳过 M1 表面照明,composite1 体积束照常) /
  * {@code !scat} 体积光散射各向异性 g(经 SSBO vlParams.x 直接换值,0=各向同性侧视最亮,
- * off=回编译期默认 0.55;侧视丁达尔可见性主旋钮,见 evidence/2026-09-05-beam-visibility-diagnosis)。
- * 默认全关 = 零行为变化;越界/非法拒绝不污染;收尾全关(零残留)。
+ * off=回编译期默认 0.55;侧视丁达尔可见性主旋钮,见 evidence/2026-09-05-beam-visibility-diagnosis) /
+ * {@code !beamcap} 体积光重叠软上限倍率 m(经 SSBO vlParams.z 透传,GLSL cap=2.0×m:
+ * 低于半帽点恒等=单灯观感零变化,多灯重叠亮度指数肩部渐近 cap 不许无限叠加;
+ * 0.25=压得最狠,8≈基本不限,off=回 m=1 默认)。
+ * 旋钮默认全关 = 零覆盖行为(beamcap 关=m=1,GLSL 默认 cap=2.0 恒生效,属功能本身);
+ * 越界/非法拒绝不污染;收尾全关(零残留)。
  */
 public class LightTuneContract {
     public static void main(String[] args) {
@@ -128,6 +132,27 @@ public class LightTuneContract {
         check(LightTuneOverride.scatOr(0.55f) == 0.55f, "scat off 生效(回编译期默认)");
         LightTuneOverride.configureScat("0.1");
 
+        // ---- beamcap:体积光重叠软上限倍率(2026-09-05,SSBO vlParams.z 透传) ----
+        // GLSL cap = 2.0 × m(m 默认 1):低于半帽点恒等(单灯观感零变化),多灯重叠
+        // 亮度指数肩部渐近 cap(用户需求:两灯同照不许亮度无限叠加刺眼)。
+        // m=0 非法即未激活哨兵(上传侧保持槽位默认 1.0),故显式 0 走 range 拒绝。
+        check(LightTuneOverride.configureBeamcap("status").contains("off"),
+                "beamcap 默认 off 回显: " + LightTuneOverride.configureBeamcap("status"));
+        check(LightTuneOverride.beamCapM() == 0.0f, "默认 beamCapM=0(未激活,槽位保持 1.0)");
+        String bc2 = LightTuneOverride.configureBeamcap("2.0");
+        check(bc2.contains("beamcap=2.0"), "beamcap 2.0 回显: " + bc2);
+        check(Math.abs(LightTuneOverride.beamCapM() - 2.0f) < 1e-6, "beamcap 覆盖生效(m=2,cap=4)");
+        check(LightTuneOverride.configureBeamcap("0.25").contains("beamcap=0.25"), "beamcap 0.25 回显");
+        check(Math.abs(LightTuneOverride.beamCapM() - 0.25f) < 1e-6, "beamcap 0.25 生效(cap=0.5 最压制)");
+        check(LightTuneOverride.configureBeamcap("9").startsWith("range"), "beamcap 越界拒绝(>8)");
+        check(Math.abs(LightTuneOverride.beamCapM() - 0.25f) < 1e-6, "beamcap 越界不污染当前值");
+        check(LightTuneOverride.configureBeamcap("0.1").startsWith("range"), "beamcap 越界拒绝(<0.25)");
+        check(LightTuneOverride.configureBeamcap("0").startsWith("range"), "beamcap 0 拒绝(0=哨兵不可显式设)");
+        check(LightTuneOverride.configureBeamcap("abc").startsWith("bad arg"), "beamcap 非法输入拒绝");
+        check(LightTuneOverride.configureBeamcap("off").contains("off"), "beamcap off 回显");
+        check(LightTuneOverride.beamCapM() == 0.0f, "beamcap off 生效(回默认槽位 1.0)");
+        LightTuneOverride.configureBeamcap("2.0");
+
         try {
             String core = java.nio.file.Files.readString(
                     java.nio.file.Path.of("pack/shaders/lib/taclight_core.glsl"));
@@ -142,6 +167,14 @@ public class LightTuneContract {
                     "GLSL:composite1 步数 64(细锥采样,侧视可见性,32 步会跨过细锥)");
             check(comp1.contains("L.vlParams.x"),
                     "GLSL:composite1 HG 相位消费 vlParams.x(scat 透传消费点)");
+            check(comp1.contains("#define TACLIGHT_BEAM_CAP 2.0"),
+                    "GLSL:composite1 软上限默认 cap=2.0 线性");
+            check(comp1.contains("#define TACLIGHT_BEAM_GAIN 1.0"),
+                    "GLSL:composite1 总增益 1.0(侧视轮廓亮度,2026-09-05 由 0.5 翻倍)");
+            check(comp1.contains("lights[0].vlParams.z"),
+                    "GLSL:composite1 软上限倍率消费 vlParams.z(beamcap 透传消费点)");
+            check(comp1.contains("(1.0 - exp("),
+                    "GLSL:composite1 肩部为指数渐近(软压缩,非硬截断)");
         } catch (Exception e) {
             throw new AssertionError("FAIL GLSL 源读取: " + e);
         }
@@ -156,12 +189,14 @@ public class LightTuneContract {
         check(Math.abs(tuned.coneReservedW() - 3.0f) < 1e-6, "集成:cone.w=knee G 3.0 透传");
         check(Math.abs(tuned.density() - 0.35f) < 1e-4, "集成:vlParams.y=beam 密度 0.35 覆盖(config 0.05 被换)");
         check(Math.abs(tuned.anisotropy() - 0.1f) < 1e-6, "集成:vlParams.x=scat g 0.1 覆盖(0.55 被换)");
+        check(Math.abs(tuned.beam() - 2.0f) < 1e-6, "集成:vlParams.z=beamcap 倍率 2.0 覆盖(默认 1.0 被换)");
         java.nio.ByteBuffer buf = SpotlightBufferLayout.newBuffer(1);
         SpotlightBufferLayout.writeLight(buf, 0, tuned);
         SpotlightData read = SpotlightBufferLayout.readLight(buf, 0);
         check(Math.abs(read.coneReservedZ() - 1.0f) < 1e-6, "cone.z 经 SSBO 读写回环");
         check(Math.abs(read.coneReservedW() - 3.0f) < 1e-6, "cone.w 经 SSBO 读写回环");
         check(Math.abs(read.anisotropy() - 0.1f) < 1e-6, "anisotropy 经 SSBO 读写回环");
+        check(Math.abs(read.beam() - 2.0f) < 1e-6, "vlParams.z(beamcap 倍率)经 SSBO 读写回环");
 
         // ---- 默认灯 cone.z=0(GLSL 回退) ----
         SpotlightData plain = SpotlightData.spot(1f, 2f, 3f, 24f,
@@ -176,6 +211,7 @@ public class LightTuneContract {
         LightTuneOverride.configureBeam("off");
         LightTuneOverride.configureBeamonly("off");
         LightTuneOverride.configureScat("off");
+        LightTuneOverride.configureBeamcap("off");
         SpotlightData clean = ClientSpotlightUploader.buildSpotBeam(
                 0, 0, 0, 0, 0, -1, p, 1.0f);
         check(Math.abs(clean.intensity() - 6.0f) < 1e-4
@@ -186,8 +222,9 @@ public class LightTuneContract {
         check(Math.abs(clean.density() - 0.05f) < 1e-4, "收尾关闭:density 回 config 默认 0.05");
         check(Math.abs(clean.anisotropy() - SpotlightData.BEAM_ANISOTROPY) < 1e-6,
                 "收尾关闭:anisotropy 回编译期默认 0.55");
+        check(Math.abs(clean.beam() - 1.0f) < 1e-6, "收尾关闭:vlParams.z 回默认倍率 1.0");
 
-        System.out.println("LightTuneContract: ALL PASS (68 checks)");
+        System.out.println("LightTuneContract: ALL PASS (88 checks)");
     }
 
     private static void check(boolean cond, String what) {

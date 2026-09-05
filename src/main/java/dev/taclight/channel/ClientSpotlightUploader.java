@@ -503,7 +503,9 @@ public final class ClientSpotlightUploader {
      *  2026-09-05 第四旋钮 !knee 经 cone.w 逐灯透传(0=GLSL 恒等直通=表面路径今日行为)。
      *  2026-09-05 第五旋钮 !beam 直接换 vlParams.y 体积密度(GLSL 零改动;0=关光束,off=回 config 默认)。
      *  2026-09-05 第六旋钮 !scat 直接换 vlParams.x 散射各向异性 g(GLSL 零改动;
-     *  0=各向同性侧视最亮,off=回编译期默认 0.55——侧视丁达尔可见性主旋钮)。 */
+     *  0=各向同性侧视最亮,off=回编译期默认 0.55——侧视丁达尔可见性主旋钮)。
+     *  2026-09-05 第七旋钮 !beamcap 经 vlParams.z 透传软上限倍率 m(GLSL cap=2.0×m:
+     *  单灯恒等、多灯重叠渐近封顶不许无限叠加)。 */
     public static SpotlightData buildSpotBeam(double wx, double wy, double wz,
                                               double dx, double dy, double dz,
                                               LightParams p, float intensityMult) {
@@ -520,12 +522,13 @@ public final class ClientSpotlightUploader {
         float k = LightTuneOverride.attenK();
         float g = LightTuneOverride.kneeG();
         float scat = LightTuneOverride.scatOr(plain.anisotropy());
-        if (k == 0.0f && g == 0.0f && !LightTuneOverride.scatActive()) return plain;
+        float capM = LightTuneOverride.beamCapM();
+        if (k == 0.0f && g == 0.0f && !LightTuneOverride.scatActive() && capM == 0.0f) return plain;
         return new SpotlightData(plain.posX(), plain.posY(), plain.posZ(), plain.radius(),
                 plain.red(), plain.green(), plain.blue(), plain.intensity(),
                 plain.dirX(), plain.dirY(), plain.dirZ(), plain.type(),
                 plain.cosOuter(), plain.cosInner(), k, g,
-                scat, plain.density(), plain.beam(), plain.vlReservedW(),
+                scat, plain.density(), capM == 0.0f ? plain.beam() : capM, plain.vlReservedW(),
                 plain.cookieR(), plain.cookieG(), plain.cookieB(), plain.cookieA());
     }
 
