@@ -6,7 +6,7 @@ struct TacLightSpot {
     vec4 colorIntensity;  // rgb = linear color; a = intensity
     vec4 dirType;         // xyz = normalized direction (light->target); w = 1.0 spot
     vec4 cone;            // x = cos(outer half-angle); y = cos(inner half-angle)
-    vec4 vlParams;        // x anisotropy, y density, z beam strength
+    vec4 vlParams;        // x axial floor (side-phase), y density, z beam cap mult
     vec4 cookie;          // reserved
 };
 

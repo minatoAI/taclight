@@ -46,7 +46,7 @@ struct TacLightSpot {
     vec4 colorIntensity;  // rgb = 线性色;a = 强度
     vec4 dirType;         // xyz = 归一化 world 方向(灯→目标);w = 类型(1=spot)
     vec4 cone;            // x = cos 外锥半角;y = cos 内锥半角;z/w 保留
-    vec4 vlParams;        // x 各向异性 g(!scat),y 密度(!beam),z 软上限倍率 m(!beamcap,默认1)
+    vec4 vlParams;        // x 轴向底亮 f(!scat,侧面相位 sin²θ),y 密度(!beam),z 软上限倍率 m(!beamcap,默认1)
     vec4 cookie;          // GLSL→Java 回写诊断槽位(探针阶段启用)
 };
 

@@ -90,8 +90,8 @@ public class ShaderCoreContract {
         }
 
         // ---- 边界 6:math/style 无双份 ----
-        check(math.contains("float taclight_ign(vec2 p)") && math.contains("float taclight_hg(float cosTheta, float g)"),
-                "math 层定义 IGN/HG 公开数学");
+        check(math.contains("float taclight_ign(vec2 p)") && !math.contains("taclight_hg"),
+                "math 层定义 IGN 公开数学(HG 相位已移除:侧面相位 sin²θ 内联在 composite1,2026-09-05 定案)");
         check(style.contains("#include \"/lib/taclight_math.glsl\"") && !style.contains("float taclight_ign(vec2 p)"),
                 "style 经 include 复用 math(传递可见给 final),不再重复定义");
 

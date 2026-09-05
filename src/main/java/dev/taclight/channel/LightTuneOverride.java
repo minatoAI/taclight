@@ -5,8 +5,9 @@ package dev.taclight.channel;
  * {@code !bright} 绝对亮度 / {@code !dist} 绝对照距 / {@code !atten} 衰减系数 K /
  * {@code !knee} 近场软肩 G(经 SSBO cone.w 逐灯透传) /
  * {@code !beam} 体积光束密度(经 SSBO vlParams.y 直接换值,GLSL 零改动) /
- * {@code !scat} 体积光散射各向异性 g(经 SSBO vlParams.x 直接换值,GLSL 零改动;
- * 0=完全各向同性侧视最亮,off=回编译期默认 0.55——侧视丁达尔可见性主旋钮) /
+ * {@code !scat} 体积光轴向底亮份额 f(经 SSBO vlParams.x 直接换值,GLSL 零改动;
+ * 侧面相位 phase=NORM·(f+(1−f)·sin²θ):0=纯侧面丁达尔,off=回编译期默认 0.04——
+ * 2026-09-05 用户定案:体积光只为侧面视角服务,正对/沿轴调低防与表面光叠加刺眼) /
  * {@code !beamcap} 体积光重叠软上限倍率 m(经 SSBO vlParams.z 透传,GLSL cap=2.0×m:
  * 低于半帽点恒等=单灯观感零变化,多灯重叠亮度指数肩部渐近 cap 不许无限叠加——
  * 2026-09-05 用户需求:两灯同照刺眼;0.25=压得最狠,8≈基本不限,off=回 m=1)。
@@ -177,12 +178,12 @@ public final class LightTuneOverride {
     /** relay 入口:返回状态串(供日志)。 */
     public static String configureScat(String arg) {
         if (arg.isEmpty() || arg.equals("status")) {
-            return scatActive ? ("scat=" + scatValue) : "off(GLSL 默认 g=0.55)";
+            return scatActive ? ("scat=" + scatValue) : "off(GLSL 默认 floor 0.04)";
         }
         if (arg.equals("off")) {
             scatActive = false;
             scatValue = 0.0f;
-            return "off(GLSL 默认 g=0.55)";
+            return "off(GLSL 默认 floor 0.04)";
         }
         try {
             float v = Float.parseFloat(arg);
@@ -195,10 +196,10 @@ public final class LightTuneOverride {
         }
     }
 
-    /** buildSpotBeam 调用:有覆盖 → 逐灯 HG 各向异性 g 换值(0=完全各向同性雾球,侧视最亮;
-     *  off 回编译期默认 0.55。与 !beam 同族:0 是合法消费值,不走 0 哨兵)。 */
-    public static float scatOr(float configAnisotropy) {
-        if (!scatActive) return configAnisotropy;
+    /** buildSpotBeam 调用:有覆盖 → 逐灯轴向底亮份额 f 换值(GLSL phase=NORM·(f+(1−f)·sin²θ),
+     *  0=纯侧面丁达尔;off 回编译期默认 0.06。与 !beam 同族:0 是合法消费值,不走 0 哨兵)。 */
+    public static float scatOr(float configSideFloor) {
+        if (!scatActive) return configSideFloor;
         return scatValue;
     }
 

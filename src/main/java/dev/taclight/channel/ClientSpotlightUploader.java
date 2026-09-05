@@ -474,7 +474,7 @@ public final class ClientSpotlightUploader {
                     l.red(), l.green(), l.blue(), l.intensity(),
                     l.dirX(), l.dirY(), l.dirZ(), l.type(),
                     l.cosOuter(), l.cosInner(), l.coneReservedZ(), l.coneReservedW(),
-                    l.anisotropy(), l.density(), l.beam(), l.vlReservedW(),
+                    l.sideFloor(), l.density(), l.beam(), l.vlReservedW(),
                     l.cookieR() + (l.posX() - nx), l.cookieG() + (l.posY() - ny),
                     l.cookieB() + (l.posZ() - nz), l.cookieA()));
         }
@@ -502,8 +502,8 @@ public final class ClientSpotlightUploader {
      *  !dist 覆盖本耦合(绝对照距);!atten 经 cone.z 逐灯透传(0=GLSL 回退编译期默认)。
      *  2026-09-05 第四旋钮 !knee 经 cone.w 逐灯透传(0=GLSL 恒等直通=表面路径今日行为)。
      *  2026-09-05 第五旋钮 !beam 直接换 vlParams.y 体积密度(GLSL 零改动;0=关光束,off=回 config 默认)。
-     *  2026-09-05 第六旋钮 !scat 直接换 vlParams.x 散射各向异性 g(GLSL 零改动;
-     *  0=各向同性侧视最亮,off=回编译期默认 0.55——侧视丁达尔可见性主旋钮)。
+     *  2026-09-05 第六旋钮 !scat 直接换 vlParams.x 轴向底亮份额 f(GLSL 零改动;
+     *  侧面相位 phase=NORM·(f+(1−f)·sin²θ):0=纯侧面丁达尔,off=回编译期默认 0.06)。
      *  2026-09-05 第七旋钮 !beamcap 经 vlParams.z 透传软上限倍率 m(GLSL cap=2.0×m:
      *  单灯恒等、多灯重叠渐近封顶不许无限叠加)。 */
     public static SpotlightData buildSpotBeam(double wx, double wy, double wz,
@@ -521,7 +521,7 @@ public final class ClientSpotlightUploader {
                 p.cosOuter, p.cosInner, LightTuneOverride.beamDensityOr(p.beamDensity), 1.0f);
         float k = LightTuneOverride.attenK();
         float g = LightTuneOverride.kneeG();
-        float scat = LightTuneOverride.scatOr(plain.anisotropy());
+        float scat = LightTuneOverride.scatOr(plain.sideFloor());
         float capM = LightTuneOverride.beamCapM();
         if (k == 0.0f && g == 0.0f && !LightTuneOverride.scatActive() && capM == 0.0f) return plain;
         return new SpotlightData(plain.posX(), plain.posY(), plain.posZ(), plain.radius(),

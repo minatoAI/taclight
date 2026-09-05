@@ -9,8 +9,9 @@ import dev.taclight.channel.ClientSpotlightUploader.LightParams;
  * {@code !knee} 近场软肩 G(经 SSBO cone.w 逐灯透传,0=恒等直通) /
  * {@code !beam} 体积光密度(经 SSBO vlParams.y 直接换值,0=完全关光束,off=回 config 默认) /
  * {@code !beamonly} 只看光束(头部 flags bit2,跳过 M1 表面照明,composite1 体积束照常) /
- * {@code !scat} 体积光散射各向异性 g(经 SSBO vlParams.x 直接换值,0=各向同性侧视最亮,
- * off=回编译期默认 0.55;侧视丁达尔可见性主旋钮,见 evidence/2026-09-05-beam-visibility-diagnosis) /
+ * {@code !scat} 体积光轴向底亮份额 f(经 SSBO vlParams.x 直接换值,GLSL 侧面相位
+ * phase = NORM·(f + (1−f)·sin²θ):正侧 90° 最亮=丁达尔效应服务旁观者,正对/沿轴
+ * 只剩 f 份额防叠加刺眼;0=纯侧面,off=回编译期默认 BEAM_SIDE_FLOOR=0.04) /
  * {@code !beamcap} 体积光重叠软上限倍率 m(经 SSBO vlParams.z 透传,GLSL cap=2.0×m:
  * 低于半帽点恒等=单灯观感零变化,多灯重叠亮度指数肩部渐近 cap 不许无限叠加;
  * 0.25=压得最狠,8≈基本不限,off=回 m=1 默认)。
@@ -111,25 +112,28 @@ public class LightTuneContract {
                                | SpotlightBufferLayout.FLAG_TIMING_PROBE)) == 0,
                 "FLAG_BEAM_ONLY=bit2(4)与既有 flags 无冲突");
 
-        // ---- scat:体积光散射各向异性 g(2026-09-05 第六旋钮,SSBO vlParams.x 直接换值) ----
-        // 语义与 !beam 同族(换消费值本身):显式 0=完全各向同性(侧视最亮),
-        // off=回编译期默认 BEAM_ANISOTROPY=0.55。0.55 下侧/背视相位暗 16~27×,
-        // 是"侧面看不到丁达尔"的主因(证据 evidence/2026-09-05-beam-visibility-diagnosis/)。
-        check(LightTuneOverride.configureScat("status").contains("g=0.55"),
+        // ---- scat:体积光轴向底亮份额 f(2026-09-05 侧面相位定案,SSBO vlParams.x 直接换值) ----
+        // 语义与 !beam 同族(换消费值本身):GLSL phase = NORM·(f + (1−f)·sin²θ),
+        // 显式 0=纯侧面(正对光源零体积叠加),off=回编译期默认 BEAM_SIDE_FLOOR=0.04
+        // (用户定案:体积光只为侧面视角服务,正面调低防与表面光叠加刺眼;
+        //  2026-09-05 实测定标:NORM 0.4 → 侧视空中光束项 +~32/255(旧 HG 同法 +7.7),
+        //  正对残留 0.4×0.04=0.016 仍低于旧 HG 后向瓣 0.029)。
+        check(SpotlightData.BEAM_SIDE_FLOOR == 0.04f, "编译期默认 BEAM_SIDE_FLOOR=0.04(侧面相位底亮)");
+        check(LightTuneOverride.configureScat("status").contains("floor 0.04"),
                 "scat 默认 off 回显: " + LightTuneOverride.configureScat("status"));
-        check(LightTuneOverride.scatOr(0.55f) == 0.55f, "默认 scat 直通(编译期默认 g=0.55)");
+        check(LightTuneOverride.scatOr(0.04f) == 0.04f, "默认 scat 直通(编译期默认 floor 0.04)");
         String sc03 = LightTuneOverride.configureScat("0.3");
         check(sc03.contains("scat=0.3"), "scat 0.3 回显: " + sc03);
-        check(Math.abs(LightTuneOverride.scatOr(0.55f) - 0.3f) < 1e-6, "scat 覆盖生效");
-        check(LightTuneOverride.configureScat("0").contains("scat=0.0"), "scat 0 回显(显式各向同性)");
-        check(LightTuneOverride.scatOr(0.55f) == 0.0f, "scat 0 = 完全各向同性(显式零≠回默认)");
+        check(Math.abs(LightTuneOverride.scatOr(0.04f) - 0.3f) < 1e-6, "scat 覆盖生效");
+        check(LightTuneOverride.configureScat("0").contains("scat=0.0"), "scat 0 回显(显式纯侧面)");
+        check(LightTuneOverride.scatOr(0.04f) == 0.0f, "scat 0 = 纯侧面(显式零≠回默认)");
         check(LightTuneOverride.configureScat("0.95").startsWith("range"), "scat 越界拒绝(>0.9): "
                 + LightTuneOverride.configureScat("0.95"));
-        check(Math.abs(LightTuneOverride.scatOr(0.55f) - 0.0f) < 1e-6, "scat 越界不污染当前值");
+        check(Math.abs(LightTuneOverride.scatOr(0.04f) - 0.0f) < 1e-6, "scat 越界不污染当前值");
         check(LightTuneOverride.configureScat("-0.1").startsWith("range"), "scat 越界拒绝(<0)");
         check(LightTuneOverride.configureScat("abc").startsWith("bad arg"), "scat 非法输入拒绝");
-        check(LightTuneOverride.configureScat("off").contains("g=0.55"), "scat off 回显");
-        check(LightTuneOverride.scatOr(0.55f) == 0.55f, "scat off 生效(回编译期默认)");
+        check(LightTuneOverride.configureScat("off").contains("floor 0.04"), "scat off 回显");
+        check(LightTuneOverride.scatOr(0.04f) == 0.04f, "scat off 生效(回编译期默认)");
         LightTuneOverride.configureScat("0.1");
 
         // ---- beamcap:体积光重叠软上限倍率(2026-09-05,SSBO vlParams.z 透传) ----
@@ -166,7 +170,11 @@ public class LightTuneContract {
             check(comp1.contains("TACLIGHT_VL_STEPS 64"),
                     "GLSL:composite1 步数 64(细锥采样,侧视可见性,32 步会跨过细锥)");
             check(comp1.contains("L.vlParams.x"),
-                    "GLSL:composite1 HG 相位消费 vlParams.x(scat 透传消费点)");
+                    "GLSL:composite1 侧面相位消费 vlParams.x(scat 底亮透传消费点)");
+            check(comp1.contains("#define TACLIGHT_BEAM_NORM 0.4"),
+                    "GLSL:composite1 侧面相位归一 0.4(实测定标:空中光束项 +~32/255,侧面提亮定案)");
+            check(comp1.contains("1.0 - cosT * cosT"),
+                    "GLSL:composite1 sin²θ 侧面剖面(正侧最亮,正对/沿轴只剩底亮份额)");
             check(comp1.contains("#define TACLIGHT_BEAM_CAP 2.0"),
                     "GLSL:composite1 软上限默认 cap=2.0 线性");
             check(comp1.contains("#define TACLIGHT_BEAM_GAIN 1.0"),
@@ -188,14 +196,14 @@ public class LightTuneContract {
         check(Math.abs(tuned.coneReservedZ() - 1.0f) < 1e-6, "集成:cone.z=atten K 1.0 透传");
         check(Math.abs(tuned.coneReservedW() - 3.0f) < 1e-6, "集成:cone.w=knee G 3.0 透传");
         check(Math.abs(tuned.density() - 0.35f) < 1e-4, "集成:vlParams.y=beam 密度 0.35 覆盖(config 0.05 被换)");
-        check(Math.abs(tuned.anisotropy() - 0.1f) < 1e-6, "集成:vlParams.x=scat g 0.1 覆盖(0.55 被换)");
+        check(Math.abs(tuned.sideFloor() - 0.1f) < 1e-6, "集成:vlParams.x=scat 轴向底亮 0.1 覆盖(0.04 被换)");
         check(Math.abs(tuned.beam() - 2.0f) < 1e-6, "集成:vlParams.z=beamcap 倍率 2.0 覆盖(默认 1.0 被换)");
         java.nio.ByteBuffer buf = SpotlightBufferLayout.newBuffer(1);
         SpotlightBufferLayout.writeLight(buf, 0, tuned);
         SpotlightData read = SpotlightBufferLayout.readLight(buf, 0);
         check(Math.abs(read.coneReservedZ() - 1.0f) < 1e-6, "cone.z 经 SSBO 读写回环");
         check(Math.abs(read.coneReservedW() - 3.0f) < 1e-6, "cone.w 经 SSBO 读写回环");
-        check(Math.abs(read.anisotropy() - 0.1f) < 1e-6, "anisotropy 经 SSBO 读写回环");
+        check(Math.abs(read.sideFloor() - 0.1f) < 1e-6, "vlParams.x(轴向底亮)经 SSBO 读写回环");
         check(Math.abs(read.beam() - 2.0f) < 1e-6, "vlParams.z(beamcap 倍率)经 SSBO 读写回环");
 
         // ---- 默认灯 cone.z=0(GLSL 回退) ----
@@ -220,11 +228,11 @@ public class LightTuneContract {
                         && clean.coneReservedW() == 0.0f,
                 "收尾关闭:强度/半径/atten/knee 全回默认(零残留)");
         check(Math.abs(clean.density() - 0.05f) < 1e-4, "收尾关闭:density 回 config 默认 0.05");
-        check(Math.abs(clean.anisotropy() - SpotlightData.BEAM_ANISOTROPY) < 1e-6,
-                "收尾关闭:anisotropy 回编译期默认 0.55");
+        check(Math.abs(clean.sideFloor() - SpotlightData.BEAM_SIDE_FLOOR) < 1e-6,
+                "收尾关闭:vlParams.x 回编译期默认 floor 0.04");
         check(Math.abs(clean.beam() - 1.0f) < 1e-6, "收尾关闭:vlParams.z 回默认倍率 1.0");
 
-        System.out.println("LightTuneContract: ALL PASS (88 checks)");
+        System.out.println("LightTuneContract: ALL PASS (93 checks)");
     }
 
     private static void check(boolean cond, String what) {

@@ -114,7 +114,7 @@ public final class SpotlightBufferLayout {
         buf.putFloat(base + OFF_CONE + 4, l.cosInner());
         buf.putFloat(base + OFF_CONE + 8, l.coneReservedZ());
         buf.putFloat(base + OFF_CONE + 12, l.coneReservedW());
-        buf.putFloat(base + OFF_VL_PARAMS, l.anisotropy());
+        buf.putFloat(base + OFF_VL_PARAMS, l.sideFloor());
         buf.putFloat(base + OFF_VL_PARAMS + 4, l.density());
         buf.putFloat(base + OFF_VL_PARAMS + 8, l.beam());
         buf.putFloat(base + OFF_VL_PARAMS + 12, l.vlReservedW());

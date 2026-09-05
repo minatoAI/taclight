@@ -38,8 +38,8 @@ import java.nio.file.StandardCopyOption;
   *       0..1;0=完全关光束(开关对比),off=回 config 默认 0.05;vlParams.y 直接换值。</li>
  *   <li>{@code !beamonly} —— 只看光束(2026-09-05):头部 flags bit2,GLSL 跳过 M1 表面
  *       照明,composite1 体积束照常——单独观察体积光形态用。on/off/status。</li>
- *   <li>{@code !scat} —— 体积光散射各向异性 g 第六旋钮(2026-09-05):0..0.9,经
- *       vlParams.x 逐灯透传;0=各向同性侧视最亮,off=回默认 0.55。</li>
+ *   <li>{@code !scat} —— 体积光轴向底亮份额第六旋钮(2026-09-05 侧面相位定案):0..0.9,经
+ *       vlParams.x 逐灯透传;0=纯侧面丁达尔(正对光源零体积叠加),off=回默认 0.04。</li>
  *   <li>{@code !beamcap} —— 体积光重叠软上限倍率第七旋钮(2026-09-05):0.25..8,经
  *       vlParams.z 透传(GLSL cap=2.0×m);单灯恒等,多灯重叠渐近封顶。</li>
  *   <li>{@code !looktrace} / {@code !mcap} —— 消融探针 / 运动门控采集开关(09-01,

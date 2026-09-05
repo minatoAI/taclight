@@ -6,7 +6,7 @@ public record SpotlightData(
         float red, float green, float blue, float intensity,
         float dirX, float dirY, float dirZ, float type,
         float cosOuter, float cosInner, float coneReservedZ, float coneReservedW,
-        float anisotropy, float density, float beam, float vlReservedW,
+        float sideFloor, float density, float beam, float vlReservedW,
         float cookieR, float cookieG, float cookieB, float cookieA) {
 
     public static SpotlightData spot(float px, float py, float pz, float radius,
@@ -20,10 +20,11 @@ public record SpotlightData(
                 0f, 0f, 0f, 0f, -1f, 0f, 1f, 0f);
     }
 
-    /** 带体积束参数的聚光灯(第 5 个 vec4:anisotropy/density/beam/reserved)。
-     *  anisotropy=0.55:M3 体积光 HG 相位的各向异性系数——前向散射强,
-     *  光束沿照射方向最亮(手电束感);0 = 各向同性雾球(无方向感)。 */
-    public static final float BEAM_ANISOTROPY = 0.55f;
+    /** 带体积束参数的聚光灯(第 5 个 vec4:sideFloor/density/beam/reserved)。
+     *  sideFloor=0.04(2026-09-05 侧面相位定案+实测定标):GLSL phase = NORM·(f + (1−f)·sin²θ),
+     *  f = 轴向底亮份额——正侧 90° 视角最亮(丁达尔效应服务旁观者),正对/沿轴视角
+     *  只剩 f 份额,不再与表面照明叠加刺眼;0 = 纯侧面(正对光源零体积光)。 */
+    public static final float BEAM_SIDE_FLOOR = 0.04f;
 
     public static SpotlightData spotBeam(float px, float py, float pz, float radius,
                                          float r, float g, float b, float intensity,
@@ -35,7 +36,7 @@ public record SpotlightData(
                 base.red(), base.green(), base.blue(), base.intensity(),
                 base.dirX(), base.dirY(), base.dirZ(), base.type(),
                 base.cosOuter(), base.cosInner(), 0f, 0f,
-                BEAM_ANISOTROPY, density, beam, 0f, -1f, 0f, 1f, 0f);
+                BEAM_SIDE_FLOOR, density, beam, 0f, -1f, 0f, 1f, 0f);
     }
 
     /** 空数据:光强 0(等同于关闭)。 */
@@ -54,7 +55,7 @@ public record SpotlightData(
                 red, green, blue, intensity,
                 dirX, dirY, dirZ, type,
                 cosOuter, cosInner, coneReservedZ, coneReservedW,
-                anisotropy, density, beam, vlReservedW,
+                sideFloor, density, beam, vlReservedW,
                 capOffX, capOffY, capOffZ, capRadius);
     }
 }

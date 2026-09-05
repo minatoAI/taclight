@@ -3,7 +3,8 @@
  * composite1 · M3 体积光束(doc06 §2.8):
  *   沿像素视线 raymarch,每个采样点:实心几何深度遮挡(depthtex1,视图空间
  *   线性距离比较——热修 13 同款,设备深度域必漏检)→ 锥判定(与表面照明
- *   同一 smoothstep 软边)→ D6 衰减 × HG 相位(各向异性,Java 侧 g=0.55)
+ *   同一 smoothstep 软边)→ D6 衰减 × 侧面相位(sin²θ,vlParams.x 轴向底亮,
+ *   Java 侧 BEAM_SIDE_FLOOR=0.06:侧面服务型丁达尔,正面压暗)
  *   × 密度(vlParams.y,配置 beamDensity)累加各灯散射;
  *   贴灯豁免(TACLIGHT_SSO_SELF_FREE,与 SSO 同值):自身体/枪身不切光束。
  *   输出 colortex4;final 中 additive 合成,bloom 从 scene+beam 提取。
@@ -23,8 +24,13 @@ layout(location = 0) out vec4 taclightVL;
                                // evidence/2026-09-05-beam-visibility-diagnosis/)
 // 色调管线 v2:colortex0/合成改线性域后,光束在 final 中直接线性相加(旧域等效
 // 贡献 ≈ b^2.2,新域 = b 本身);1.4→0.32 为同观感重校(核心亮度以 B0 截图对齐)。
-#define TACLIGHT_BEAM_GAIN 1.0   // 2026-09-05:0.5→1.0,侧视轮廓仍嫌暗(用户实测)——
-                                 // 全角度体积光亮度×2;重叠眩光由下方 BEAM_CAP 软上限兜底
+#define TACLIGHT_BEAM_GAIN 1.0   // 全局体积亮度标量(2026-09-05 由 0.5 翻倍);侧面轮廓
+                                 // 亮度由下方 BEAM_NORM 决定,重叠眩光由 BEAM_CAP 软上限兜底
+// 侧面相位归一(2026-09-05 侧面相位定案):phase = NORM·(f + (1−f)·sin²θ),正侧 90°
+// 相位 = NORM = 0.12(旧 HG g=0.55 侧视 0.0373 的 ~3.2 倍,用户"侧面再亮一点");
+// 正对/沿轴只剩 f·NORM(f=vlParams.x 轴向底亮,Java 侧 BEAM_SIDE_FLOOR=0.06,!scat 透传)
+// ≈ 0.0096/采样,较旧 HG 前向 0.609 压 ~63×,正面不与表面照明叠加刺眼。
+#define TACLIGHT_BEAM_NORM 0.12
 // 软上限默认帽(线性域),vlParams.z 倍率 m 相乘(!beamcap 旋钮透传):低于半帽点恒等
 // =单灯观感零变化;多灯重叠亮度指数肩部渐近 cap——不许无限叠加刺眼(2026-09-05 用户需求)。
 #define TACLIGHT_BEAM_CAP 2.0
@@ -75,8 +81,11 @@ void main() {
                 float cosAng = dot(-toL / d, dv[i]);
                 float spot = smoothstep(L.cone.x, L.cone.y, cosAng);
                 if (spot <= 0.001) continue;
-                // HG 相位:视线方向 × 光传播方向(灯→采样点),g=vlParams.x
-                float ph = taclight_hg(dot(rd, -toL / d), L.vlParams.x);
+                // 侧面相位(2026-09-05 用户定案):体积光只为侧面视角服务(丁达尔效应,
+                // 强化旁观者)。sin²θ 剖面:θ=视线×光传播,正侧 90° 最亮;正对光源/沿轴
+                // (0°/180°)只剩 vlParams.x 底亮份额 f → 正面不再与表面照明叠加刺眼。
+                float cosT = dot(rd, -toL / d);
+                float ph = TACLIGHT_BEAM_NORM * (L.vlParams.x + (1.0 - L.vlParams.x) * (1.0 - cosT * cosT));
                 // F4(2026-08-30):近场正则化。灯锚在玩家头侧(前 0.35m 起),
                 // march 采样点可距灯 <0.1m,反平方在此发散 → 近场亮核白爆;
                 // 体素采样不早于 0.75m(≈灯锚到枪口/手电前沿的尺度),

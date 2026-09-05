@@ -16,7 +16,7 @@
 #   !atten  <0.2..20> 衰减系数 K(越大远处暗得越快)
 #   !knee   <0.2..8>  近场软膝 G(越大近处压得越狠;off=关闭)
 #   !beam   <0..1>    体积光束密度(0=关光束)
-#   !scat   <0..0.9>  散射各向异性 g(0=各向同性侧视最亮;off=回0.55)
+#   !scat   <0..0.9>  轴向底亮份额(0=纯侧面丁达尔,正面最暗;off=回0.04)
 #   !beamcap <0.25..8> 重叠软上限倍率(小=压眩光狠;off=回1)
 #   其他: !light 开关手电 / !gun 枪灯 / !diag 诊断 / !shot 截图
 param(
@@ -50,7 +50,7 @@ Write-Output "输入旋钮命令后回车发送(例: !bright 12),Ctrl+C 退出�
 Write-Output "  !bright <0.5..30>   亮度        !dist <4..96>    照距(格)"
 Write-Output "  !atten  <0.2..20>   衰减K       !knee <0.2..8>   近场软膝(off=关)"
 Write-Output "  !beam   <0..1>      体积光密度(0=关光束,off=回默认0.05)"
-Write-Output "  !scat   <0..0.9>    散射各向异性g(0=侧视最亮,off=回默认0.55)"
+Write-Output "  !scat   <0..0.9>    轴向底亮(0=纯侧面丁达尔,正面最暗,off=回默认0.04)"
 Write-Output "  !beamcap <0.25..8>  重叠软上限倍率(小=压眩光狠,off=回默认1)"
 Write-Output "  !beamonly on/off    只看光束(关掉表面照明,单独看体积光形态)"
 Write-Output "  无参=status  off=回默认   !light 手电开关   !shot 截图"

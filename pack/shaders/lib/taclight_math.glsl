@@ -14,11 +14,7 @@ float taclight_ign(vec2 p) {
     return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715))));
 }
 
-// M3 · HG 相位函数(Henyey-Greenstein,公开数学):体积散射角分布。
-// cosTheta = 视线方向 · 光传播方向;g>0 前向散射强(手电束感),g=0 各向同性。
-float taclight_hg(float cosTheta, float g) {
-    float g2 = g * g;
-    return (1.0 - g2) / (12.566371 * pow(1.0 + g2 - 2.0 * g * cosTheta, 1.5));
-}
+// 体积光角分布不再用 HG 相位(2026-09-05 侧面相位定案,见 composite1.fsh):
+// sin²θ 侧面剖面内联在消费点——正侧 90° 最亮(丁达尔),正对/沿轴只剩底亮份额。
 
 #endif // TACLIGHT_MATH_INCLUDED
