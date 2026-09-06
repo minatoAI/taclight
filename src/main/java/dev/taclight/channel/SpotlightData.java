@@ -58,4 +58,15 @@ public record SpotlightData(
                 sideFloor, density, beam, vlReservedW,
                 capOffX, capOffY, capOffZ, capRadius);
     }
+
+    /** 时间复用置信度写入口(2026-09-06 !tm 立项):vlParams.w 槽位(原恒 0 保留),
+     *  GLSL composite1 混合权重 = 0.75 × 本值;首帧/灯开关/瞬移 → 0 = 全新鲜。 */
+    public SpotlightData withVlReservedW(float w) {
+        return new SpotlightData(posX, posY, posZ, radius,
+                red, green, blue, intensity,
+                dirX, dirY, dirZ, type,
+                cosOuter, cosInner, coneReservedZ, coneReservedW,
+                sideFloor, density, beam, w,
+                cookieR, cookieG, cookieB, cookieA);
+    }
 }

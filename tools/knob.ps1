@@ -20,6 +20,7 @@
 #   !beamcap <0.25..8> 重叠软上限倍率(小=压眩光狠;off=回1)
 #   !cone   <2..45>   外锥半角度数(小=接近平行光;off=回默认8)
 #   !occl    on/off     遮挡距离表(默认开;off=回逐采样DDA,慢但逐格精确)
+#   !tm      on/off     体积光时间复用(默认开;off=回64步全新鲜)
 #   其他: !light 开关手电 / !gun 枪灯 / !diag 诊断 / !shot 截图
 param(
   [string]$Side = 'A',
@@ -32,7 +33,7 @@ $File = Join-Path $Project (Join-Path $RunDir 'taclight-cmds.txt')
 $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 # 容错:裸旋钮名(忘了 ! 前缀)自动补 ! —— 09-05 实机教训:用户输 "knee 6" 被中继
 # 判未知行静默忽略,表现为"调了没反应"。/ 开头(服务端命令)与已带 ! 的不碰。
-$KnobWords = '^(bright|beamonly|beam|beamcap|cone|occl|scat|dist|atten|knee|light|gun|neon|selflight|lv|diag|bench|shot|reload|voxel|bob|psnap|bsnap|extrap|sweep|rec|mcap|looktrace|tpfb|tproe|back|lan)(\s|$)'
+$KnobWords = '^(bright|beamonly|beam|beamcap|cone|occl|tm|scat|dist|atten|knee|light|gun|neon|selflight|lv|diag|bench|shot|reload|voxel|bob|psnap|bsnap|extrap|sweep|rec|mcap|looktrace|tpfb|tproe|back|lan)(\s|$)'
 
 function Send([string]$line) {
   $line = $line.Trim()
@@ -56,6 +57,7 @@ Write-Output "  !scat   <0..0.9>    轴向底亮(0=纯侧面丁达尔,正面最�
 Write-Output "  !beamcap <0.25..8>  重叠软上限倍率(小=压眩光狠,off=回默认1)"
 Write-Output "  !cone   <2..45>     外锥半角度数(小=接近平行光,off=回默认8)"
 Write-Output "  !beamonly on/off    只看光束(关掉表面照明,单独看体积光形态)"
+Write-Output "  !tm on/off          体积光时间复用(默认开;off=回64步全新鲜,A/B 对照)"
 Write-Output "  无参=status  off=回默认   !light 手电开关   !shot 截图"
 while ($true) {
   $line = Read-Host 'knob'

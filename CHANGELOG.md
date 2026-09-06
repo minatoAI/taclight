@@ -1,3 +1,39 @@
+## 09-06 下午 · 遮挡查表双线性化(条纹修复)+ 体积光时间复用:灯光开销减半、同机位 +58% 帧(未 push)
+
+- 用户批准两项优化一并落地(讨论定案:先修查表条纹,再上时间复用;半分辨率路线
+  被本包史否决——v0.10.0 热修 Oculus 1.8.0 buffer 全屏假设不成立,故为全分辨率减步)。
+- **① 条纹修复**:用户实测查表版有"径向条纹/过渡断层"→ 根因 = 512×256 表每 texel
+  0.7° 扇形在 30m 处横跨 ≈37cm,超过 FUZZ 0.35 软化带,NEAREST 相邻扇区 vis 整带
+  跳变。修复 = `taclight_occl_table_row` 改**双线性 4tap**(texelFetch 定点取数,
+  经度 mod 环绕/纬度钳制;凸组合性质由契约钉死)。实机同姿态 occl on vs off
+  (柱影机位)imgdiff **meanDiff 0.0144 / changed 0.0025%**(NEAREST 时代同口径
+  0.894 / 0.16%,降 62×/64×)= 查表与逐格精确 DDA 噪声级一致。OcclTableContract
+  5263 → **17061** checks(新增 texel 中心恒等/凸性/边界 Lipschitz/跨界插值四钉)。
+- **② 时间复用 `!tm`(默认开,第十旋钮)**:composite1 步数 64→**32** + IGN 抖动
+  逐帧旋转(`fract(ign+0.618·frame)`,帧间去相关)+ 上一帧历史 **colortex9**
+  (clear=false,rgb=混合后光束 a=终点距离/256)**重投影混合**(权重=0.75×逐灯
+  置信度)。重投影 = 终点经 gbufferModelViewInverse **全逆**(铁律 3)→ world →
+  previousCameraPosition → 上一帧全矩阵回投;有效性门 = 历史 a>0 非 NaN + uv 出界
+  拒用 + 终点距离差 ≥2m 拒用(disocclusion)。**防拖影**:Java 新增
+  `LightMotionConf` 按灯身份键(自身手持/枪、远程按实体 id,槽位换位免疫)差分
+  上帧位姿,`conf=exp(-6·Δpos)·exp(-4·Δangle)`,经 SSBO **vlParams.w**(原恒 0
+  保留槽,布局 96B 不变)透传;首帧/灯开关/瞬移=0=全新鲜;无贡献像素 conf=0
+  (灯关即灭,不留衰减尾巴)。`!tm off` = 64 步全新鲜(逐位旧行为)。
+  flags **bit5(FLAG_TEMPORAL=32)**,重启清零回默认 on。
+- **实机(4K 窗口,锥 20,单灯,机位=远看被照墙长射线穿束体,bench×3 中位)**:
+  灯关 422.6;tm off+occl on 116.2(灯开销 6.24ms)→ **tm on+occl on 183.5
+  (3.08ms,开销 −50.6%,fps +58%)**;DDA 路径同得 +57%(106.2→167.0);新默认 vs
+  旧 DDA 路径 +72.8%;1%low 59→146-150。**画质**:tm on 收敛 vs tm off 同机位
+  imgdiff **meanDiff 0.0057 / maxDiff=1 / changed=0 = 逐位一致**(静态有效步数
+  32/(1−0.75)=128,时间累积把 32 步质量补回 64 步以上)。
+- 契约:新增 TemporalReuseContract **60** 项(置信度 oracle/有效步数/GLSL+Java 源码钉/
+  !tm 三态),连同全部既有 AllContracts ALL PASS + BUILD SUCCESSFUL。坑105 复查:
+  实机 reload 后 grep 无编译错,tm on/off 帧数差异证明新 composite1 真在跑。
+- 证据 `docs/evidence/2026-09-06-temporal-bilinear/`(README+6 截图+manifest)。
+  收尾按降温纪律:柱子移除、灯关、pack=NO_PACK。**待用户体感:①移动甩灯/步行
+  拖影(嫌拖影 !tm off 即回旧路径)②条纹观感确认 ③连同锥角/knee/scat 等旋钮
+  一起拍板 config 默认交正式版本**。B 端本轮未启动,双人验收跑 mp-session。
+
 ## 09-06 午 · 体积光遮挡查表化(方案二)落地:最坏场景 38.4→65.4 帧(+70%)(未 push)
 
 - 用户批"按方案二做,把性能表现优化一下"→ **逐灯全向遮挡距离表**(shadow-map 思想

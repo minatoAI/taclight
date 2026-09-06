@@ -57,6 +57,10 @@ public final class SpotlightBufferLayout {
     /** bit4: 遮挡距离表(!occl,2026-09-06 方案二)——GLSL composite 每帧预建均向
      *  D 表(colortex8)、composite1 查表代替体积光逐采样灯侧 DDA;仅体素栅格有效时置位。 */
     public static final int FLAG_OCCL_TABLE = 1 << 4;
+    /** bit5: 体积光时间复用(!tm,2026-09-06 用户批准,默认开)——GLSL composite1
+     *  步数 64→32 + 抖动逐帧旋转 + 上一帧历史(colortex9)重投影混合;逐灯置信度
+     *  经 vlParams.w 透传(Java LightMotionConf 位姿差分),off=64 步全新鲜。 */
+    public static final int FLAG_TEMPORAL = 1 << 5;
 
     private SpotlightBufferLayout() {}
 

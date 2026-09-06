@@ -35,6 +35,7 @@ public class OcclTableContract {
         hitDistBasics();
         oracleAgainstVoxelDda();
         tableLevelProperties();
+        bilinearOracle();
         visSemantics();
         foliageSemantics();
         knobBehavior();
@@ -241,6 +242,165 @@ public class OcclTableContract {
         return visFromHit(table[texel[0]][texel[1]] * DIST_SCALE, t);
     }
 
+    // ---- 双线性消费镜像(2026-09-06 条纹修复:与 adapter taclight_occl_table_row 逐行对应)----
+
+    static double clamp01(double v) {
+        return Math.max(0.0, Math.min(0.9999, v));
+    }
+
+    /** 消费侧 g 空间坐标(u·512−0.5, v·256−0.5),与 GLSL floor/fract 同基。 */
+    static double[] bilinearG(double dx, double dy, double dz) {
+        double len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        double u = Math.atan2(dz / len, dx / len) / (2.0 * Math.PI) + 0.5;
+        double v = Math.asin(Math.max(-1.0, Math.min(1.0, dy / len))) / Math.PI + 0.5;
+        return new double[]{clamp01(u) * TABLE_X - 0.5, clamp01(v) * TABLE_Y - 0.5};
+    }
+
+    /** 双线性 4 tap 足域(2×2 texel 索引展平 x0,y0,x1,y0,x0,y1,x1,y1);跨界/极区返回 null。 */
+    static int[] footprintTexels(double[] gxy) {
+        int t0x = (int) Math.floor(gxy[0]), t0y = (int) Math.floor(gxy[1]);
+        if (t0x < 0 || t0x + 1 >= TABLE_X || t0y < 0 || t0y + 1 >= TABLE_Y) return null;
+        return new int[]{t0x, t0y, t0x + 1, t0y, t0x, t0y + 1, t0x + 1, t0y + 1};
+    }
+
+    static double tableVisBilinear(double[][] table, double dx, double dy, double dz, double t) {
+        double[] gxy = bilinearG(dx, dy, dz);
+        int t0x = (int) Math.floor(gxy[0]), t0y = (int) Math.floor(gxy[1]);
+        double fx = gxy[0] - t0x, fy = gxy[1] - t0y;
+        int x0 = (((t0x % TABLE_X) + TABLE_X) % TABLE_X), x1 = (x0 + 1) % TABLE_X;
+        int y0 = Math.max(0, Math.min(TABLE_Y - 1, t0y)), y1 = Math.max(0, Math.min(TABLE_Y - 1, t0y + 1));
+        double r0 = table[x0][y0] + (table[x1][y0] - table[x0][y0]) * fx;
+        double r1 = table[x0][y1] + (table[x1][y1] - table[x0][y1]) * fx;
+        return visFromHit((r0 + (r1 - r0) * fy) * DIST_SCALE, t);
+    }
+
+    /** 连续 (u,v) → 方向(与构建侧同一参数化,P3 边界扫描用)。 */
+    static double[] uvDir(double u, double v) {
+        double lon = u * 2.0 * Math.PI - Math.PI;
+        double lat = v * Math.PI - Math.PI / 2.0;
+        double cl = Math.cos(lat);
+        return new double[]{cl * Math.cos(lon), Math.sin(lat), cl * Math.sin(lon)};
+    }
+
+    /** 双线性足域的外角 4 方向(经纬边界各外扩到足域边缘)的 DDA 透射;跨界返回 null。 */
+    static double[] footprintCornerTransmits(byte[][][] g, double lx, double ly, double lz,
+                                             double[] gxy, double t) {
+        int t0x = (int) Math.floor(gxy[0]), t0y = (int) Math.floor(gxy[1]);
+        if (t0x < 0 || t0x + 1 >= TABLE_X || t0y < 0 || t0y + 1 >= TABLE_Y) return null;
+        double lonL = t0x / (double) TABLE_X * 2.0 * Math.PI - Math.PI;
+        double lonR = (t0x + 2) / (double) TABLE_X * 2.0 * Math.PI - Math.PI;
+        double latB = t0y / (double) TABLE_Y * Math.PI - Math.PI / 2.0;
+        double latT = (t0y + 2) / (double) TABLE_Y * Math.PI - Math.PI / 2.0;
+        double[] out = new double[4];
+        int k = 0;
+        for (double lon : new double[]{lonL, lonR})
+            for (double lat : new double[]{latB, latT}) {
+                double cl = Math.cos(lat);
+                out[k++] = transmit(g, lx, ly, lz,
+                        lx + cl * Math.cos(lon) * t, ly + Math.sin(lat) * t, lz + cl * Math.sin(lon) * t);
+            }
+        return out;
+    }
+
+    // =====================================================================
+    // ②b 双线性消费性质(2026-09-06 条纹修复:NEAREST 扇形台阶 → 4tap 插值)
+    // =====================================================================
+
+    static void bilinearOracle() {
+        byte[][][] g = scene(24, 24, 24);
+        for (int y = 0; y < 24; y++) for (int z = 0; z < 24; z++) g[10][y][z] = VoxelField.CODE_SOLID;
+        double lampX = 2.5, lampY = 12.5, lampZ = 12.5;
+        double[][] table = buildTable(g, lampX, lampY, lampZ);
+        Random rnd = new Random(20260908L);
+
+        // P1 texel 中心恒等:双线性在 f=0 处必须逐位回到 NEAREST 值(不改变原有判定)
+        for (int i = 0; i < 4000; i++) {
+            int tx = rnd.nextInt(TABLE_X), ty = rnd.nextInt(TABLE_Y);
+            double[] dir = tableDir(tx, ty);
+            double t = 1.0 + rnd.nextDouble() * 15.0;
+            double nb = visFromHit(table[tx][ty] * DIST_SCALE, t);
+            double bl = tableVisBilinear(table, dir[0], dir[1], dir[2], t);
+            check(close(nb, bl), "bilinear texel 中心恒等 NEAREST (" + tx + "," + ty + ")");
+        }
+
+        // P2 凸性:双线性 vis 必落在 4 tap 邻域 NEAREST vis 的 [min,max] 内
+        // (visFromHit 对 dHit 单调增 + dHit 凸组合 ⇒ 不产生邻域外的假亮/假暗)
+        int convexSamples = 0;
+        for (int i = 0; i < 4000; i++) {
+            double dx = rnd.nextDouble() - 0.5, dy = rnd.nextDouble() - 0.5, dz = rnd.nextDouble() - 0.5;
+            double len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            if (len < 0.1) continue;
+            dx /= len; dy /= len; dz /= len;
+            double t = 2.0 + rnd.nextDouble() * 12.0;
+            double[] gxy = bilinearG(dx, dy, dz);
+            int[] fp = footprintTexels(gxy);
+            if (fp == null) continue;
+            double lo = 2.0, hi = -2.0;
+            for (int k = 0; k < 4; k++) {
+                double nv = visFromHit(table[fp[2 * k]][fp[2 * k + 1]] * DIST_SCALE, t);
+                lo = Math.min(lo, nv);
+                hi = Math.max(hi, nv);
+            }
+            double bl = tableVisBilinear(table, dx, dy, dz, t);
+            check(bl >= lo - 1e-9 && bl <= hi + 1e-9, "bilinear 凸性:vis ∈ 4tap 邻域");
+            convexSamples++;
+        }
+        check(convexSamples > 2500, "凸性样本量充足(实测 " + convexSamples + ")");
+
+        // P3 边界 Lipschitz(条纹=NEAREST 跨扇形瞬跳;双线性的 vis 梯度被
+        // 邻域差分约束:方位向 ±0.01 texel 的 vis 变化 ≤ 2δ·邻域D跨度/FUZZ)
+        int lipSamples = 0;
+        for (int i = 0; i < 150000 && lipSamples < 3000; i++) {
+            double dx = rnd.nextDouble() - 0.5, dy = rnd.nextDouble() * 0.4 - 0.2, dz = rnd.nextDouble() - 0.5;
+            double len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            if (len < 0.2) continue;
+            dx /= len; dy /= len; dz /= len;
+            double[] gxy = bilinearG(dx, dy, dz);
+            int t0x = (int) Math.floor(gxy[0]), t0y = (int) Math.floor(gxy[1]);
+            if (t0x < 1 || t0x + 2 >= TABLE_X || t0y < 0 || t0y + 1 >= TABLE_Y) continue;
+            // 梯度界取左/本/右三个线性段(±δ 可跨过任一侧 texel 边界 knot)
+            double spread = Math.max(Math.max(
+                    Math.abs(table[t0x + 1][t0y] - table[t0x][t0y]),
+                    Math.abs(table[t0x + 1][t0y + 1] - table[t0x][t0y + 1])), Math.max(Math.max(
+                    Math.abs(table[t0x + 2][t0y] - table[t0x + 1][t0y]),
+                    Math.abs(table[t0x + 2][t0y + 1] - table[t0x + 1][t0y + 1])), Math.max(
+                    Math.abs(table[t0x][t0y] - table[t0x - 1][t0y]),
+                    Math.abs(table[t0x][t0y + 1] - table[t0x - 1][t0y + 1])))) * DIST_SCALE;
+            if (spread < 0.15) continue;   // 钉一切 D 场有变化的 texel(阴影边/掠射角)
+            double u = (gxy[0] + 0.5) / TABLE_X, v = (gxy[1] + 0.5) / TABLE_Y;
+            double du = 0.01 / TABLE_X;   // ±0.01 texel
+            double tBand = (table[t0x][t0y] + table[t0x + 1][t0y]) * 0.5 * DIST_SCALE;   // 过渡带中心
+            double vl2 = tableVisBilinear(table, uvDir(u - du, v)[0], uvDir(u - du, v)[1], uvDir(u - du, v)[2], tBand);
+            double vr2 = tableVisBilinear(table, uvDir(u + du, v)[0], uvDir(u + du, v)[1], uvDir(u + du, v)[2], tBand);
+            check(Math.abs(vr2 - vl2) <= 2.0 * 0.01 * spread / FUZZ + 1e-9,
+                    "bilinear 边界 Lipschitz(±0.01 texel Δvis=" + fmt(Math.abs(vr2 - vl2))
+                            + " ≤ 界 " + fmt(2.0 * 0.01 * spread / FUZZ) + ")");
+            lipSamples++;
+        }
+        check(lipSamples > 2000, "Lipschitz 样本量充足(实测 " + lipSamples + ")");
+
+        // P4 过渡插值:相邻 texel D 差在 FUZZ 过渡带内(两端 vis 均未饱和)时,
+        // 跨界中点 vis 必须严格介于两侧之间 —— 阴影边是渐变坡,不是 NEAREST 的悬崖。
+        int midSamples = 0;
+        for (int tx = 1; tx < TABLE_X - 1; tx += 3) {
+            for (int ty = 2; ty < TABLE_Y - 2; ty += 5) {
+                double dA = table[tx][ty] * DIST_SCALE, dB = table[tx + 1][ty] * DIST_SCALE;
+                if (Math.abs(dA - dB) < 0.05 || Math.abs(dA - dB) > 0.30) continue;
+                double u = (tx + 1.0) / TABLE_X, v = (ty + 0.5) / TABLE_Y;   // 跨界中点 f=0.5
+                double[] dir = uvDir(u, v);
+                double t = (Math.min(dA, dB) + Math.max(dA, dB)) * 0.5;      // 过渡带中点
+                double va = visFromHit(dA, t), vb = visFromHit(dB, t);
+                if (close(va, vb) || va <= 0.0 || va >= 1.0 || vb <= 0.0 || vb >= 1.0) continue;
+                double vm = tableVisBilinear(table, dir[0], dir[1], dir[2], t);
+                double lo = Math.min(va, vb), hi = Math.max(va, vb);
+                check(vm > lo && vm < hi,
+                        "跨界中点 vis 严格插值(" + fmt(lo) + " < " + fmt(vm) + " < " + fmt(hi) + ")");
+                midSamples++;
+            }
+        }
+        check(midSamples > 300, "过渡插值样本量充足(实测 " + midSamples + ")");
+    }
+
     static void tableLevelProperties() {
         // S2 混合场景:门洞墙 + 柱 + 植被(确定性)
         byte[][][] g = scene(24, 24, 24);
@@ -262,9 +422,12 @@ public class OcclTableContract {
                     "equirect 往返恒等 texel(" + tx + "," + ty + ")→(" + back[0] + "," + back[1] + ")");
         }
 
-        // 深影必遮挡(零漏光):4 角全 0 透射的采样点,查表必须 ≤0.003
-        // 全清晰必可见(零假挡):4 角透射全 > SOFT_FLOOR 的采样点,查表必须 > 0.5
-        int leakCandidates = 0, clearCandidates = 0, leaks = 0, falseBlocks = 0;
+        // 深影必遮挡(零漏光)/全清晰必可见(零假挡)/硬判定不一致率 —— 双线性消费语义
+        // (2026-09-06 条纹修复)。探针两级:
+        //   A. 足域凸组合(数学保证):2×2 tap 4 texel 全遮挡 ⇒ 双线性 ≤0.003(vis 单调
+        //      + dHit 凸组合,不产生邻域外的值);
+        //   B. 几何级(与旧 NEAREST 角点探针同构,足域外角 DDA 全挡/全清晰)。
+        int leakCandidates = 0, clearCandidates = 0, leaksAirtight = 0, leaksGeo = 0, falseBlocks = 0;
         int hardMismatch = 0, hardTotal = 0, nearMismatch = 0, nearTotal = 0;
         for (int i = 0; i < 20000; i++) {
             double t = 1.0 + rnd.nextDouble() * 18.0;
@@ -276,7 +439,7 @@ public class OcclTableContract {
             if (px < 0.5 || py < 0.5 || pz < 0.5 || px > 23.5 || py > 23.5 || pz > 23.5) continue;
             if (nearBoundary(px) || nearBoundary(py) || nearBoundary(pz)) continue;
             if (codeAt(g, (int) px, (int) py, (int) pz) != VoxelField.CODE_EMPTY) continue;
-            double tv = tableVis(table, dx, dy, dz, t);
+            double tv = tableVisBilinear(table, dx, dy, dz, t);
             double tr = transmit(g, lampX, lampY, lampZ, px, py, pz);
             boolean hardTable = tv > 0.003, hardDda = tr > 0.003;
             hardTotal++;
@@ -285,51 +448,43 @@ public class OcclTableContract {
                 if (t < 4.0) nearMismatch++;
             }
             if (t < 4.0) nearTotal++;
-            // 角点探针(±半 texel 的 lon/lat 角)——深影/全清晰只在这两个保守集合里断言
-            double[] corners = cornerTransmits(g, lampX, lampY, lampZ, dx, dy, dz, t);
-            boolean allBlocked = corners[0] <= 0.0 && corners[1] <= 0.0 && corners[2] <= 0.0 && corners[3] <= 0.0;
-            boolean allClear = corners[0] > SOFT_FLOOR && corners[1] > SOFT_FLOOR
-                    && corners[2] > SOFT_FLOOR && corners[3] > SOFT_FLOOR;
-            if (allBlocked) {
-                leakCandidates++;
-                if (tv > 0.003) leaks++;
+            // A. 足域凸组合零漏光
+            int[] fp = footprintTexels(bilinearG(dx, dy, dz));
+            if (fp != null) {
+                boolean blockAll = true;
+                for (int k = 0; k < 4; k++) {
+                    blockAll &= visFromHit(table[fp[2 * k]][fp[2 * k + 1]] * DIST_SCALE, t) <= 0.003;
+                }
+                if (blockAll) {
+                    leakCandidates++;
+                    if (tv > 0.003) leaksAirtight++;
+                }
             }
-            if (allClear && tr > SOFT_FLOOR) {
-                clearCandidates++;
-                if (tv <= 0.5) falseBlocks++;
+            // B. 几何级(足域外角)
+            double[] corners = footprintCornerTransmits(g, lampX, lampY, lampZ, bilinearG(dx, dy, dz), t);
+            if (corners != null) {
+                boolean allBlocked = corners[0] <= 0.0 && corners[1] <= 0.0 && corners[2] <= 0.0 && corners[3] <= 0.0;
+                boolean allClear = corners[0] > SOFT_FLOOR && corners[1] > SOFT_FLOOR
+                        && corners[2] > SOFT_FLOOR && corners[3] > SOFT_FLOOR;
+                if (allBlocked && tv > 0.003) leaksGeo++;
+                if (allClear && tr > SOFT_FLOOR) {
+                    clearCandidates++;
+                    if (tv <= 0.5) falseBlocks++;
+                }
             }
         }
         check(leakCandidates > 300, "深影样本量充足(实测 " + leakCandidates + ")");
-        check(leaks == 0, "深影(4 角全挡)零漏光(实测漏 " + leaks + ")");
+        check(leaksAirtight == 0, "深影(足域 4 texel 全挡)零漏光(凸组合保证,实测漏 " + leaksAirtight + ")");
+        check(leaksGeo == 0, "深影(足域外角全挡)零漏光(实测漏 " + leaksGeo + ")");
         check(clearCandidates > 300, "全清晰样本量充足(实测 " + clearCandidates + ")");
         check((double) falseBlocks / Math.max(clearCandidates, 1) <= 0.02,
-                "假挡率 ≤2%(NEAREST 重采样的固有角度歧义带,保守方向不漏光;实测挡 "
+                "假挡率 ≤2%(双线性重采样的固有角度歧义带,保守方向不漏光;实测挡 "
                         + falseBlocks + "/" + clearCandidates + ")");
         check(hardTotal >= 8000, "不一致率样本量充足(实测 " + hardTotal + ")");
         check((double) hardMismatch / hardTotal <= 0.025,
                 "硬判定不一致率 ≤2.5%(实测 " + hardMismatch + "/" + hardTotal
                         + " = " + fmt(100.0 * hardMismatch / hardTotal) + "%)");
         check(nearMismatch == 0, "近场(t<4)零不一致(实测 " + nearMismatch + "/" + nearTotal + ")");
-    }
-
-    /** 采样方向的表 texel 的 4 个 lon/lat 角方向,各自 lamp→(同 t 端点) 的 DDA 透射。 */
-    static double[] cornerTransmits(byte[][][] g, double lx, double ly, double lz,
-                                    double dx, double dy, double dz, double t) {
-        int[] texel = dirTexel(dx, dy, dz);
-        double halfLon = Math.PI / TABLE_X, halfLat = Math.PI / (2.0 * TABLE_Y);
-        double lon0 = (texel[0] + 0.5) / TABLE_X * 2.0 * Math.PI - Math.PI;
-        double lat0 = (texel[1] + 0.5) / TABLE_Y * Math.PI - Math.PI / 2.0;
-        double[] out = new double[4];
-        int k = 0;
-        for (int sLon = -1; sLon <= 1; sLon += 2)
-            for (int sLat = -1; sLat <= 1; sLat += 2) {
-                double lon = lon0 + sLon * halfLon, lat = lat0 + sLat * halfLat;
-                double cl = Math.cos(lat);
-                double cx = cl * Math.cos(lon), cy = Math.sin(lat), cz = cl * Math.sin(lon);
-                out[k++] = transmit(g, lx, ly, lz,
-                        lx + cx * t, ly + cy * t, lz + cz * t);
-            }
-        return out;
     }
 
     // =====================================================================
@@ -390,7 +545,10 @@ public class OcclTableContract {
         check(adapter.contains("uniform sampler2D colortex8"), "GLSL:adapter 声明表缓冲 colortex8");
         check(adapter.contains("#define TACLIGHT_OCCL_TABLE_AT(rel) taclight_occl_table_row(rel)"),
                 "GLSL:adapter 注入表行取数宏(core 未适配包回退全哨兵)");
-        check(adapter.contains("texelFetch(colortex8"), "GLSL:adapter NEAREST texelFetch(无接缝滤波问题)");
+        check(adapter.contains("texelFetch(colortex8"), "GLSL:adapter 4tap 均为 texelFetch(定点取数)");
+        check(adapter.contains("(t0.x % sx + sx) % sx"),
+                "GLSL:adapter 双线性经度接缝 mod 环绕(2026-09-06 条纹修复:扇形台阶→连续插值)");
+        check(adapter.contains("mix(r0, r1, f.y)"), "GLSL:adapter 双线性 4tap 纵向混合");
         check(adapter.contains("#define TACLIGHT_OCCL_TABLE_SIZE_X 512.0")
                 && adapter.contains("#define TACLIGHT_OCCL_TABLE_SIZE_Y 256.0"),
                 "GLSL:adapter 表区 512×256(854×480 的 B 端视口也放得下)");
@@ -420,7 +578,7 @@ public class OcclTableContract {
         check(comp1.contains("viewWidth >= TACLIGHT_OCCL_TABLE_SIZE_X"),
                 "GLSL:composite1 视口 < 表区时回退(防越界取数)");
         check(comp1.contains("#define TACLIGHT_VL_STEPS 64"),
-                "GLSL:composite1 步数回 64(查表化把 DDA 预算买回,采样质量恢复 09-05 定案)");
+                "GLSL:composite1 off 路径步数 64(tm off=逐位旧行为;tm 开 32 由 TemporalReuseContract 钉)");
     }
 
     static void javaPins() throws Exception {
@@ -450,7 +608,7 @@ public class OcclTableContract {
         check(relay.contains("configureOccl(arg)"), "Java:中继接 configureOccl");
 
         String knob = Files.readString(Path.of("tools/knob.ps1"));
-        check(knob.contains("|cone|occl|scat|"), "工具:knob.ps1 白名单含 occl(裸词自动补 !)");
+        check(knob.contains("|cone|occl|tm|scat|"), "工具:knob.ps1 白名单含 occl/tm(裸词自动补 !)");
         check(knob.contains("!occl"), "工具:knob.ps1 帮助文本含 !occl");
     }
 

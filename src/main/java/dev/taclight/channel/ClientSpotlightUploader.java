@@ -68,11 +68,15 @@ public final class ClientSpotlightUploader {
         if (mc.level == null || mc.player == null) {
             MotionCapture.shutdown("world-unload");
             LightBuffer.upload(List.of());
+            LightMotionConf.endFrame();   // 世界卸载:逐出全部灯键(重进=首帧语义)
             return;
         }
         dev.taclight.client.CameraSweep.tick(mc.player);
         LightParams cfg = LightParams.load();
         List<SpotlightData> lights = new ArrayList<>(2);
+        // 时间复用逐灯身份键(2026-09-06 !tm):与 lights 同序;键=灯身份而非槽位
+        // (灯增减/远程排序换位时置信度不错位)。
+        List<String> slotKeys = new ArrayList<>(2);
         Camera cam = mc.gameRenderer.getMainCamera();
         Vec3 eye = cam.getPosition();
         org.joml.Vector3f lookJoml = cam.getLookVector();
@@ -94,6 +98,7 @@ public final class ClientSpotlightUploader {
             Vec3 lookDir = fp ? look : mc.player.getLookAngle();
             SpotlightData hand = toSpot(anchor.add(handheldOffset(lookDir)), lookDir, cfg, 0.9f);
             lights.add(selfCapped(hand, playerEye));
+            slotKeys.add("self:hand");
         }
         if (selfOn && ClientLightState.gunLightOn()) {
             dev.taclight.pose.MuzzlePoseMath.Pose muzzle = dev.taclight.client.MuzzlePoseCapture.consumeFresh();
@@ -109,6 +114,7 @@ public final class ClientSpotlightUploader {
                 Vec3 dir = new Vec3(fwdW.x(), fwdW.y(), fwdW.z());
                 SpotlightData gun = toSpot(pos, dir, cfg, dev.taclight.config.TacLightConfig.GUN_MULTIPLIER.get().floatValue());
                 lights.add(selfCapped(gun, playerEye));
+                slotKeys.add("self:gun");
             } else {
                 // F4(2026-08-30):非第一人称(或枪口姿态未捕获)禁止锚相机——
                 // TP 下灯浮在观察相机上(0830 R4.2"TP 枪灯 fallback 锚相机")。
@@ -118,9 +124,10 @@ public final class ClientSpotlightUploader {
                 SpotlightData gun = toSpot(gAnchor.add(gunFallbackOffset(gLook)), gLook, cfg,
                         dev.taclight.config.TacLightConfig.GUN_MULTIPLIER.get().floatValue());
                 lights.add(selfCapped(gun, playerEye));
+                slotKeys.add("self:gun");
             }
         }
-        collectRemoteLights(mc, eye, cfg, lights);
+        collectRemoteLights(mc, eye, cfg, lights, slotKeys);
         int extraFlags = ClientLightState.debugMode() ? SpotlightBufferLayout.FLAG_DEBUG : 0;
         if (LightTuneOverride.beamOnly()) extraFlags |= SpotlightBufferLayout.FLAG_BEAM_ONLY;
         // 体素遮挡栅格(09-01 深夜④ DDA):墙后漏光立项,与灯数据同缓冲上传;
@@ -132,6 +139,15 @@ public final class ClientSpotlightUploader {
         if (LightTuneOverride.occlTable() && voxelGrid != null) {
             extraFlags |= SpotlightBufferLayout.FLAG_OCCL_TABLE;
         }
+        // 时间复用(2026-09-06 !tm 默认开):头部 flags 置 bit5;逐灯置信度经
+        // vlParams.w 透传(键=灯身份,差分在 clamp 之后=最终上传位姿)。off 时不写
+        // (槽位保持 0 = GLSL 全新鲜),endFrame 照常逐出失效键(重开=首帧语义)。
+        boolean tmOn = LightTuneOverride.temporal();
+        if (tmOn) {
+            extraFlags |= SpotlightBufferLayout.FLAG_TEMPORAL;
+            applyTemporalConfidence(lights, slotKeys);
+        }
+        LightMotionConf.endFrame();
         LightBuffer.upload(lights, extraFlags, voxelGrid);
         if (FrameRecorder.active()) {
             long t = System.nanoTime() / 1_000_000L;
@@ -247,6 +263,19 @@ public final class ClientSpotlightUploader {
         }
     }
 
+    /** 时间复用逐灯置信度(2026-09-06 !tm 立项):键=灯身份(slotKeys 与 lights 同序),
+     *  差分上帧位姿 → [0,1] 指数衰减 → vlReservedW(vlParams.w)透传 GLSL 混合权重。
+     *  必须在 clampLightsOutOfSolid 之后调用(置信度按最终上传位姿差分,钳制位移同计入);
+     *  tm off 时不调用(GLSL 不置位 bit5,槽位 0 无消费方)。 */
+    static void applyTemporalConfidence(List<SpotlightData> lights, List<String> keys) {
+        for (int i = 0; i < lights.size() && i < keys.size(); i++) {
+            SpotlightData l = lights.get(i);
+            float c = LightMotionConf.conf(keys.get(i), l.posX(), l.posY(), l.posZ(),
+                    l.dirX(), l.dirY(), l.dirZ());
+            lights.set(i, l.withVlReservedW(c));
+        }
+    }
+
     /** SSBO 硬上限(LightBuffer/GLSL 两侧同值 8;自身灯优先,远程补足余量)。 */
     private static final int MAX_LIGHTS = 8;
 
@@ -267,7 +296,8 @@ public final class ClientSpotlightUploader {
     public static final java.util.Map<Integer, String> TP_PROBE = new java.util.HashMap<>();
 
     /** M5 远程玩家灯收集:实体数据开关 → 距离剔除/就近上限 → 第三人称锚定数学复用。 */
-    private static void collectRemoteLights(Minecraft mc, Vec3 camEye, LightParams cfg, List<SpotlightData> out) {
+    private static void collectRemoteLights(Minecraft mc, Vec3 camEye, LightParams cfg,
+                                            List<SpotlightData> out, List<String> slotKeys) {
         if (out.size() >= MAX_LIGHTS) return;
         var tpSeen = new java.util.HashSet<Integer>();
         var remotes = new ArrayList<net.minecraft.client.player.AbstractClientPlayer>();
@@ -328,6 +358,7 @@ public final class ClientSpotlightUploader {
             if (sel.handheld()) {
                 SpotlightData hand = toSpot(eye.add(handheldOffset(look)), look, cfg, 0.9f);
                 out.add(selfCapped(hand, eye));
+                slotKeys.add("remote:" + p.getId() + ":hand");
             }
             if (sel.gun() && out.size() < MAX_LIGHTS) {
                 // 里程碑②(2026-09-02):第三人称渲染捕获 = 该玩家当前渲染枪姿(瞄准/
@@ -384,6 +415,7 @@ public final class ClientSpotlightUploader {
                 recordTpProbe(p, entry, res, liveRef);
                 tpSeen.add(p.getId());
                 out.add(selfCapped(gun, eye));
+                slotKeys.add("remote:" + p.getId() + ":gun");
             }
         }
         TP_BLENDS.keySet().retainAll(tpSeen);

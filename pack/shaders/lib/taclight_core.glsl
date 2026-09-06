@@ -5,7 +5,8 @@
 //   本文件 = TacLight 照明核心,是跨光影包移植的"唯一需要搬运的代码"。
 //   依赖边界(由 ShaderCoreContract 契约钉死):
 //     · 仅依赖 Iris/Oculus 标准 uniform(gbufferModelView 系列/cameraPosition/
-//       depthtex1)与模组绑定的 SSBO binding=7;
+//       depthtex1,及时间复用上一帧组 gbufferPrevious*/previousCameraPosition)
+//       与模组绑定的 SSBO binding=7;
 //     · 仅 #include lib/taclight_math.glsl(公开数学,零依赖);
 //     · **禁止出现 colortex 字面量** —— G-Buffer 私有编码(法线/albedo/材质/
 //       遮挡系数布局)一律在 taclight_adapter.glsl(包侧)或消费 pass 中;
@@ -41,6 +42,8 @@
 #define TACLIGHT_FLAG_TIMING_PROBE 8u   // bit3 reserved 回读探针(DEBUG 构建才置位)
 #define TACLIGHT_FLAG_OCCL_TABLE  16u   // bit4 !occl 遮挡距离表(2026-09-06 方案二:composite
                                        // 每帧预建均向 D 表,composite1 查表代替逐采样灯侧 DDA)
+#define TACLIGHT_FLAG_TEMPORAL   32u   // bit5 !tm 体积光时间复用(2026-09-06:composite1 步数
+                                       // 64→32 + 抖动逐帧旋转 + 上一帧历史重投影混合)
 
 // ---- 每灯 96B · 6×vec4(std430,与 Java writeLight 写序一致)----
 struct TacLightSpot {
@@ -117,6 +120,26 @@ vec3 taclight_depth_to_view(vec2 uv, float depth) {
     vec4 ndc  = vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
     vec4 view = gbufferProjectionInverse * ndc;
     return view.xyz / view.w;
+}
+
+// ----------------------------------------------------------------------------
+// 时间复用重投影(2026-09-06 立项):当前帧像素 march 终点(视图域)→ 上一帧屏幕 uv。
+// 静态世界假设:终点经 **全矩阵** 逆回世界(gbufferModelViewInverse 含 bob 平移,铁律 3)
+// → 绝对 world → 上一帧相机相对(previousCameraPosition)→ 上一帧全矩阵回投。
+// 相机平移/转动/bob 被精确对齐;灯自身的运动不由本函数处理(逐灯置信度
+// vlParams.w,Java LightMotionConf 按位姿帧间差分,消费侧降权混合)。
+// ----------------------------------------------------------------------------
+uniform mat4 gbufferPreviousModelView;   // 上一帧 view 矩阵(R·T 含 bob,同 gbufferModelView 约定)
+uniform mat4 gbufferPreviousProjection;  // 上一帧投影矩阵
+uniform vec3 previousCameraPosition;     // 上一帧相机 world 坐标
+
+vec2 taclight_reproject_prev_uv(vec3 endView) {
+    vec4 relCur = gbufferModelViewInverse * vec4(endView, 1.0);
+    vec4 viewPrev = gbufferPreviousModelView
+            * vec4(relCur.xyz + cameraPosition - previousCameraPosition, 1.0);
+    vec4 clipPrev = gbufferPreviousProjection * viewPrev;
+    if (clipPrev.w <= 0.0) return vec2(-1.0);   // 上一帧相机背后 → 哨兵(消费侧 uv 界检查拒用)
+    return (clipPrev.xy / clipPrev.w) * 0.5 + 0.5;
 }
 
 /** 视图空间 → world。**必须用全矩阵逆**:旧 transpose(mat3) 形式丢掉 gbufferModelView

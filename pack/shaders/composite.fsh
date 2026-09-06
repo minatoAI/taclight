@@ -26,6 +26,8 @@
  * colortex7 RGBA16  adaptive exposure history (cleared = never)
  * colortex8 RGBA16  遮挡距离表(方案二 2026-09-06:左上 512×256 equirect,每帧由本
  *                   pass 预建、composite1 查表;布局与参数化见 lib/taclight_adapter.glsl)
+ * colortex9 RGBA16  composite1 时间复用历史(2026-09-06 !tm:rgb=上帧混合后光束,
+ *                   a=march 终点视图距离/256;clear=false 跨帧持久,composite1 读写)
 const int colortex0Format = RGBA16;
 const int colortex1Format = RGBA16;
 const int colortex2Format = RGBA16;
@@ -35,7 +37,9 @@ const int colortex5Format = RGBA8;
 const int colortex6Format = RGBA16;
 const int colortex7Format = RGBA16;
 const int colortex8Format = RGBA16;
+const int colortex9Format = RGBA16;
 const bool colortex7Clear = false;
+const bool colortex9Clear = false;
 */
 #include "/lib/taclight_common.glsl"
 #include "/lib/taclight_debug.glsl"

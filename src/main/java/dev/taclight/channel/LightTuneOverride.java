@@ -327,4 +327,33 @@ public final class LightTuneOverride {
     public static boolean occlTable() {
         return occlActive;
     }
+
+    /** !tm 体积光时间复用(2026-09-06 用户批准立项,默认开):composite1 步数 64→32 +
+     *  IGN 抖动逐帧旋转(帧间去相关)+ 上一帧历史(colortex9)重投影混合,权重 =
+     *  0.75 × 逐灯置信度(Java LightMotionConf 按灯位姿帧间差分,经 SSBO vlParams.w
+     *  透传;首帧/灯开关/瞬移 = 0 = 全新鲜,防拖影)。静态场景有效步数
+     *  32/(1−0.75)=128,raymarch 每帧步数减半;off = 回 64 步全新鲜(逐位旧行为)。 */
+    private static volatile boolean temporalActive = true;
+
+    /** relay 入口:返回状态串(供日志)。on/off/status,重启回默认(on)。 */
+    public static String configureTemporal(String arg) {
+        if (arg.isEmpty() || arg.equals("status")) {
+            return temporalActive ? "tm=on(体积光时间复用:32步+历史混合,有效≈128步)"
+                                  : "tm=off(64 步全新鲜)";
+        }
+        if (arg.equals("on")) {
+            temporalActive = true;
+            return "tm=on(体积光时间复用:32步+历史混合,有效≈128步)";
+        }
+        if (arg.equals("off")) {
+            temporalActive = false;
+            return "tm=off(64 步全新鲜)";
+        }
+        return "bad arg " + arg + " (want on/off/status)";
+    }
+
+    /** onFrame 调用:true → 头部 flags 置 FLAG_TEMPORAL(GLSL composite1 时间复用)。 */
+    public static boolean temporal() {
+        return temporalActive;
+    }
 }

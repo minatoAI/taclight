@@ -242,6 +242,16 @@ public final class DebugCommandRelay {
                     dev.taclight.channel.LightTuneOverride.configureOccl(arg));
             return;
         }
+        if (line.startsWith("!tm")) {
+            // 2026-09-06 第十旋钮:体积光时间复用(默认开)——步数 64→32 + 抖动逐帧
+            // 旋转 + 上一帧历史重投影混合(权重 0.75×逐灯置信度,LightMotionConf 差分
+            // 灯位姿经 vlParams.w 透传)。静态有效步数≈128、raymarch 步数减半;
+            // off=回 64 步全新鲜(A/B 对照)。on/off/status,重启清零。
+            String arg = line.length() > 3 ? line.substring(3).trim() : "";
+            TacLightMod.LOGGER.info("[TacLight] RELAY tm -> {}",
+                    dev.taclight.channel.LightTuneOverride.configureTemporal(arg));
+            return;
+        }
         if (line.startsWith("!beam")) {
             // 2026-09-05 用户体感第五旋钮:体积光束密度(丁达尔效果强度)。经 SSBO
             // vlParams.y 逐灯直接换值,GLSL 零改动;0=完全关光束(A/B 开关对比),
