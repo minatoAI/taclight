@@ -282,12 +282,38 @@ public final class DebugCommandRelay {
             return;
         }
         if (line.startsWith("!gun")) {
-            boolean next = !ClientLightState.gunLightOn();
-            ClientLightState.setGunLightManual(next);
-            // 手动覆写必须同步服务端真源,否则本端 SSBO 有光而对端(同步读)永远看不见
-            // —— 这正是"Dev 视角切开关无变化 + B 看不见 Dev 灯"的另一半根因。
-            dev.taclight.network.TacLightNetwork.sendSetLight(ClientLightState.isOn(), next);
-            TacLightMod.LOGGER.info("[TacLight] RELAY gunLight -> {} (manual)", next);
+            // 2026-09-07:无参=翻转(兼容旧行为);on/off=显式手动;auto=清手动旗回探针跟随
+            // (主手有灯枪即亮、空手即灭);未知参=回显。用 GunControl 与 M 键共状态机。
+            String arg = line.length() > 4 ? line.substring(4).trim() : "";
+            dev.taclight.client.GunControl.Action act =
+                    dev.taclight.client.GunControl.parseRelayArg(arg);
+            switch (act) {
+                case AUTO: {
+                    dev.taclight.client.GunControl.applyAuto();
+                    dev.taclight.network.TacLightNetwork.sendSetLight(
+                            ClientLightState.isOn(), ClientLightState.gunLightOn());
+                    TacLightMod.LOGGER.info("[TacLight] RELAY gunLight -> auto (probe-follow)");
+                    break;
+                }
+                case STATUS: {
+                    TacLightMod.LOGGER.info("[TacLight] RELAY gunLight = {} manual={} (usage: !gun <on|off|auto>)",
+                            ClientLightState.gunLightOn(), ClientLightState.gunManual());
+                    break;
+                }
+                default: {
+                    boolean next = (act == dev.taclight.client.GunControl.Action.ON)
+                            ? true
+                            : (act == dev.taclight.client.GunControl.Action.OFF)
+                                    ? false
+                                    : !ClientLightState.gunLightOn();
+                    ClientLightState.setGunLightManual(next);
+                    // 手动覆写必须同步服务端真源,否则本端 SSBO 有光而对端(同步读)永远看不见
+                    // —— 这正是"Dev 视角切开关无变化 + B 看不见 Dev 灯"的另一半根因。
+                    dev.taclight.network.TacLightNetwork.sendSetLight(ClientLightState.isOn(), next);
+                    TacLightMod.LOGGER.info("[TacLight] RELAY gunLight -> {} (manual)", next);
+                    break;
+                }
+            }
             return;
         }
         if (line.startsWith("!selflight")) {

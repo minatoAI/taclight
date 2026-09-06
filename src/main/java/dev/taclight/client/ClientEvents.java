@@ -56,6 +56,7 @@ public class ClientEvents {
         @SubscribeEvent
         public static void onRegisterKeys(RegisterKeyMappingsEvent event) {
             event.register(KeyBindings.FLASHLIGHT_TOGGLE);
+            event.register(KeyBindings.GUNLIGHT_TOGGLE);
             event.register(KeyBindings.DEBUG_TOGGLE);
             event.register(KeyBindings.DIAG_DUMP);
             event.register(KeyBindings.BENCH);
@@ -69,6 +70,12 @@ public class ClientEvents {
             // M5:开关上报纸服务端(SynchedEntityData 真源),其他玩家客户端可见
             dev.taclight.network.TacLightNetwork.sendSetLight(ClientLightState.isOn(), ClientLightState.gunLightOn());
             TacLightMod.LOGGER.info("[TacLight] handheld flashlight {}", ClientLightState.isOn() ? "ON" : "OFF");
+        }
+        while (KeyBindings.GUNLIGHT_TOGGLE.consumeClick()) {
+            boolean next = dev.taclight.client.GunControl.toggleGunManual();
+            // M5:手动覆写同步服务端真源(与 !gun 同语义,见 DebugCommandRelay)
+            dev.taclight.network.TacLightNetwork.sendSetLight(ClientLightState.isOn(), next);
+            TacLightMod.LOGGER.info("[TacLight] gun light {} (key, manual)", next ? "ON" : "OFF");
         }
         while (KeyBindings.DEBUG_TOGGLE.consumeClick()) {
             ClientLightState.toggleDebug();

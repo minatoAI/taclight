@@ -3,5 +3,6 @@
   "item.taclight.flashlight": "手电筒",
   "item.taclight.flashlight.tip": "手持光源。配合光影包使用时呈现真实锥形聚光灯。",
   "key.taclight.flashlight_toggle": "手电筒开关",
+  "key.taclight.gunlight_toggle": "枪灯开关(M)",
   "key.categories.taclight": "TacLight"
 }

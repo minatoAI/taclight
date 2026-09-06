@@ -1,3 +1,31 @@
+## 09-07 凌晨 · 枪灯 M 键 + `!gun auto` + 镜面 F4 + knee8 真凶定位(未 push)
+
+- **B 路枪灯可控性(用户:TaCZ 有无激光开关?空手亮=bug)**:TaCZ 1.1.8 原版**无激光/灯
+  开关**(键表实查:inspect/reload/shoot/interact/fire_select/aim/crawl/refit/zoom/melee/
+  open_config,无 laser 位)——"与激光共用一键"无法字面落地,替代方案:M 键
+  (`key.taclight.gunlight_toggle`,控制设置可改绑)与 `!gun` 共 GunControl 状态机
+  (新纯逻辑类,契约 GunControlContract 13 项:翻转/on/off/auto/status 决议+手动旗
+  语义)。`!gun auto`=清手动旗回探针跟随(主手有灯枪即亮、空手即灭);未知参=回显
+  不乱动。实机:`auto`→probe-follow、`status`→`gun=false manual=false`。lang 中英 +
+  gunpack 副本 + knob 帮助同步。用户"空手也亮"根因=诊断遗留 manual=true(探针
+  本身只读主手,无辜);空手门禁(持枪才上传)是否加,待拍板。
+- **C 路反光(用户:自研包比 Comp 晃眼)**:Comp 配方=GGX 内饱和曲线
+  `spec/(0.125·spec+1)`(渐近 8)+ 粗糙重映射压普通方块 + 全局 sqrt 柔化。本包取
+  饱和一式:F4 `TACLIGHT_SPEC_CEIL 4.0`(渐近 4,线性 DAMP 0.35 保留,签名不变)。
+  但同机位 A/B(深蓝瓷砖墙,手持,bright 6):F4 前后**逐位一致**(ROI 均 63.0)→
+  白斑与镜面无关;`SPEC_DAMP=0` 探针白斑不动→铁证**白斑=近场漫反射吹爆**。
+  真解=`!knee 8`:池心 83.3→58.7(−30%),白核消除墙砖透出。knee 默认(2.0→8?)
+  **待用户体感拍板**(实例现挂 knee 8 覆盖)。F4 保留(护真镜面,此景零副作用)。
+  证据 docs/evidence/2026-09-07-gunkey-specknee/。
+- **Comp 活但弱(用户目验"有光照效果"→ 推翻旧负结果)**:同机位枪灯 34.10→38.52
+  (`!bright` 缩放即活证),手持路 +7.38;双关基线 30.24,SSBO count=0。旧判错因:
+  默认太暗/!light 拨错灯/跨包对比污染。双关残留=TaCZ 原生激光(配件自带 laser
+  块),空手消失。证据 docs/evidence/2026-09-07-comp-alive/。
+- 契约:GunControl 13/SelfLightGate 11/余下 JVM 全绿;FrameRecorderContract 与
+  tools-selftest rec-analyze 在 harness 内挂 node EPERM(沙箱命名管道限制,环境性
+  ——干净树 stash 对照同挂,与本轮改动无关)。坑 115(C1503:GLSL 先定义后使用)
+  +116(手持/枪灯开关分家)入册。
+
 ## 09-06 晚 · 扫参冻结(atten K 20/beam 0.25)+ 注入包性能对照(未 push)
 
 - **冻结(用户扫参结束,口令"以现在状态为默认")**:13 旋钮逐一 status 存档(20:09:26-40)。

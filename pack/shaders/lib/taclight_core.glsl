@@ -234,6 +234,9 @@ vec3 taclight_shoulder3(vec3 x, float t, float head) {
 // M1 · 表面照明数学(全部公开标准公式,自写实现)
 // GGX 分布 × Smith 遮蔽 × Schlick 菲涅尔。枪身金属反光用。
 // 阶段二:F0 由适配层解码 —— 金属的 F0 = albedo(彩色),介电为常量灰。
+// F4(2026-09-07)镜面饱和渐近:必须在 taclight_ggx 之前定义(GLSL 先定义后使用,
+// 否则 composite 报 C1503 undefined,实机翻车一次)。
+#define TACLIGHT_SPEC_CEIL 4.0
 // ----------------------------------------------------------------------------
 vec3 taclight_ggx(vec3 n, vec3 v, vec3 l, float roughness, vec3 f0) {
     vec3 h = normalize(v + l);
@@ -246,7 +249,13 @@ vec3 taclight_ggx(vec3 n, vec3 v, vec3 l, float roughness, vec3 f0) {
     float k = a * 0.5;
     float g = (ndv / (ndv * (1.0 - k) + k)) * (ndl / (ndl * (1.0 - k) + k));
     vec3 f = f0 + (1.0 - f0) * pow(1.0 - max(dot(h, v), 0.0), 5.0);
-    return d * g * f;
+    // F4(2026-09-07,用户体感:底黑+镜面尖峰=晃眼;对标 Complementary ggx.glsl):
+    // Comp = GGX 输出先过饱和曲线 spec/(0.125·spec+1)(渐近 8)再 ×highlightMult,
+    // 粗糙重映射又把普通方块压成宽而暗的高光。我们只取饱和曲线一式(压峰不压形,
+    // 与 F3 同哲学):尖峰先钳入渐近 TACLIGHT_SPEC_CEIL,再走线性 DAMP,镜面峰回落
+    // 到 diffuse(≤1) 同量级,黑底上不再炸白。签名不变(ShaderCore 契约钉死)。
+    vec3 s = d * g * f;
+    return s / (s * (1.0 / TACLIGHT_SPEC_CEIL) + 1.0);
 }
 
 // ----------------------------------------------------------------------------

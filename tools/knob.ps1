@@ -21,7 +21,7 @@
 #   !cone   <2..45>   外锥半角度数(小=接近平行光;off=回默认8)
 #   !occl    on/off     遮挡距离表(默认开;off=回逐采样DDA,慢但逐格精确)
 #   !tm      on/off     体积光时间复用(默认开;off=回64步全新鲜)
-#   其他: !light 开关手电 / !gun 枪灯 / !diag 诊断 / !shot 截图
+#   其他: !light 开关手电 / !gun <on|off|auto> 枪灯(auto=回探针跟随) / M键=枪灯翻转
 param(
   [string]$Side = 'A',
   [string]$Text = ''

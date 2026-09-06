@@ -18,6 +18,17 @@ public final class KeyBindings {
             GLFW.GLFW_KEY_K,
             "key.categories.taclight");
 
+    /**
+     * M:枪灯手动开关(TaCZ 原版无激光/灯开关,见 options 键表:inspect/reload/shoot/
+     * interact/fire_select/aim/crawl/refit/zoom/melee 均无 laser 位)。与 !gun 共用
+     * GunControl 状态机;翻转即立手动旗(探针不再覆盖),!gun auto 可清旗回探针。
+     */
+    public static final KeyMapping GUNLIGHT_TOGGLE = new KeyMapping(
+            "key.taclight.gunlight_toggle",
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_M,
+            "key.categories.taclight");
+
     /** N:一行结构化诊断入日志(SSBO dump + 相机 + 灯状态 + 包名),供调试自动化 grep。 */
     public static final KeyMapping DIAG_DUMP = new KeyMapping(
             "key.taclight.diag_dump",

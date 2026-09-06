@@ -19,6 +19,7 @@ import dev.taclight.client.BobViewControlContract;
 import dev.taclight.client.CameraSweepContract;
 import dev.taclight.client.TpFallbackControlContract;
 import dev.taclight.client.TpOffscreenRenderGateContract;
+import dev.taclight.client.GunControlContract;
 import dev.taclight.client.SelfLightGateContract;
 import dev.taclight.pose.MuzzlePoseMathContract;
 import dev.taclight.pose.MuzzlePoseModelContract;
@@ -82,6 +83,8 @@ public class AllContracts {
         TpFallbackControlContract.main(args);
         System.out.println("== TpOffscreenRenderGateContract ==");
         TpOffscreenRenderGateContract.main(args);
+        System.out.println("== GunControlContract ==");
+        GunControlContract.main(args);
         System.out.println("== SelfLightGateContract ==");
         SelfLightGateContract.main(args);
         System.out.println("== ScenePlanContract ==");
