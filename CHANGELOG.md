@@ -1,3 +1,37 @@
+## 09-06 午 · 体积光遮挡查表化(方案二)落地:最坏场景 38.4→65.4 帧(+70%)(未 push)
+
+- 用户批"按方案二做,把性能表现优化一下"→ **逐灯全向遮挡距离表**(shadow-map 思想
+  的逐灯变体)落地并实机闭环。VL_STEPS **回 64**(查表消掉 DDA 大头后,64 步采样
+  质量重新可负担,上午 64→32 实验项就此关闭)。
+- **设计**:composite 最早段(MRT `/* DRAWBUFFERS:08 */` 写 **colortex8**)每帧为
+  每灯预计算 512×256 equirect 全向"该方向首个遮挡距离 D"表(4 灯 RGBA 打包,
+  D/128 归一,1.0=128m=全通;构建=新 `taclight_vox_hit_dist`,与 vox_transmit 完全
+  同语义镜像:起始格豁免/tie 全轴/FUZZ 0.35 穿透软化/树叶软地板 0.45);composite1
+  每采样 NEAREST 查一次表代替 384 格 DDA 行走,vis=`clamp((D−dist)/FUZZ+0.5,0,1)`
+  与旧软化带一致。栅格无效 → Java 不置 **flags bit4(FLAG_OCCL_TABLE=16)** →
+  GLSL 自动回退旧逐采样 DDA,fail-safe 语义保留。
+- **新旋钮 `!occl on/off/status`(默认 on,重启清零,九旋钮)**:off=回旧逐采样
+  DDA(慢但逐格精确,保底+对照);knob.ps1 已入白名单。
+- **实机(4K,锥 20°,双灯,`!bench`×3 中位)**:用户还原的最坏场景(近景亮墙+
+  地面光池+门洞光锥同屏,"主视角被体积光包围")**occl on 65.4 帧(1%low 56.8)vs
+  occl off 38.4 帧(1%low 30.2)= +27 帧 +70%,−10.7ms/帧;off 与用户早上体感
+  "掉到 40 帧"吻合**。开阔机位四点:俯地 95.9/89.1、沿轴 92.5/83.2、墙面 92.2/84.5、
+  仰空 105.9/100.0——表模式处处不慢(构建成本 <2ms@4K)。**画面等价 imgdiff:
+  meanDiff 0.894/255,差异像素 0.16% 全部在光束亮区内部(NEAREST 角向量化正常抖动),
+  光束外逐位一致=零新增漏光**。
+- 契约:**OcclTableContract 5263 项 ALL PASS**(JVM oracle 与 VoxelDda 互证 800 迭代
+  ×3 场景、深墙 200 点零漏、方向↔texel 往返恒等 5000 检、假挡率 ≤2%、近场零失配、
+  旋钮三态、GLSL/Java 源码钉),连同全部既有契约 `AllContracts: ALL PASS`。
+  interop:`TemplateLibrary.directiveFree` 已登记 `TACLIGHT_OCCL_TABLE_AT` 钩子块
+  (宿主包注入=哨兵全可见),iterationT 冒烟模板加载检查当场抓住过漏登记 → 坑 113。
+- 证据 docs/evidence/2026-09-06-occl-table/(包围视角基准表 + off/on 对照帧 +
+  imgdiff + manifest);坑 113 入册。
+- **收尾(12:07,应"系统温度高"用户要求)**:双端灯已关、A 端光影包已禁用
+  (`pack=NO_PACK`,SSBO count=0),实例保持运行,下次实测前再拉包。
+- **待用户:下次实测拉包后体感①最坏场景帧数是否达标(65 帧级)②光束遮挡观感与
+  之前有无可感差异(契约与 imgdiff 均说无,以体感为准);连同锥角/knee/scat 等
+  各旋钮一起拍板 config 默认后交正式版本。**
+
 ## 09-06 上午 · 光池内掉帧定位 + VL_STEPS 64→32 实验(未 push,GLSL 待用户拍板)
 
 - 用户报"开灯前 240 帧 / 开灯后掉到 40"→ **同机位同视角受控 A/B**(4K,双灯 on,

@@ -23,9 +23,12 @@
 in vec2 texcoord;
 layout(location = 0) out vec4 taclightVL;
 
-#define TACLIGHT_VL_STEPS 64   // 2026-09-05:32→64,细锥采样翻倍(32 步对远背景视线步长
-                               // 1~3m 会把近场细锥整段跨过=侧视不可见三因之一,证据
-                               // evidence/2026-09-05-beam-visibility-diagnosis/)
+uniform float viewWidth;
+uniform float viewHeight;
+
+#define TACLIGHT_VL_STEPS 64   // 2026-09-06 回 64:遮挡查表化(方案二)把 in-pool 成本大头
+                               // (灯侧 DDA +20.6ms@4K)消掉后,64 步采样质量重新可负担
+                               // (2026-09-05 64 的理由:远背景步长 1~3m 跨过近场细锥);
 // 色调管线 v2:colortex0/合成改线性域后,光束在 final 中直接线性相加(旧域等效
 // 贡献 ≈ b^2.2,新域 = b 本身);1.4→0.32 为同观感重校(核心亮度以 B0 截图对齐)。
 #define TACLIGHT_BEAM_GAIN 1.0   // 全局体积亮度标量(2026-09-05 由 0.5 翻倍);侧面轮廓
@@ -43,6 +46,11 @@ layout(location = 0) out vec4 taclightVL;
 
 void main() {
     vec3 vl = vec3(0.0);
+    // 方案二(2026-09-06):遮挡距离表可用性 = 头部 bit4 且视口 ≥ 表区(854×480 的
+    // B 竀 512×256 放得下;更小视口回退逐采样 DDA)。Java 侧仅在体素栅格有效时置位。
+    bool occlTableOn = (flags & TACLIGHT_FLAG_OCCL_TABLE) != 0u
+            && viewWidth >= TACLIGHT_OCCL_TABLE_SIZE_X
+            && viewHeight >= TACLIGHT_OCCL_TABLE_SIZE_Y;
     if (lightCount > 0u) {
         // F1(2026-08-30):march 终点用 depthtex1(实心几何)而非 depthtex0。
         // 雨/玻璃等半透写 depthtex0 且逐帧移动,会让光束终点逐帧抖动;
@@ -101,8 +109,16 @@ void main() {
                 // 但灯→采样点光路穿墙"的锥体越墙部分(墙后灯的锥体从洞口/墙沿探进
                 // 观察侧,空气采样照样过锥判定 → 漏光)。与表面照明同一 DDA/同一栅格;
                 // 返回 -1(栅格无效或任一端出格)回退可见=旧行为,覆盖不足不假遮挡。
-                float visVox = taclight_vox_transmit(L.posRadius.xyz, spWorld);
-                if (visVox < 0.0) visVox = 1.0;
+                // 方案二(2026-09-06):表模式查 colortex8 均向 D 表(本帧 composite
+                // 预建)代替逐采样 DDA 走格——in-pool @4K −~20ms;前 4 盏灯走表,
+                // 之后的灯与表不可用回退原逐采样路径(语义不变)。
+                float visVox;
+                if (occlTableOn && i < 4u) {
+                    visVox = taclight_occl_table_vis(i, spWorld - L.posRadius.xyz);
+                } else {
+                    visVox = taclight_vox_transmit(L.posRadius.xyz, spWorld);
+                    if (visVox < 0.0) visVox = 1.0;
+                }
                 if (visVox <= 0.003) continue;
                 // F4(2026-08-30):近场正则化。灯锚在玩家头侧(前 0.35m 起),
                 // march 采样点可距灯 <0.1m,反平方在此发散 → 近场亮核白爆;

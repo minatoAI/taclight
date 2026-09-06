@@ -402,11 +402,14 @@ public final class TemplateLibrary {
             + "}\n";
     private static final String OCCLUSION_FN =
             "float taclight_occlusion_at(vec2 uv) { return 1.0; }";
+    private static final String OCCL_TABLE_FN =
+            "vec4 taclight_occl_table_row(vec3 rel) { return vec4(1e4); }   // 宿主无表:哨兵=全可见";
 
     /**
      * 指令全解析变换(坑80):仅处理本库自有资源,指令清单固定(InlineCoreContract 盘点)。
      * ①include 守卫(#ifndef/#define/#endif 携 TACLIGHT_*_INCLUDED)整行删除;
-     * ②TACLIGHT_OCCLUSION_AT 三行块(ifndef/define/endif)→ 单行真函数;
+     * ②TACLIGHT_OCCLUSION_AT / TACLIGHT_OCCL_TABLE_AT 三行块(ifndef/define/endif)
+     *    → 单行真函数(2026-09-06 方案二:表钩子,宿主无表 = 哨兵全可见);
      * ③其余对象式 #define → const 常量(值带 u 后缀 = uint,含小数点 = float,否则 int);
      * ④调用点 TACLIGHT_OCCLUSION_AT( → taclight_occlusion_at(;
      * ⑤任何未识别指令行 = 抛异常(模板被拒 = 零注入,fail-safe)。
@@ -415,6 +418,7 @@ public final class TemplateLibrary {
     private static String directiveFree(String src) {
         StringBuilder out = new StringBuilder(src.length() + 64);
         boolean inOcclusionBlock = false;
+        boolean inTableBlock = false;
         for (String line : src.split("\r?\n", -1)) {
             String t = line.trim();
             if (t.startsWith("#")) {
@@ -433,6 +437,18 @@ public final class TemplateLibrary {
                     inOcclusionBlock = false;
                     continue; // ② 块收
                 }
+                if (t.matches("#\\s*ifndef\\s+TACLIGHT_OCCL_TABLE_AT.*")) {
+                    inTableBlock = true;
+                    continue; // ②' 表钩子块开(2026-09-06 方案二)
+                }
+                if (inTableBlock && t.matches("#\\s*define\\s+TACLIGHT_OCCL_TABLE_AT.*")) {
+                    out.append(OCCL_TABLE_FN).append('\n');
+                    continue; // ②' 宏定义 → 函数(宿主无表:哨兵=全可见)
+                }
+                if (inTableBlock && t.matches("#\\s*endif.*")) {
+                    inTableBlock = false;
+                    continue; // ②' 块收
+                }
                 var m = java.util.regex.Pattern
                         .compile("#\\s*define\\s+(TACLIGHT_[A-Za-z_]+)\\s+([^\\s/]+)\\s*(//.*)?")
                         .matcher(t);
@@ -449,7 +465,9 @@ public final class TemplateLibrary {
             }
             out.append(line).append('\n');
         }
-        String result = out.toString().replace("TACLIGHT_OCCLUSION_AT(", "taclight_occlusion_at(");
+        String result = out.toString()
+                .replace("TACLIGHT_OCCLUSION_AT(", "taclight_occlusion_at(")
+                .replace("TACLIGHT_OCCL_TABLE_AT(", "taclight_occl_table_row(");
         for (String l : result.split("\r?\n", -1)) {
             if (l.trim().startsWith("#")) {
                 throw new IllegalStateException("指令全解析变换后仍有指令行(实现 bug): " + l);

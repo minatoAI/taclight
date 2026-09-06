@@ -13,7 +13,7 @@
  * 语法注意(实机教训 2026-08-27):430 core 下禁用 varying/gl_FragData,
  * 必须 in/out + 显式 layout(location) 输出;顶点侧保持 330 compatibility。
  */
-/* DRAWBUFFERS:0 */
+/* DRAWBUFFERS:08 */
 /*
  * Buffer formats (Iris comment constants, pipeline-wide, M2/M3 HDR chain):
  * colortex0 RGBA16  scene + surface lighting (HDR-ready for bloom/ACES)
@@ -22,14 +22,19 @@
  * colortex3 RGBA32F G-Buffer viewpos + occlusion factor
  * colortex4 RGBA16  composite1 volumetric beam
  * colortex5 RGBA8   G-Buffer 材质(阶段二:F0/金属;M2 旧 bloom 半分辨率 buffer 已退役)
+ * colortex6 RGBA16  composite3 bloom2 时域历史(坑37;Iris 默认不清 4-7 号缓冲)
  * colortex7 RGBA16  adaptive exposure history (cleared = never)
+ * colortex8 RGBA16  遮挡距离表(方案二 2026-09-06:左上 512×256 equirect,每帧由本
+ *                   pass 预建、composite1 查表;布局与参数化见 lib/taclight_adapter.glsl)
 const int colortex0Format = RGBA16;
 const int colortex1Format = RGBA16;
 const int colortex2Format = RGBA16;
 const int colortex3Format = RGBA32F;
 const int colortex4Format = RGBA16;
 const int colortex5Format = RGBA8;
+const int colortex6Format = RGBA16;
 const int colortex7Format = RGBA16;
+const int colortex8Format = RGBA16;
 const bool colortex7Clear = false;
 */
 #include "/lib/taclight_common.glsl"
@@ -39,10 +44,42 @@ uniform sampler2D colortex0;
 uniform sampler2D colortex1;
 uniform sampler2D colortex2;
 uniform sampler2D colortex5;   // G-Buffer 材质(阶段二)
+uniform float viewWidth;
+uniform float viewHeight;
 // depthtex1 声明来自 lib/taclight_common.glsl(F1 起表面查找用它,不再采样 depthtex0)
 
 in vec2 texcoord;
 layout(location = 0) out vec4 taclightCompositeOut;
+layout(location = 1) out vec4 taclightOcclOut;   // -> colortex8 遮挡距离表(方案二)
+
+// ----------------------------------------------------------------------------
+// 方案二 · 逐灯均向遮挡距离表构建(2026-09-06,性能立项证据
+// evidence/2026-09-06-inpool-perf/:光池内逐采样×逐灯 DDA @4K +20.6ms):
+//   本 pass 先于 composite1,表区内(左上 512×256 texel)每 texel 沿 equirect 方向
+//   走一次 taclight_vox_hit_dist(与 vox_transmit 同源遍历),存 4 灯 D/128;
+//   composite1 的每采样灯侧遮挡从"DDA 走格"降为"一次查表"。表区外像素写哨兵
+//   1.0(=128m,消费侧视为可见),保证每帧全缓冲干净、无陈旧数据。
+//   栅格无效(hit_dist=-1)→ 同样哨兵 = 旧行为回退可见,不假遮挡。
+// ----------------------------------------------------------------------------
+void taclight_build_occl_table() {
+    vec2 tpx = texcoord * vec2(viewWidth, viewHeight);
+    vec4 row = vec4(1.0);
+    if ((flags & TACLIGHT_FLAG_OCCL_TABLE) != 0u
+            && tpx.x < TACLIGHT_OCCL_TABLE_SIZE_X && tpx.y < TACLIGHT_OCCL_TABLE_SIZE_Y) {
+        vec3 tdir = taclight_occl_table_dir((floor(tpx) + 0.5)
+                / vec2(TACLIGHT_OCCL_TABLE_SIZE_X, TACLIGHT_OCCL_TABLE_SIZE_Y));
+        vec4 dRow = vec4(1.0);
+        for (uint ti = 0u; ti < lightCount && ti < 4u; ti++) {
+            TacLightSpot L = lights[ti];
+            if (L.dirType.w < 0.5) continue;
+            float dHit = taclight_vox_hit_dist(L.posRadius.xyz, tdir, 96.0);
+            if (dHit < 0.0) dHit = 1e4;   // 栅格无效/灯出格 → 哨兵(回退可见)
+            dRow[ti] = clamp(dHit / TACLIGHT_OCCL_DIST_SCALE, 0.0, 1.0);
+        }
+        row = dRow;
+    }
+    taclightOcclOut = row;
+}
 
 // 门探针已闭环(2026-08-27:照明系统实际在工作,场景/入射角误导判读)。
 // 沉淀结论:平射时地面 ndl≈0.1 属物理正确;草丛背面片元由双面法线修复(gbuffers 侧)。
@@ -56,6 +93,9 @@ layout(location = 0) out vec4 taclightCompositeOut;
 // 固定阈值在中远距离必然漏检,混合四边形的垃圾法线就是黑边根因。
 
 void main() {
+    // 方案二:遮挡距离表先建(composite1 依赖本帧表;必须早于任何 DBG 早退分支)
+    taclight_build_occl_table();
+
     // 色调管线 v2(2026-08-30 消融实验结论):colortex0 自此为**线性**。
     // 旧版在 gamma 域把 M1 辐射加进原版画面,final 再整体 pow(2.2) 线性化——
     // 加法发生在错误的域:叠加项的感知贡献随底亮度非线性(暗底压扁/亮底放大),

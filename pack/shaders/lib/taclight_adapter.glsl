@@ -31,4 +31,41 @@ uniform sampler2D colortex3;
 // M1 表面照明总增益(与 knee 配合;实测反馈驱动调参)。2026-08-29 实测过曝,2.0→1.0。
 #define TACLIGHT_LIGHT_GAIN 2.2
 
+// ----------------------------------------------------------------------------
+// 方案二 · 遮挡距离表(2026-09-06,本包私有缓冲布局知识,故在适配层):
+//   colortex8 = 逐灯均向"最远无遮挡距离"D(dir),composite pass 每帧预建
+//   (composite.fsh MRT location=1 写入),composite1 每采样查表(代替灯侧 DDA 走格)。
+//   参数化 = equirect 全球:texel (tx,ty) → lon=(tx+0.5)/512·2π−π, lat=(ty+0.5)/256·π−π/2
+//   → dir=(cosLat·cosLon, sinLat, cosLat·sinLon);消费侧 atan/asin 逆变换取同一 texel
+//   (NEAREST texelFetch,无跨接缝滤波问题;往返恒等由 OcclTableContract 钉死)。
+//   存储:每 texel RGBA = 灯 0..3 的 D(世界格单位 ÷ 128 归一;RGBA16 ≈ 2-4cm 量化,
+//   远小于 FUZZ 0.35);区域固定左上 512×256(854×480 的 B 端也放得下),表区外
+//   像素写哨兵 1.0(=128m,消费侧视为可见)。灯 4..7 不入表(消费侧回退逐采样 DDA)。
+//   angular 分辨率 ≈0.7°/texel:影子边缘定位误差 ≈ d·tan(0.7°)(10m 处 ≈12cm),
+//   被 FUZZ 0.35 半影带覆盖——契约 OcclTableContract 用"角点歧义带"性质钉死。
+// ----------------------------------------------------------------------------
+uniform sampler2D colortex8;
+#define TACLIGHT_OCCL_TABLE_SIZE_X 512.0
+#define TACLIGHT_OCCL_TABLE_SIZE_Y 256.0
+#define TACLIGHT_OCCL_DIST_SCALE 128.0
+#define TACLIGHT_OCCL_TABLE_AT(rel) taclight_occl_table_row(rel)
+
+/** 消费侧:relWorld(world 域灯→采样向量)→ 该方向 texel 的 4 灯 D 行(归一值)。 */
+vec4 taclight_occl_table_row(vec3 relWorld) {
+    vec3 d = relWorld / max(length(relWorld), 1e-4);
+    float u = atan(d.z, d.x) / 6.2831853 + 0.5;
+    float v = asin(clamp(d.y, -1.0, 1.0)) / 3.14159265 + 0.5;
+    ivec2 texel = ivec2(clamp(u, 0.0, 0.9999) * TACLIGHT_OCCL_TABLE_SIZE_X,
+                        clamp(v, 0.0, 0.9999) * TACLIGHT_OCCL_TABLE_SIZE_Y);
+    return texelFetch(colortex8, texel, 0);
+}
+
+/** 构建侧:表内归一坐标 (0..1)² → 世界方向(与上行严格互逆,契约钉死)。 */
+vec3 taclight_occl_table_dir(vec2 uv01) {
+    float lon = uv01.x * 6.2831853 - 3.14159265;
+    float lat = uv01.y * 3.14159265 - 1.5707963;
+    float cl = cos(lat);
+    return vec3(cl * cos(lon), sin(lat), cl * sin(lon));
+}
+
 #endif // TACLIGHT_ADAPTER_INCLUDED

@@ -54,6 +54,9 @@ public final class SpotlightBufferLayout {
     public static final int FLAG_BEAM_ONLY = 1 << 2;
     /** bit3: 时序探针(G0 风格)——GLSL 在表面 pass 用 atomicOr 写回 reserved。 */
     public static final int FLAG_TIMING_PROBE = 1 << 3;
+    /** bit4: 遮挡距离表(!occl,2026-09-06 方案二)——GLSL composite 每帧预建均向
+     *  D 表(colortex8)、composite1 查表代替体积光逐采样灯侧 DDA;仅体素栅格有效时置位。 */
+    public static final int FLAG_OCCL_TABLE = 1 << 4;
 
     private SpotlightBufferLayout() {}
 

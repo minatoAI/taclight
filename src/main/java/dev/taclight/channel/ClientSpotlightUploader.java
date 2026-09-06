@@ -127,6 +127,11 @@ public final class ClientSpotlightUploader {
         // 禁用/无灯 → null,GLSL 逐光线回退屏幕空间 SSO。
         var voxelGrid = dev.taclight.client.VoxelGrid.update(mc, lights);
         clampLightsOutOfSolid(lights, voxelGrid);
+        // 遮挡距离表(2026-09-06 方案二,!occl 默认开):仅栅格有效时置位——
+        // 栅格无效时 GLSL 走原逐采样 DDA(-1→可见)回退,语义与旧行为逐位一致。
+        if (LightTuneOverride.occlTable() && voxelGrid != null) {
+            extraFlags |= SpotlightBufferLayout.FLAG_OCCL_TABLE;
+        }
         LightBuffer.upload(lights, extraFlags, voxelGrid);
         if (FrameRecorder.active()) {
             long t = System.nanoTime() / 1_000_000L;

@@ -233,6 +233,15 @@ public final class DebugCommandRelay {
                     dev.taclight.channel.LightTuneOverride.configureBeamcap(arg));
             return;
         }
+        if (line.startsWith("!occl")) {
+            // 2026-09-06 方案二第九旋钮:遮挡距离表(默认开)——GLSL composite 每帧预建
+            // 逐灯均向 D 表(colortex8),composite1 体积光逐采样灯侧 DDA(光池内
+            // @4K +20.6ms)降为一次查表。off=回逐采样 DDA(A/B 对照)。on/off/status。
+            String arg = line.length() > 5 ? line.substring(5).trim() : "";
+            TacLightMod.LOGGER.info("[TacLight] RELAY occl -> {}",
+                    dev.taclight.channel.LightTuneOverride.configureOccl(arg));
+            return;
+        }
         if (line.startsWith("!beam")) {
             // 2026-09-05 用户体感第五旋钮:体积光束密度(丁达尔效果强度)。经 SSBO
             // vlParams.y 逐灯直接换值,GLSL 零改动;0=完全关光束(A/B 开关对比),

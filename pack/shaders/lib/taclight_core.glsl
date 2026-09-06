@@ -39,6 +39,8 @@
 #define TACLIGHT_FLAG_DEBUG        2u   // bit1 K 键绿锥调试(doc06 §2.10)
 #define TACLIGHT_FLAG_BEAM_ONLY    4u   // bit2 !beamonly 只看光束(跳过表面照明,2026-09-05)
 #define TACLIGHT_FLAG_TIMING_PROBE 8u   // bit3 reserved 回读探针(DEBUG 构建才置位)
+#define TACLIGHT_FLAG_OCCL_TABLE  16u   // bit4 !occl 遮挡距离表(2026-09-06 方案二:composite
+                                       // 每帧预建均向 D 表,composite1 查表代替逐采样灯侧 DDA)
 
 // ---- 每灯 96B · 6×vec4(std430,与 Java writeLight 写序一致)----
 struct TacLightSpot {
@@ -370,6 +372,81 @@ float taclight_vox_transmit(vec3 worldA, vec3 worldB) {
         else if (code == 1u) T *= 0.75; // 软植被:0.25 遮挡/格
     }
     return T;
+}
+
+// ----------------------------------------------------------------------------
+// 方案二 · 均向遮挡距离表(2026-09-06,用户批准的性能立项):
+//   光池内"逐采样 × 逐灯"的灯侧 DDA 是体积光成本主体(in-pool @4K +20.6ms,
+//   evidence/2026-09-06-inpool-perf/)。同一盏灯的灯→采样光路一帧被全屏像素
+//   重复走数百万次 → 改为每帧按方向预计算一次"最远无遮挡距离"D(dir),
+//   消费侧每采样一次查表。遍历语义与 taclight_vox_transmit 严格同源:
+//   起点(灯)格先步进后判定、tie 全轴推进、实心格穿透软化同 FUZZ;无"终点格"
+//   豁免(表是纯方向函数)。返回值:
+//     ≥0  首次等效遮挡距离(实心格入格时间,或植被累积 T ≤ SOFT_FLOOR 的时间)
+//     maxDist   方向上 maxDist 内无遮挡(哨兵=最远,消费者视为可见)
+//     -1  栅格无效或灯在栅格外(消费者回退哨兵=可见,同 vox_transmit 的 -1 语义)
+//   植被语义(保守方向):树叶/植被逐格累积透射,累积 ≤ 0.45 即记为遮挡——单层
+//   树叶(0.4)即触发,表对植被一致偏暗(0 vs 旧逐采样 0.4/0.16),不存在"表比
+//   DDA 更透"的漏光方向;墙后遮挡(用户 09-05 立项)语义逐位不变。
+// ----------------------------------------------------------------------------
+#define TACLIGHT_OCCL_SOFT_FLOOR 0.45
+
+float taclight_vox_hit_dist(vec3 worldA, vec3 dir, float maxDist) {
+    if (voxOrigin.w <= 0.0) return -1.0;
+    vec3 a = worldA - voxOrigin.xyz;
+    vec3 dim = vec3(voxMeta.xyz);
+    if (any(lessThan(a, vec3(0.0))) || any(greaterThanEqual(a, dim))) return -1.0;
+    ivec3 cell = ivec3(floor(a));
+    ivec3 istep = ivec3(dir.x > 0.0 ? 1 : (dir.x < 0.0 ? -1 : 0),
+                        dir.y > 0.0 ? 1 : (dir.y < 0.0 ? -1 : 0),
+                        dir.z > 0.0 ? 1 : (dir.z < 0.0 ? -1 : 0));
+    vec3 tDelta = vec3(abs(dir.x) > 1e-9 ? 1.0 / abs(dir.x) : 1e9,
+                       abs(dir.y) > 1e-9 ? 1.0 / abs(dir.y) : 1e9,
+                       abs(dir.z) > 1e-9 ? 1.0 / abs(dir.z) : 1e9);
+    vec3 tMax = vec3(abs(dir.x) > 1e-9 ? (dir.x > 0.0 ? (float(cell.x) + 1.0 - a.x) : (a.x - float(cell.x))) * tDelta.x : 1e9,
+                     abs(dir.y) > 1e-9 ? (dir.y > 0.0 ? (float(cell.y) + 1.0 - a.y) : (a.y - float(cell.y))) * tDelta.y : 1e9,
+                     abs(dir.z) > 1e-9 ? (dir.z > 0.0 ? (float(cell.z) + 1.0 - a.z) : (a.z - float(cell.z))) * tDelta.z : 1e9);
+    float T = 1.0;
+    for (int guard = 0; guard < 384; guard++) {
+        float tNext = min(tMax.x, min(tMax.y, tMax.z));
+        if (tNext > maxDist) return maxDist;
+        float tieEps = max(1e-6, abs(tNext) * 1e-5);
+        bvec3 tied = lessThanEqual(abs(tMax - vec3(tNext)), vec3(tieEps));
+        cell += istep * ivec3(tied);
+        tMax += tDelta * vec3(tied);
+        if (any(lessThan(cell, ivec3(0))) || any(greaterThanEqual(cell, ivec3(dim)))) return maxDist;
+        int idx = cell.x + cell.y * int(dim.x) + cell.z * int(dim.x) * int(dim.y);
+        uint code = (voxData[idx >> 4] >> uint((idx & 15) * 2)) & 3u;
+        if (code == 3u) {
+            float tExit = min(tMax.x, min(tMax.y, tMax.z));
+            float penLen = max(0.0, min(tExit, maxDist) - tNext);
+            float f = clamp(penLen / TACLIGHT_VOX_FUZZ, 0.0, 1.0);
+            if (f >= 1.0) return tNext;
+            T *= 1.0 - f;
+        }
+        else if (code == 2u) T *= 0.40;
+        else if (code == 1u) T *= 0.75;
+        if (T <= TACLIGHT_OCCL_SOFT_FLOOR) return tNext;
+    }
+    return maxDist;
+}
+
+/** 查表 vis 语义:命中距离 ±FUZZ/2 线性过渡(与 DDA 的穿透软化带同宽)。
+ *  dHit=哨兵(maxDist 级)时 dist ≤ 半径 < 哨兵−带宽 → 恒 1(可见)。 */
+float taclight_occl_vis_from_hit(float dHit, float dist) {
+    return clamp((dHit - dist) / TACLIGHT_VOX_FUZZ + 0.5, 0.0, 1.0);
+}
+
+/** composite1 消费入口:relWorld = 采样点 − 灯位(world 域,与 vox_transmit 同坐标)。
+ *  表行由适配层宏 TACLIGHT_OCCL_TABLE_AT 取(均向 D 表,equirect 512×256,NEAREST);
+ *  未适配包回退全哨兵 = 全可见(该包不应置位 bit4)。 */
+#ifndef TACLIGHT_OCCL_TABLE_AT
+#define TACLIGHT_OCCL_TABLE_AT(rel) (vec4(1e4))
+#endif
+float taclight_occl_table_vis(uint lampIdx, vec3 relWorld) {
+    vec4 row = TACLIGHT_OCCL_TABLE_AT(relWorld);
+    float dHit = row[int(lampIdx)] * TACLIGHT_OCCL_DIST_SCALE;
+    return taclight_occl_vis_from_hit(dHit, length(relWorld));
 }
 
 /** F3(2026-08-30):spec 项能量钳制。GGX 分布项(d)在低 roughness 下峰值可到

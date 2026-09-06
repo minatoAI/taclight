@@ -6,6 +6,7 @@ import dev.taclight.channel.LightTuneContract;
 import dev.taclight.channel.MotionCaptureContract;
 import dev.taclight.channel.FrameRecorderContract;
 import dev.taclight.channel.MultiLightCollectorContract;
+import dev.taclight.channel.OcclTableContract;
 import dev.taclight.channel.RemoteBaseSnapContract;
 import dev.taclight.channel.RemotePosSnapContract;
 import dev.taclight.channel.RemoteLookPredictorContract;
@@ -62,6 +63,8 @@ public class AllContracts {
         LightLevelOverrideContract.main(args);
         System.out.println("== LightTuneContract ==");
         LightTuneContract.main(args);
+        System.out.println("== OcclTableContract ==");
+        OcclTableContract.main(args);
         System.out.println("== MuzzlePoseMathContract ==");
         MuzzlePoseMathContract.main(args);
         System.out.println("== MuzzlePoseStoreContract ==");

@@ -13,7 +13,9 @@ package dev.taclight.channel;
  * 低于半帽点恒等=单灯观感零变化,多灯重叠亮度指数肩部渐近 cap 不许无限叠加——
  * 2026-09-05 用户需求:两灯同照刺眼;0.25=压得最狠,8≈基本不限,off=回 m=1) /
  * {@code !cone} 锥角收窄(2026-09-05 用户定案"接近平行光"):外锥半角(度),内锥=外×0.5,
- * Java 侧直改 cosOuter/cosInner,SSBO/GLSL 零改动;0 哨兵=直通 config 默认 外8/内4。
+ * Java 侧直改 cosOuter/cosInner,SSBO/GLSL 零改动;0 哨兵=直通 config 默认 外8/内4。 /
+ * {@code !occl} 遮挡距离表(2026-09-06 方案二,默认开):GLSL composite 预建逐灯均向
+ * D 表(colortex8),composite1 体积光逐采样灯侧 DDA 降为查表;off=回逐采样 DDA(A/B 对照)。
  * <p>Forge CLIENT config 热改 toml 不回读(瞬时读仍是旧值,见 {@link LightLevelOverride}),
  * 故各路均为纯内存覆盖,重启实例 = 覆盖清零 = 回 config 默认。
  * <p>默认:bright/dist 直通、attenK 回 0(GLSL 回退编译期默认)、kneeG 回
@@ -295,5 +297,34 @@ public final class LightTuneOverride {
     /** onFrame 调用:true → 头部 flags 置 FLAG_BEAM_ONLY(GLSL 跳过 M1 表面照明)。 */
     public static boolean beamOnly() {
         return beamOnlyActive;
+    }
+
+    /** !occl 遮挡距离表(2026-09-06 方案二,用户批准的性能立项):默认开——
+     *  GLSL composite 每帧预建逐灯均向"最远无遮挡距离"表(colortex8,512×256 equirect),
+     *  composite1 体积光的逐采样灯侧 DDA(光池内 @4K +20.6ms,占开灯开销 2/3)降为
+     *  每采样一次查表。off = 回逐采样 DDA(逐格精确但慢,A/B 对照用)。
+     *  Java 仅在体素栅格有效时置位 FLAG_OCCL_TABLE(栅格无效=旧行为回退可见)。 */
+    private static volatile boolean occlActive = true;
+
+    /** relay 入口:返回状态串(供日志)。on/off/status,重启回默认(on)。 */
+    public static String configureOccl(String arg) {
+        if (arg.isEmpty() || arg.equals("status")) {
+            return occlActive ? "occl=on(遮挡距离表:查表代替体积光逐采样 DDA)"
+                              : "occl=off(逐采样 DDA)";
+        }
+        if (arg.equals("on")) {
+            occlActive = true;
+            return "occl=on(遮挡距离表:查表代替体积光逐采样 DDA)";
+        }
+        if (arg.equals("off")) {
+            occlActive = false;
+            return "occl=off(逐采样 DDA)";
+        }
+        return "bad arg " + arg + " (want on/off/status)";
+    }
+
+    /** onFrame 调用:true → 头部 flags 置 FLAG_OCCL_TABLE(GLSL composite1 查表)。 */
+    public static boolean occlTable() {
+        return occlActive;
     }
 }
