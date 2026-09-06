@@ -105,6 +105,11 @@ dependencies {
     // playerAnimator(里程碑③,第三方库,libs/*.jar 不入库):TaCZ 第三人称动画消费方,
     // 本模组零代码引用,纯运行时伴生
     runtimeOnly fg.deobf("blank:player-animation-lib-forge:1.0.2-rc1+1.20")
+    // Freecam(第三方 mod,xolt Freecam 的 Forge 移植,libs/*.jar 不入库):
+    // 2026-09-06 用户要求装 freecam 做灵魂出窍观察,替代双客户端旁观拓扑。
+    // 必须走 fg.deobf —— 生产 jar 直接丢 run/mods 会在 dev(mapped_official)
+    // 里 mixin @Shadow SRG 名对不上直接 FATAL 崩启动(实测 2026-09-06)。
+    runtimeOnly fg.deobf("blank:freecam-forge:1.2.1+1.20")
     // mixin refmap:生产服 SRG 环境靠 taclight.refmap.json 重映射;没有它 dev
     // 能跑(开发映射),生产服必崩 No refMap loaded(实机抓获 2026-09-04)。
     // 生成方式:不走 mixin 注解处理器(试过,AP 在 FG6 下认不出官方映射——
