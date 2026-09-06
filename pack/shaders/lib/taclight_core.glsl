@@ -160,7 +160,7 @@ vec3 taclight_view_to_world(vec3 viewPos) {
 // 数学:分母 1+K(d/r)²,K 只改变"中段肩部"(0.5r 处 50%→20% 亮度),
 // 端点 atten(0)=1/atten(r)=0 不动,远场尾部保持。移植到其他包按宿主量纲重标(同 GAIN)。
 // ----------------------------------------------------------------------------
-#define TACLIGHT_ATTEN_K 5.0   // 标定常数:越小尾越长;5.0 = 0.5r 处约 20% 亮度
+#define TACLIGHT_ATTEN_K 20.0  // 标定常数:越小尾越长;20.0 = 0.5r 处约 12.5%/0.8r 处约 2.6%(2026-09-06 用户扫参冻结,默认 5.0 作古)
 // 2026-09-04 逐灯 K(用户体感 !atten 经 SSBO cone.z 透传):kOverride>0 取逐灯值,
 // ≤0 回退编译期默认 —— 半径 r 仍走原通道,端点 atten(0)=1/atten(r)=0 语义不动。
 float taclight_attenuation(float dist, float radius, float kOverride) {

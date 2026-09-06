@@ -53,8 +53,8 @@ public class InlineCoreContract {
         check(inline.contains("const float TACLIGHT_LIGHT_GAIN = 2.2;"),
                 "prelude 提供 GAIN 标定 const(core 无兜底,计划 §3)");
         check(inline.contains("const uint TACLIGHT_FLAG_HAS_DATA = 1u;")
-                        && inline.contains("const float TACLIGHT_ATTEN_K = 5.0;"),
-                "对象式宏 → const 常量(uint/float 类型推断;ATTEN_K=5.0 真实感调参 2026-09-03)");
+                        && inline.contains("const float TACLIGHT_ATTEN_K = 20.0;"),
+                "对象式宏 → const 常量(uint/float 类型推断;ATTEN_K=20.0 用户扫参冻结 2026-09-06(原 5.0 真实感调参 2026-09-03))");
         check(inline.contains("vec3 taclight_surface_lighting"), "照明主入口定义在");
         long open = inline.chars().filter(c -> c == '{').count();
         long close = inline.chars().filter(c -> c == '}').count();
@@ -83,8 +83,8 @@ public class InlineCoreContract {
         String fwd = TemplateLibrary.inlineCoreTextForward();
         check(fwd.contains("inline-core-forward"),
                 "前向精简块含 marker(幂等锚)");
-        check(fwd.contains("const float TACLIGHT_ATTEN_K = 5.0;"),
-                "前向精简 prelude K=5.0(2026-09-04 与主包收敛;!atten 逐灯经 cone.z,0=回退默认)");
+        check(fwd.contains("const float TACLIGHT_ATTEN_K = 20.0;"),
+                "前向精简 prelude K=20.0(2026-09-06 冻结;!atten 逐灯经 cone.z,0=回退默认)");
         for (String anchor : new String[]{
                 "layout(std430, binding = 7)", "vec3 taclight_world_to_scene(",
                 "vec3 taclight_scene_to_view(", "vec3 taclight_view_to_world(",

@@ -1,4 +1,4 @@
-﻿# knob.ps1 - TacLight 体感调参输入器:把你输入的旋钮命令写入实例中继文件(无 BOM)。
+# knob.ps1 - TacLight 体感调参输入器:把你输入的旋钮命令写入实例中继文件(无 BOM)。
 # 游戏内没有 ! 命令聊天入口(dev 命令树不完整),中继文件是唯一输入通道;本脚本
 # 让你在游戏旁边开个终端就能自助调参,不用等 AI 代写。
 #
@@ -52,7 +52,7 @@ Write-Output ("knob({0}) -> {1}" -f $Side, $File)
 Write-Output "输入旋钮命令后回车发送(例: !bright 12),Ctrl+C 退出。"
 Write-Output "  !bright <0.5..30>   亮度        !dist <4..96>    照距(格)"
 Write-Output "  !atten  <0.2..20>   衰减K       !knee <0.2..8>   近场软膝(off=关)"
-Write-Output "  !beam   <0..1>      体积光密度(0=关光束,off=回默认0.05)"
+Write-Output "  !beam   <0..1>      体积光密度(0=关光束,off=回默认0.25)"
 Write-Output "  !scat   <0..0.9>    轴向底亮(0=纯侧面丁达尔,正面最暗,off=回默认0.04)"
 Write-Output "  !beamcap <0.25..8>  重叠软上限倍率(小=压眩光狠,off=回默认1)"
 Write-Output "  !cone   <2..45>     外锥半角度数(小=接近平行光,off=回默认8)"

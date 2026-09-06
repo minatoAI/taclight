@@ -146,12 +146,12 @@ public final class LightTuneOverride {
     /** relay 入口:返回状态串(供日志)。 */
     public static String configureBeam(String arg) {
         if (arg.isEmpty() || arg.equals("status")) {
-            return beamActive ? ("beam=" + beamValue) : "off(config 默认 density=0.05)";
+            return beamActive ? ("beam=" + beamValue) : "off(config 默认 density=0.25)";
         }
         if (arg.equals("off")) {
             beamActive = false;
             beamValue = 0.0f;
-            return "off(config 默认 density=0.05)";
+            return "off(config 默认 density=0.25)";
         }
         try {
             float v = Float.parseFloat(arg);

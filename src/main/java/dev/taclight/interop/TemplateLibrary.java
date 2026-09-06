@@ -196,7 +196,7 @@ public final class TemplateLibrary {
         String slim = slimForwardCore(directiveFree(coreNoInclude));
         String prelude = "// TACLIGHT interop prelude-forward(gbuffers 前向精简版,SSO/GGX 不进前向)\n"
                 + "const float TACLIGHT_LIGHT_GAIN = 2.2;\n"
-                + "const float TACLIGHT_ATTEN_K = 5.0;\n"
+                + "const float TACLIGHT_ATTEN_K = 20.0; // 2026-09-06 用户扫参冻结(主包同值收敛)\n"
                 + "const float TACLIGHT_KNEE_GAIN = 2.0;\n"
                 + "const float TACLIGHT_VOX_FUZZ = 0.35;\n";
         r = "/* " + PatchExecutor.MARKER + " inline-core-forward (injected by TacLight interop) */\n"

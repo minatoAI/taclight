@@ -1,3 +1,23 @@
+## 09-06 晚 · 扫参冻结(atten K 20/beam 0.25)+ 注入包性能对照(未 push)
+
+- **冻结(用户扫参结束,口令"以现在状态为默认")**:13 旋钮逐一 status 存档(20:09:26-40)。
+  相对旧默认的净增量仅两项:**TACLIGHT_ATTEN_K 5.0→20.0**(0.5r 处约 12.5%/0.8r
+  处约 2.6%,远墙白饼 A 档解法)、**beamDensity 0.05→0.25**;其余(dist 36/knee
+  2.0/bright 6/cone 8/4/scat 0.04/beamcap 1/occl on/tm on/beamonly off/
+  selflight true)与旧默认一致,零改动。落点:core #define + 前向精简
+  prelude(TemplateLibrary:199,契约"与主包收敛"当场抓住过漏改)+config
+  BEAM_DENSITY + 三处回显/help 文案(knob.ps1/Relay/javadoc)。
+- 契约:InlineCore 43(含新 K 双钉)/LightTune 113/OcclTable 17061/TemporalReuse
+  60,余下全部 AllContracts ALL PASS + BUILD SUCCESSFUL(contracts-freeze2.log)。
+  运行中实例沿用内存覆盖(值与新默认一致),零行为变化;新默认下次重启生效。
+- **注入包性能(用户命题,同机位走廊 cam 2013.57,窗口 1280x1392,枪灯开,零编译错)**:
+  基线自研包 166.6/167.7/167.3(中位 167.3,1%low~128);
+  iterationT 3.2.0(+27166 chars,光池/手照正常渲染,有效测量)49.1/53.4/56.5/
+  57.2(爬升后稳 ~57,1%low~50,帧带雨,口径 footnote);
+  ComplementaryReimagined(+8399 chars 多 pass,**无光池/手不亮=注入未渲染,
+  负结果,166.5 不得引用为注入成本**,另起诊断轮未立项)。
+  回切自研包 + reload,DIAG pack=TACLIGHT_PACK,机位未动。证据
+  docs/evidence/2026-09-06-interop-perf/(README+4 截图+manifest)。
 ## 09-06 下午 · 遮挡查表双线性化(条纹修复)+ 体积光时间复用:灯光开销减半、同机位 +58% 帧(未 push)
 
 - **环境**:应用户要求给 dev 实例装 **Freecam 模组**(freecam-forge-1.2.1+1.20,xolt

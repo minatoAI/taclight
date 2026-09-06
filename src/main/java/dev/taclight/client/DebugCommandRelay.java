@@ -255,7 +255,7 @@ public final class DebugCommandRelay {
         if (line.startsWith("!beam")) {
             // 2026-09-05 用户体感第五旋钮:体积光束密度(丁达尔效果强度)。经 SSBO
             // vlParams.y 逐灯直接换值,GLSL 零改动;0=完全关光束(A/B 开关对比),
-            // off=回 config 默认 beamDensity=0.05。范围 0..1,零重启生效,重启清零。
+            // off=回 config 默认 beamDensity=0.25。范围 0..1,零重启生效,重启清零。
             // 注意 !bench 前缀不冲突(分支匹配互不前缀包含)。
             String arg = line.length() > 5 ? line.substring(5).trim() : "";
             TacLightMod.LOGGER.info("[TacLight] RELAY beam -> {}",

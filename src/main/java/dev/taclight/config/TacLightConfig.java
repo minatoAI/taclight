@@ -31,7 +31,7 @@ public final class TacLightConfig {
         // 远距离范围过大;8/4 在 30m 外 ≈4.2m、20m 外 ≈2.8m。运行时微调用中继 !cone。
         CONE_OUTER_DEG = builder.comment("outer half-angle in degrees (8 = near-parallel beam)").defineInRange("coneOuterDeg", 8.0, 5.0, 60.0);
         CONE_INNER_DEG = builder.comment("inner half-angle in degrees (= full-brightness core)").defineInRange("coneInnerDeg", 4.0, 2.0, 55.0);
-        BEAM_DENSITY = builder.comment("volumetric beam density (0 = off)").defineInRange("beamDensity", 0.05, 0.0, 1.0);
+        BEAM_DENSITY = builder.comment("volumetric beam density (0 = off)").defineInRange("beamDensity", 0.25, 0.0, 1.0);
         GUN_MULTIPLIER = builder.comment("gun-mounted light intensity multiplier").defineInRange("gunMultiplier", 1.1, 0.1, 3.0);
         // M5 多人:远程玩家灯的收集护栏(旁观视角与多人调试方案.md §4.3)
         REMOTE_LIGHT_MAX_DIST = builder.comment("max distance (blocks) to render other players' lights").defineInRange("remoteLightMaxDist", 48.0, 8.0, 128.0);
