@@ -1,4 +1,4 @@
-# 列出含 taclight.mixins 的 java 进程: PID + 完整命令行尾部(判 worktree 归属)
+﻿# 列出含 taclight.mixins 的 java 进程: PID + 完整命令行尾部(判 worktree 归属)
 $procs = Get-CimInstance Win32_Process -Filter "Name='java.exe'"
 foreach ($p in $procs) {
     $c = $p.CommandLine

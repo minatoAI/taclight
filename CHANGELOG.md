@@ -1,3 +1,10 @@
+## 09-07 夜 · knob.ps1 BOM 复发修复(未 push)
+
+- 用户双击 `tools\knob.bat` 即炸:09-07 凌晨改帮助文案时 edit 落盘 strip 了 BOM,
+  PS 5.1 按 GBK 解析,中文乱码吞引号 → 全脚本解析失败(坑 104 复发,同错同修:
+  补 EF BB BF + `knob.bat knee status` 单发自证 `sent(A) -> !knee status`)。另扫出
+  interop-smoke/stop、java-procs-interop 三个含中文无 BOM 脚本一并补上。
+
 ## 09-07 傍晚 · 持枪门:手动偏好×探针=有效灯(未 push)
 
 - **根因(用户实测:持枪开灯后切其他物品灯还亮)**:`setGunLight` 在 manual=true 时丢弃

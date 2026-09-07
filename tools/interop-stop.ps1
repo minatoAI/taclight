@@ -1,4 +1,4 @@
-# Stop ONLY the interop client java process(es).
+﻿# Stop ONLY the interop client java process(es).
 # Match rule: command line contains 'taclight.mixins' (client args; gradle daemons lack it)
 # AND 'wt-interop' (worktree classpath; main-line instances live under taclight\build instead).
 # NOTE: do NOT match 'run-interop' — the game dir is passed as a RELATIVE path ('.'), so the

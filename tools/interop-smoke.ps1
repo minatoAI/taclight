@@ -1,4 +1,4 @@
-# Interop injection smoke driver (acceptance 3-4 of the milestone-2 plan §7):
+﻿# Interop injection smoke driver (acceptance 3-4 of the milestone-2 plan §7):
 # scene build -> camera goto -> light off shot -> light on shot, all through the file
 # relay (programmatic only, zero mouse/keyboard/window grabbing — user mandate 09-02).
 # Screenshots come from relay !shot (vanilla Screenshot.grab) into run-interop/screenshots,
