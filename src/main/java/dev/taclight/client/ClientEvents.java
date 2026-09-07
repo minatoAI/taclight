@@ -16,6 +16,7 @@ import net.minecraftforge.fml.common.Mod;
 @Mod.EventBusSubscriber(modid = TacLightMod.MODID, value = Dist.CLIENT)
 public class ClientEvents {
     private static GunLaserReader.Status lastGunStatus = GunLaserReader.Status.NONE;
+    private static boolean lastSentEffective = false;
     private static int e2eTick;
     private static boolean e2eLogged;
 
@@ -68,14 +69,15 @@ public class ClientEvents {
         while (KeyBindings.FLASHLIGHT_TOGGLE.consumeClick()) {
             ClientLightState.toggle();
             // M5:开关上报纸服务端(SynchedEntityData 真源),其他玩家客户端可见
-            dev.taclight.network.TacLightNetwork.sendSetLight(ClientLightState.isOn(), ClientLightState.gunLightOn());
+            dev.taclight.network.TacLightNetwork.sendSetLight(ClientLightState.isOn(), ClientLightState.gunLightEffective());
             TacLightMod.LOGGER.info("[TacLight] handheld flashlight {}", ClientLightState.isOn() ? "ON" : "OFF");
         }
         while (KeyBindings.GUNLIGHT_TOGGLE.consumeClick()) {
             boolean next = dev.taclight.client.GunControl.toggleGunManual();
-            // M5:手动覆写同步服务端真源(与 !gun 同语义,见 DebugCommandRelay)
-            dev.taclight.network.TacLightNetwork.sendSetLight(ClientLightState.isOn(), next);
-            TacLightMod.LOGGER.info("[TacLight] gun light {} (key, manual)", next ? "ON" : "OFF");
+            // M5:上报有效灯(偏好×持枪门),空手按 M 只存偏好不亮灯,切回枪即复
+            boolean eff = ClientLightState.gunLightEffective();
+            dev.taclight.network.TacLightNetwork.sendSetLight(ClientLightState.isOn(), eff);
+            TacLightMod.LOGGER.info("[TacLight] gun light {} (key, manual, effective={})", next ? "ON" : "OFF", eff ? "ON" : "OFF");
         }
         while (KeyBindings.DEBUG_TOGGLE.consumeClick()) {
             ClientLightState.toggleDebug();
@@ -334,7 +336,9 @@ public class ClientEvents {
             }
         }
 
-        ClientLightState.setGunLight(status == GunLaserReader.Status.OUR_LIGHT);
+        boolean probeOn = (status == GunLaserReader.Status.OUR_LIGHT);
+        ClientLightState.setGunProbe(probeOn);
+        ClientLightState.setGunLight(probeOn);
         // Gun state remains tick-driven above; SSBO collection/upload occurs only in onRenderLevel.
         probeIfEnabled();
         checkShaderPackDiag(mc);
@@ -349,8 +353,12 @@ public class ClientEvents {
             TacLightMod.LOGGER.info("[TacLight] gun light {} ({})",
                     status == GunLaserReader.Status.OUR_LIGHT ? "ON" : "OFF", detail);
             lastGunStatus = status;
-            // M5:枪灯状态变化同步服务端真源
-            dev.taclight.network.TacLightNetwork.sendSetLight(ClientLightState.isOn(), ClientLightState.gunLightOn());
+        }
+        // M5:有效灯变化即同步服务端真源(含手动期切走/切回:偏好不变但有效翻转)
+        boolean effNow = ClientLightState.gunLightEffective();
+        if (effNow != lastSentEffective) {
+            lastSentEffective = effNow;
+            dev.taclight.network.TacLightNetwork.sendSetLight(ClientLightState.isOn(), effNow);
         }
     }
 }

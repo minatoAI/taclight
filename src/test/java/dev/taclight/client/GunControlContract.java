@@ -29,10 +29,28 @@ public class GunControlContract {
         check(!ClientLightState.gunLightOn(), "auto 后探针写 false 生效");
         ClientLightState.setGunLight(true);
         check(ClientLightState.gunLightOn(), "auto 后探针写 true 生效(空手切枪即亮/灭)");
+        // 持枪门(2026-09-07 用户实测:持枪开灯后切其他物品灯还亮=bug):
+        // 有效灯 = 手动偏好 × 主手探针,切走即灭、切回即复(偏好保留)。
+        ClientLightState.clearGunManual();
+        ClientLightState.setGunProbe(true);
+        ClientLightState.setGunLight(true);
+        check(ClientLightState.gunLightEffective(), "auto+持灯枪=有效亮");
+        ClientLightState.setGunProbe(false);
+        ClientLightState.setGunLight(false);
+        check(!ClientLightState.gunLightEffective(), "auto+空手=有效灭");
+        ClientLightState.setGunLightManual(true);
+        ClientLightState.setGunProbe(true);
+        check(ClientLightState.gunLightEffective(), "手动开+持灯枪=有效亮");
+        ClientLightState.setGunProbe(false);
+        check(!ClientLightState.gunLightEffective(), "手动开+切走=有效灭(本次回归)");
+        check(ClientLightState.gunLightOn(), "切走后手动偏好保留");
+        ClientLightState.setGunProbe(true);
+        check(ClientLightState.gunLightEffective(), "切回持枪=恢复亮");
         // 复位,免污染后续契约/运行
+        ClientLightState.setGunProbe(false);
         ClientLightState.setGunLight(false);
         ClientLightState.clearGunManual();
-        System.out.println("GunControlContract: ALL PASS (13 checks)");
+        System.out.println("GunControlContract: ALL PASS (19 checks)");
     }
 
     private static void check(boolean cond, String what) {

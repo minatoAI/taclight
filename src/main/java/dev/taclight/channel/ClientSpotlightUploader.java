@@ -100,7 +100,7 @@ public final class ClientSpotlightUploader {
             lights.add(selfCapped(hand, playerEye));
             slotKeys.add("self:hand");
         }
-        if (selfOn && ClientLightState.gunLightOn()) {
+        if (selfOn && ClientLightState.gunLightEffective()) {
             dev.taclight.pose.MuzzlePoseMath.Pose muzzle = dev.taclight.client.MuzzlePoseCapture.consumeFresh();
             if (muzzle != null && fp) {
                 // 枪渲染空间 → 世界(2026-09-02 坑60):捕获矩阵是 GL 视图空间(-Z 前),

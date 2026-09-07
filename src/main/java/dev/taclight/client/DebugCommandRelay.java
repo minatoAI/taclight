@@ -164,7 +164,7 @@ public final class DebugCommandRelay {
             ClientLightState.toggle();
             // 08-31 实测坑:L 键路径(InjectionEvent) toggle 后会 sendSetLight 上报服务端,
             // relay 必须对齐,否则服务端实体数据不变 → 其他玩家看不到开关(ssbo count 假 1)。
-            dev.taclight.network.TacLightNetwork.sendSetLight(ClientLightState.isOn(), ClientLightState.gunLightOn());
+            dev.taclight.network.TacLightNetwork.sendSetLight(ClientLightState.isOn(), ClientLightState.gunLightEffective());
             TacLightMod.LOGGER.info("[TacLight] RELAY light -> {}", ClientLightState.isOn());
             return;
         }
@@ -291,7 +291,7 @@ public final class DebugCommandRelay {
                 case AUTO: {
                     dev.taclight.client.GunControl.applyAuto();
                     dev.taclight.network.TacLightNetwork.sendSetLight(
-                            ClientLightState.isOn(), ClientLightState.gunLightOn());
+                            ClientLightState.isOn(), ClientLightState.gunLightEffective());
                     TacLightMod.LOGGER.info("[TacLight] RELAY gunLight -> auto (probe-follow)");
                     break;
                 }
@@ -309,8 +309,10 @@ public final class DebugCommandRelay {
                     ClientLightState.setGunLightManual(next);
                     // 手动覆写必须同步服务端真源,否则本端 SSBO 有光而对端(同步读)永远看不见
                     // —— 这正是"Dev 视角切开关无变化 + B 看不见 Dev 灯"的另一半根因。
-                    dev.taclight.network.TacLightNetwork.sendSetLight(ClientLightState.isOn(), next);
-                    TacLightMod.LOGGER.info("[TacLight] RELAY gunLight -> {} (manual)", next);
+                    // 上报有效灯:空手 !gun on 只存偏好不亮灯,切回枪即复。
+                    boolean eff = ClientLightState.gunLightEffective();
+                    dev.taclight.network.TacLightNetwork.sendSetLight(ClientLightState.isOn(), eff);
+                    TacLightMod.LOGGER.info("[TacLight] RELAY gunLight -> {} (manual, effective={})", next, eff ? "ON" : "OFF");
                     break;
                 }
             }

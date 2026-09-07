@@ -1,3 +1,15 @@
+## 09-07 傍晚 · 持枪门:手动偏好×探针=有效灯(未 push)
+
+- **根因(用户实测:持枪开灯后切其他物品灯还亮)**:`setGunLight` 在 manual=true 时丢弃
+  探针写入 + uploader 直读偏好 → 手动开一次即粘住,切空手/铲子照亮(你骂得对,语义
+  就是错的)。修复=偏好与探针分离:新增 `gunProbeOn`(每 tick 无条件覆写)+`gunLightEffective()
+  = 偏好 && 探针`;uploader 与全部 6 处 `sendSetLight` 上报改读有效值;tick 新增
+  effective 翻转即上报(含手动期切走/切回,偏好不变也同步,对端不再残留)。行为:
+  切走即灭、切回即复(偏好保留);空手按 M/`!gun on` 只存偏好不亮,日志打
+  `effective=OFF` 明示。`!gun auto` 语义不变。契约 GunControl 13→**19**(6 门禁
+  回归,ALL PASS);FrameRecorderContract 仍挂 node EPERM(环境性,同上轮)。
+  待实机验证(需重启,实例当前未运行):持枪 M 开→切铲子灯灭→切回枪灯亮。
+
 ## 09-07 凌晨 · 枪灯 M 键 + `!gun auto` + 镜面 F4 + knee8 真凶定位(未 push)
 
 - **B 路枪灯可控性(用户:TaCZ 有无激光开关?空手亮=bug)**:TaCZ 1.1.8 原版**无激光/灯

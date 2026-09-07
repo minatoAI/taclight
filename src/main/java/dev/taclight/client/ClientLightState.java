@@ -6,6 +6,8 @@ public final class ClientLightState {
     private static boolean gunLightOn = false;
     /** 手动覆写(调试开关):true=人工通过 !gun 显式设定,此后 tick 探针不再覆盖。 */
     private static volatile boolean gunManual = false;
+    /** 主手探针(每 tick 覆写):true=正持带 taclight:gun_light 的枪;手动偏好须与之相乘。 */
+    private static volatile boolean gunProbeOn = false;
     private static boolean debugMode = false;
     /** 自身灯运行时覆写(null=跟随配置 SELF_LIGHT_ENABLED;!selflight 可翻转)。 */
     private static volatile Boolean selfLightOverride = null;
@@ -31,6 +33,11 @@ public final class ClientLightState {
         gunManual = true;
         gunLightOn = on;
     }
+    /** 主手探针写入(每 tick 无条件覆写,不受手动旗影响)。 */
+    public static void setGunProbe(boolean on) { gunProbeOn = on; }
+    public static boolean gunProbeOn() { return gunProbeOn; }
+    /** 有效枪灯 = 开关偏好 × 持枪门:未持灯枪一律不亮(切走即灭、切回即复)。 */
+    public static boolean gunLightEffective() { return gunLightOn && gunProbeOn; }
     /** 清手动覆写(恢复探针跟随;调试用,暂无中继入口)。 */
     public static void clearGunManual() { gunManual = false; }
     public static boolean gunManual() { return gunManual; }
