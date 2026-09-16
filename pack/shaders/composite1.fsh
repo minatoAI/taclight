@@ -19,6 +19,8 @@
  *   composite2.fsh 头注释 v0.10.0 热修),故为全分辨率减步。
  *   MRT:colortex4(rgb=光束 a=逐像素置信度)+ colortex9(rgb=光束 a=终点距离/256)。
  * 性能:tm 开时 raymarch 每帧步数减半;灯侧遮挡查表(方案二)不变。
+ * 优化1(!beam 早退):全部有效灯密度(vlParams.y)≤0 时体积和恒为 0,整支
+ * raymarch 空转循环跳过(输出与逐采样 ×0 逐位一致,见 main 内 beamIdle)。
  */
 /* DRAWBUFFERS:49 */
 #include "/lib/taclight_common.glsl"
@@ -79,7 +81,18 @@ void main() {
     vec3 vl = vec3(0.0);
     bool contributed = false;
     float lightConf = 1.0;
-    if (lightCount > 0u) {
+    // 优化1(!beam 早退,2026-09-15):全部有效灯密度(vlParams.y)≤0 时体积和恒为
+    // 0 —— 跳过整支 raymarch 空转循环(64/32 步 × 灯,含查表/DDA)。输出与逐采样
+    // ×0 逐位一致:vl=0、contributed=false → conf=0 → 时间复用不混合、histOut
+    // 只写距离。dirType.w<0.5 的灯在循环内本就 continue,不计入判据。
+    bool beamIdle = true;
+    for (uint bi = 0u; bi < lightCount && bi < 8u; bi++) {
+        if (lights[bi].dirType.w >= 0.5 && lights[bi].vlParams.y > 0.0) {
+            beamIdle = false;
+            break;
+        }
+    }
+    if (lightCount > 0u && !beamIdle) {
         // 灯数据预取(view 空间),步进内层只做数学
         uint nL = min(lightCount, 8u);
         vec3 lv[8];
