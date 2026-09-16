@@ -1,0 +1,20 @@
+{
+  "pair": [
+    "taclight-t25-chestplate-a.png",
+    "taclight-t25-chestplate-b.png"
+  ],
+  "size": [
+    3840,
+    2130
+  ],
+  "naked_changed_pct": 0.0924,
+  "meanAbs": 0.0004,
+  "Ymean": 0.0002,
+  "Yp50": 0.0,
+  "Yp95": 0.0,
+  "Yp99": 0.0,
+  "Yp999": 0.0,
+  "Ymax": 45,
+  "floor_band_ref": "task-15 same-config band 2-4pct naked",
+  "verdict": "PASS well below floor"
+}
