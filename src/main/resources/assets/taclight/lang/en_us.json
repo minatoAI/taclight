@@ -1,0 +1,10 @@
+{
+  "item.taclight.flashlight": "Flashlight",
+  "item.taclight.flashlight.tip": "Held-light. Use with a shaderpack for a real spotlight cone.",
+  "key.taclight.flashlight_toggle": "Toggle Flashlight",
+  "key.taclight.gunlight_toggle": "Toggle Gun Light (M)",
+  "key.taclight.debug_toggle": "Neon Debug Mode (K)",
+  "key.taclight.diag_dump": "Dump Diagnostics to Log (N)",
+  "key.taclight.bench": "3s FPS Benchmark (B)",
+  "key.categories.taclight": "TacLight"
+}

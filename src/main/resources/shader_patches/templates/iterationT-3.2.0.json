@@ -1,0 +1,25 @@
+{
+  "familyId": "iterationT",
+  "packName": "iterationT 3.2.0",
+  "packHash": { "shaders/composite.fsh": "addc5c6008d98522" },
+  "files": [
+    {
+      "file": "shaders/composite.fsh",
+      "selector": "finalComposite += HeldLighting(viewPos, viewDir, gbuffer.normalL",
+      "selectorCount": 1,
+      "ops": [
+        { "op": "replaceFirst", "anchor": "#version  330", "content": "#version 430 core" },
+        {
+          "op": "insertBeforeLine",
+          "anchor": "vec3 HeldLighting(vec3 viewPos, vec3 viewDir, vec3 normal, float roughness, vec3 ao, bool isHand){",
+          "content": "/* TACLIGHT_PATCH_BEGIN iterationT 3.2.0 runtime (injected by TacLight interop) */\n<INLINE_CORE>"
+        },
+        {
+          "op": "insertAfterLine",
+          "anchor": "finalComposite += HeldLighting(viewPos, viewDir, gbuffer.normalL",
+          "content": "\t\t\t// TACLIGHT_PATCH_BEGIN iterationT 3.2.0 runtime\n\t\t\tfinalComposite += taclight_shoulder3(TACLIGHT_LIGHT_GAIN * taclight_surface_lighting(viewPos, gbuffer.albedo, gbuffer.normalL, gbuffer.material.roughness, 0.0, vec3(0.04)) / 2048.0, 0.55, 0.15 * 0.55);\n\t\t\t// TACLIGHT_PATCH_END iterationT 3.2.0 runtime"
+        }
+      ]
+    }
+  ]
+}

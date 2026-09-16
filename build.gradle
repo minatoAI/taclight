@@ -1,0 +1,252 @@
+plugins {
+    id 'eclipse'
+    id 'idea'
+    id 'net.minecraftforge.gradle' version '[6.0,6.2)'
+}
+
+version = mod_version
+group = mod_group_id
+
+base { archivesName = mod_id }
+java.toolchain.languageVersion = JavaLanguageVersion.of(17)
+
+println "Java: ${System.getProperty 'java.version'}, JVM: ${System.getProperty 'java.vm.version'} (${System.getProperty 'java.vendor'}), Arch: ${System.getProperty 'os.arch'}"
+
+minecraft {
+    mappings channel: mapping_channel, version: mapping_version
+    copyIdeResources = true
+
+    runs {
+        configureEach {
+            workingDirectory project.file('run')
+            property 'forge.logging.markers', 'REGISTRIES'
+            property 'forge.logging.console.level', 'info'
+            property 'mixin.env.remapRefMap', 'true'
+            property 'mixin.env.refMapRemappingFile', "${projectDir}/build/createSrgToMcp/output.srg"
+            mods {
+                "${mod_id}" { source sourceSets.main }
+            }
+        }
+        client {
+            property 'forge.enabledGameTestNamespaces', mod_id
+            args '-mixin.config=taclight.mixins.json'
+            jvmArgs '-Xmx4G'
+        }
+        server {
+            workingDirectory project.file('run-server')
+            args '--nogui'
+            jvmArgs '-Xmx4G'
+        }
+        data {
+            args '--mod', mod_id, '--all', '--output', file('src/generated/resources/'), '--existing', file('src/main/resources/')
+        }
+    }
+}
+
+sourceSets.main.resources { srcDir 'src/generated/resources' }
+
+// ---------------------------------------------------------------------------
+// 依赖:本项目**不重分发任何第三方 jar**(许可原因,见 THIRD_PARTY.md「依赖许可与再分发」)。
+// 编译需要 TaCZ 与 Oculus 两个 jar,请从各自官方发布页下载对应版本后放入 libs/。
+// 缺失时下面的 checkLocalDeps 会给出明确报错,而不是编译期一堆 "package does not exist"。
+// ---------------------------------------------------------------------------
+repositories { flatDir { dirs 'libs' } }
+
+def requiredLibs = ['tacz-1.1.8-hotfix.jar', 'oculus-1.8.0.jar']
+
+tasks.register('checkLocalDeps') {
+    group = 'taclight'
+    description = '检查 libs/ 下的本地依赖 jar 是否存在(本项目不重分发这些 jar)'
+    doLast {
+        def missing = requiredLibs.findAll { !file("libs/${it}").exists() }
+        if (missing) {
+            throw new GradleException("""[TacLight] 缺少本地依赖 jar: ${missing.join(', ')}
+本项目不重分发任何第三方 jar(许可原因,见 THIRD_PARTY.md「依赖许可与再分发」)。
+请从官方发布页下载后放入 libs/:
+  - Timeless and Classics Zero (TaCZ) 1.1.8-hotfix -> libs/tacz-1.1.8-hotfix.jar
+  - Oculus (Iris Forge port) 1.8.0                 -> libs/oculus-1.8.0.jar
+可选(runtimeOnly,运行游戏时才需要,不参与编译): Embeddium 0.3.31、Player Animator 1.0.2-rc1、Freecam 1.2.1""")
+        }
+    }
+}
+
+dependencies {
+    minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
+
+    // 本地离线 jar(flatDir)。TaCZ:枪械联动 API;Oculus:iris.api.v0(compileOnly 取 API 不打包)。
+    compileOnly fg.deobf("blank:tacz:1.1.8-hotfix")
+    compileOnly fg.deobf("blank:oculus:1.8.0")
+    runtimeOnly fg.deobf("blank:tacz:1.1.8-hotfix")
+    runtimeOnly fg.deobf("blank:oculus:1.8.0")
+    // Player Animator / Freecam / Embeddium:可选运行时伴生(本模组零代码引用)。
+    // 只在 libs/ 里真的放了这个 jar 时才接入 —— 本项目不重分发这些 jar,
+    // 缺它们不影响 `gradlew jar` 与编译(编译只需 tacz + oculus,见 checkLocalDeps)。
+    // 必须走 fg.deobf —— 生产 jar 直接丢 run/mods 会在 dev(mapped_official)里
+    // mixin @Shadow 的 SRG 名对不上直接 FATAL 崩启动(2026-09-06 实测)。
+    [['embeddium-0.3.31.jar', 'blank:embeddium:0.3.31'],
+     ['player-animation-lib-forge-1.0.2-rc1+1.20.jar', 'blank:player-animation-lib-forge:1.0.2-rc1+1.20'],
+     ['freecam-forge-1.2.1+1.20.jar', 'blank:freecam-forge:1.2.1+1.20']].each { pair ->
+        if (file("libs/${pair[0]}").exists()) { dependencies.add('runtimeOnly', fg.deobf(pair[1])) }
+    }
+
+    // mixin refmap:生产(SRG)环境靠 taclight.refmap.json 重映射;没有它生产服必崩
+    // "No refMap loaded"(2026-09-04 实机抓获)。生成方式见下面 generateRefmap 任务。
+    compileOnly 'org.spongepowered:mixin:0.8.5'
+}
+
+// mixin refmap 生成:mixin 注解处理器在 ForgeGradle 6 下配不出 refmap,改由本任务直接
+// 从 FG 自带的 build/createSrgToMcp/output.srg 提取本模组 4 个原版目标(其余 3 个是
+// TaCZ 类,remap=false 不查表),按 refmap v1 格式写出;jar 任务依赖它,产物打进 jar 根。
+tasks.register('generateRefmap') {
+    group = 'taclight'
+    dependsOn 'createSrgToMcp'
+    def srg = file('build/createSrgToMcp/output.srg')
+    def out = file("$buildDir/generated/refmap/taclight.refmap.json")
+    inputs.file srg
+    outputs.file out
+    doLast {
+        def lines = srg.readLines('UTF-8')
+        def findMd = { String owner, String srgName, String desc ->
+            def prefix = 'MD: ' + owner + '/' + srgName + ' ' + desc + ' ' + owner + '/'
+            def hit = lines.find { it.startsWith(prefix) }
+            if (hit == null) throw new GradleException("[TacLight] SRG 缺目标: ${owner}/${srgName} ${desc}")
+            return srgName
+        }
+        def findFd = { String owner, String srgName ->
+            def prefix = 'FD: ' + owner + '/' + srgName + ' ' + owner + '/'
+            def hit = lines.find { it.startsWith(prefix) }
+            if (hit == null) throw new GradleException("[TacLight] SRG 缺字段: ${owner}/${srgName}")
+            return srgName
+        }
+        def playerOwner = 'net/minecraft/world/entity/player/Player'
+        def dispOwner = 'net/minecraft/client/renderer/entity/EntityRenderDispatcher'
+        def livingRdrOwner = 'net/minecraft/client/renderer/entity/LivingEntityRenderer'
+        def livingOwner = 'net/minecraft/world/entity/LivingEntity'
+        def dispDesc = '(Lnet/minecraft/world/entity/Entity;Lnet/minecraft/client/renderer/culling/Frustum;DDD)Z'
+        def renderDesc = '(Lnet/minecraft/world/entity/LivingEntity;FFLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;I)V'
+        def seargeDefine = findMd(playerOwner, 'm_8097_', '()V')
+        def seargeShould = findMd(dispOwner, 'm_114397_', dispDesc)
+        def seargeRender = findMd(livingRdrOwner, 'm_7392_', renderDesc)
+        def seargeLerpX = findFd(livingOwner, 'f_20904_')
+        def seargeLerpY = findFd(livingOwner, 'f_20905_')
+        def seargeLerpZ = findFd(livingOwner, 'f_20906_')
+        // refmap 格式:mappings 直挂 mixin 类短路径;类键 = mixin 类全路径斜杠式
+        // (对应 mixins.json 的 package+name);方法键 = 纯 mojmap 名(@Inject method 的写法);
+        // 值 = Lowner;SRG名+desc(与 TaCZ 的 refmap 同形)。
+        def clsPlayer = 'dev/taclight/mixin/PlayerSynchedDataMixin'
+        def clsDisp = 'dev/taclight/mixin/TpOffscreenRenderMixin'
+        def clsRender = 'dev/taclight/mixin/LivingEntityRenderEntityMixin'
+        def clsLerp = 'dev/taclight/mixin/LivingEntityLerpAccess'
+        def mappings = new groovy.json.JsonBuilder([
+            (clsPlayer): ['defineSynchedData': 'L' + playerOwner + ';' + seargeDefine + '()V'],
+            (clsDisp): ['shouldRender': 'L' + dispOwner + ';' + seargeShould + dispDesc],
+            (clsRender): [('render' + renderDesc): 'L' + livingRdrOwner + ';' + seargeRender + renderDesc],
+            (clsLerp): ['lerpX': 'L' + livingOwner + ';' + seargeLerpX,
+                        'lerpY': 'L' + livingOwner + ';' + seargeLerpY,
+                        'lerpZ': 'L' + livingOwner + ';' + seargeLerpZ]
+        ])
+        out.parentFile.mkdirs()
+        out.text = '{\n  "mappings": ' + mappings.toString().replace('{"SEARGE":', '{\n    "SEARGE":') + ',\n  "data": {}\n}\n'
+        logger.lifecycle("[TacLight] refmap written: ${out} (define=${seargeDefine} should=${seargeShould} render=${seargeRender} lerp=${seargeLerpX},${seargeLerpY},${seargeLerpZ})")
+    }
+}
+
+// 光影注入引擎的内联核心:单一真源 = pack/shaders/lib 下两个 glsl,构建期拷进 resources。
+// (运行时契约类 InlineCoreContract 以 SHA-256 对两份内容对账,防漂移。)
+tasks.register('copyInlineCore', Copy) {
+    from file('pack/shaders/lib/taclight_math.glsl')
+    from file('pack/shaders/lib/taclight_core.glsl')
+    into file("$buildDir/generated/resources-extra/shader_patches/inline")
+}
+sourceSets.main.resources.srcDir file("$buildDir/generated/resources-extra")
+
+tasks.named('processResources', ProcessResources).configure {
+    dependsOn tasks.named('copyInlineCore')
+    var replaceProperties = [
+            minecraft_version: minecraft_version, minecraft_version_range: minecraft_version_range,
+            forge_version: forge_version, forge_version_range: forge_version_range,
+            loader_version_range: loader_version_range,
+            mod_id: mod_id, mod_name: mod_name, mod_license: mod_license, mod_version: mod_version,
+            mod_authors: mod_authors, mod_description: mod_description
+    ]
+    inputs.properties replaceProperties
+    filesMatching(['META-INF/mods.toml', 'pack.mcmeta']) { expand replaceProperties + [project: project] }
+}
+
+tasks.named('compileJava', JavaCompile).configure {
+    dependsOn 'checkLocalDeps'
+}
+
+tasks.named('jar', Jar).configure {
+    dependsOn 'generateRefmap'
+    from("$buildDir/generated/refmap") { include 'taclight.refmap.json' }
+    includeEmptyDirs = false
+    manifest {
+        attributes([
+                'Specification-Title': mod_id,
+                'Specification-Vendor': mod_authors,
+                'Specification-Version': '1',
+                'Implementation-Title': project.name,
+                'Implementation-Version': project.jar.archiveVersion,
+                'Implementation-Vendor': mod_authors,
+                'MixinConfigs': 'taclight.mixins.json'
+        ])
+    }
+    finalizedBy 'reobfJar'
+}
+
+// 光影包补丁工具:输入原包目录,输出派生包目录,原包不动。
+// 用法:gradlew patchIterationT -PtaclightPackDir=<原光影包目录>
+tasks.register('patchIterationT', JavaExec) {
+    dependsOn tasks.named('classes')
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'dev.taclight.tools.PackPatcherTool'
+    inputs.files(file('src/main/resources/shader_patches'))
+    doFirst {
+        if (!project.hasProperty('taclightPackDir')) {
+            throw new GradleException("[TacLight] 需要 -PtaclightPackDir=<原光影包目录>(默认目标 'iterationT 3.2.0' 不在本仓内)")
+        }
+    }
+    args = [
+        project.findProperty('taclightPackDir') ?: '',
+        file('src/main/resources/shader_patches/iterationT-3.2.0-v3.patch.json').absolutePath,
+        file('run/shaderpacks/iterationT 3.2.0 (taclight)').absolutePath
+    ]
+}
+
+// 光影包自检:Iris 的 #include 取整行作路径,行尾任何附加内容(如注释)会炸整包
+// (InvalidPathException)—— 同步/打包前强制检查。
+tasks.register('checkShaderIncludes') {
+    group = 'taclight'
+    doLast {
+        def bad = []
+        fileTree('pack/shaders').matching {
+            include '**/*.glsl'; include '**/*.fsh'; include '**/*.vsh'
+        }.each { f ->
+            f.eachLine { line ->
+                def t = line.trim()
+                if (t.startsWith('#include') && t.replaceFirst(/^#include\s*"[^"]+"/, '').trim() != '') {
+                    bad << "${f.name}: $line"
+                }
+            }
+        }
+        if (bad) throw new GradleException("[TacLight] include 行尾有附加内容(会炸整包):\n" + bad.join('\n'))
+    }
+}
+
+// 开发期:把光影包同步进运行实例(run/shaderpacks/taclight-shaders-dev)
+tasks.register('syncShaderPack', Copy) {
+    dependsOn tasks.named('checkShaderIncludes')
+    from file('pack/shaders')
+    into file('run/shaderpacks/taclight-shaders-dev/shaders')
+}
+
+// 发布:光影包 zip —— shaders/ 目录 + pack.png 图标(zip 根),版本号与模组一致
+// 用法:gradlew packShaderZip;产物 build/distributions/taclight-shaders-<版本>.zip
+tasks.register('packShaderZip', Zip) {
+    dependsOn tasks.named('checkShaderIncludes')
+    archiveFileName = "taclight-shaders-${project.mod_version}.zip"
+    destinationDirectory = layout.buildDirectory.dir('distributions')
+    from('pack/shaders') { into 'shaders' }
+    from('pack/pack.png')
+}

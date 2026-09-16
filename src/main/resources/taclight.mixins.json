@@ -1,0 +1,23 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "dev.taclight.mixin",
+  "refmap": "taclight.refmap.json",
+  "plugin": "dev.taclight.mixin.TacLightMixinPlugin",
+  "compatibilityLevel": "JAVA_17",
+  "mixins": [
+    "PlayerSynchedDataMixin"
+  ],
+  "client": [
+    "BeamRendererMixin",
+    "GunItemLightProviderMixin",
+    "GunModelRenderProbeMixin",
+    "LivingEntityLerpAccess",
+    "LivingEntityRenderEntityMixin",
+    "TpOffscreenRenderMixin",
+    "oculus.TransformPatcherMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

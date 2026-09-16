@@ -1,0 +1,92 @@
+{
+  "familyId": "complementary",
+  "packName": "ComplementaryReimagined",
+  "packHash": {
+    "shaders/program/gbuffers_terrain.glsl": "604f5bf642bed2e9",
+    "shaders/program/gbuffers_entities.glsl": "0e153338ca269d25",
+    "shaders/program/gbuffers_hand.glsl": "ce008e0543a81a5d"
+  },
+  "files": [
+    {
+      "file": "shaders/program/gbuffers_terrain.glsl",
+      "selector": "centerShadowBias, subsurfaceMode, smoothnessG, highlightMult, emission);",
+      "selectorCount": 1,
+      "ops": [
+        {
+          "op": "insertBeforeLine",
+          "anchor": "DoLighting(color, shadowMult, playerPos, viewPos,",
+          "content": "vec3 taclightRawAlbedo = color.rgb;"
+        },
+        {
+          "op": "insertAfterLine",
+          "anchor": "#version  130",
+          "content": "#extension GL_ARB_shader_storage_buffer_object : enable"
+        },
+        {
+          "op": "insertBeforeLine",
+          "anchor": "void DoLighting(",
+          "content": "/* TACLIGHT_PATCH_BEGIN ComplementaryReimagined runtime (injected by TacLight interop) */\n<INLINE_CORE>\n/* TACLIGHT_PATCH_END ComplementaryReimagined runtime */"
+        },
+        {
+          "op": "insertAfterLine",
+          "anchor": "centerShadowBias, subsurfaceMode, smoothnessG, highlightMult, emission);",
+          "content": "\t\t\t// TACLIGHT_PATCH_BEGIN ComplementaryReimagined runtime\n\t\t\tcolor.rgb += taclight_shoulder3(TACLIGHT_LIGHT_GAIN * taclight_surface_lighting(viewPos, taclightRawAlbedo, normalize(normalM), smoothnessG, 0.0, vec3(0.04)), 0.55, 0.15 * 0.55);\n\t\t\t// TACLIGHT_PATCH_END ComplementaryReimagined runtime"
+        }
+      ]
+    },
+    {
+      "file": "shaders/program/gbuffers_entities.glsl",
+      "selector": "true, 0, smoothnessG, highlightMult, emission);",
+      "selectorCount": 1,
+      "ops": [
+        {
+          "op": "insertBeforeLine",
+          "anchor": "DoLighting(color, shadowMult, playerPos, viewPos,",
+          "content": "vec3 taclightRawAlbedo = color.rgb;"
+        },
+        {
+          "op": "insertAfterLine",
+          "anchor": "#version  130",
+          "content": "#extension GL_ARB_shader_storage_buffer_object : enable"
+        },
+        {
+          "op": "insertBeforeLine",
+          "anchor": "void DoLighting(",
+          "content": "/* TACLIGHT_PATCH_BEGIN ComplementaryReimagined runtime (injected by TacLight interop) */\n<INLINE_CORE>\n/* TACLIGHT_PATCH_END ComplementaryReimagined runtime */"
+        },
+        {
+          "op": "insertAfterLine",
+          "anchor": "true, 0, smoothnessG, highlightMult, emission);",
+          "content": "\t\t\t// TACLIGHT_PATCH_BEGIN ComplementaryReimagined runtime\n\t\t\tcolor.rgb += taclight_shoulder3(TACLIGHT_LIGHT_GAIN * taclight_surface_lighting(viewPos, taclightRawAlbedo, normalize(normalM), smoothnessG, 0.0, vec3(0.04)) * color.a, 0.55, 0.15 * 0.55);\n\t\t\t// TACLIGHT_PATCH_END ComplementaryReimagined runtime"
+        }
+      ]
+    },
+    {
+      "file": "shaders/program/gbuffers_hand.glsl",
+      "selector": "false, 0, smoothnessG, highlightMult, emission);",
+      "selectorCount": 1,
+      "ops": [
+        {
+          "op": "insertBeforeLine",
+          "anchor": "DoLighting(color, shadowMult, playerPos, viewPos,",
+          "content": "vec3 taclightRawAlbedo = color.rgb;"
+        },
+        {
+          "op": "insertAfterLine",
+          "anchor": "#version  130",
+          "content": "#extension GL_ARB_shader_storage_buffer_object : enable"
+        },
+        {
+          "op": "insertBeforeLine",
+          "anchor": "void DoLighting(",
+          "content": "/* TACLIGHT_PATCH_BEGIN ComplementaryReimagined runtime (injected by TacLight interop) */\n<INLINE_CORE>\n/* TACLIGHT_PATCH_END ComplementaryReimagined runtime */"
+        },
+        {
+          "op": "insertAfterLine",
+          "anchor": "false, 0, smoothnessG, highlightMult, emission);",
+          "content": "\t\t\t// TACLIGHT_PATCH_BEGIN ComplementaryReimagined runtime\n\t\t\tcolor.rgb += taclight_shoulder3(TACLIGHT_LIGHT_GAIN * taclight_surface_lighting(viewPos, taclightRawAlbedo, normalize(normalM), smoothnessG, 0.0, vec3(0.04)) * color.a, 0.55, 0.15 * 0.55);\n\t\t\t// TACLIGHT_PATCH_END ComplementaryReimagined runtime"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+# Gradle / build
+.gradle/
+.gradle-user-home/
+build/
+out/
+run/
+run-*/
+
+# IDE
+.idea/
+*.iml
+.classpath
+.project
+.settings/
+.vscode/
+
+# logs / crash dumps
+*.log
+*.log.gz
+hs_err_pid*
+build-log.txt
+
+# local third-party dependency jars: this project does NOT redistribute them
+libs/*.jar
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,15 @@
+{
+  "slot": "taclight:attachment/slot/gun_light_slot",
+  "model": "taclight:attachment/gun_light_geo",
+  "texture": "taclight:attachment/uv/gun_light",
+  "sounds": {
+    "install": "tacz:attachments/attachment_general_b",
+    "uninstall": "tacz:attachments/attachment_general_uninstall"
+  },
+  "laser": {
+    "default_color": "0xfff2d8",
+    "can_edit": true,
+    "length": 18,
+    "third_person_length": 18
+  }
+}

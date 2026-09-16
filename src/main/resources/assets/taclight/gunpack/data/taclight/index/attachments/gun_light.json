@@ -1,0 +1,7 @@
+{
+  "name": "taclight.attachment.gun_light",
+  "display": "taclight:gun_light_display",
+  "data": "taclight:gun_light_data",
+  "type": "laser",
+  "sort": 10
+}
