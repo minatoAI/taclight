@@ -152,12 +152,12 @@ git -C E:\dshHome\mc-mod-spotlight-attachment\taclight filter-branch -f --index-
 
 | 分支 | 提交数 | 旧 tip | 新 tip |
 |---|---:|---|---|
-| `refs/heads/master` | 106 | `9b3a1642800e5e227c3a2c99b9157eea416b6613` | `f730665c0c62fb77db514a96e17ddfb764d40221` |
+| `refs/heads/master` | 106 | `9b3a1642800e5e227c3a2c99b9157eea416b6613` | `f751da665ab94bd83655de37f732fa82e43d9bd2` |
 | `refs/heads/dh/compat-test` | 92 | `a9b7ad46a7eea540d0f439ff0b29eaa2f578531c` | `6e6b00c59273f281ff3283c4599c28469f70f3ca` |
 | `refs/heads/interop/core-extract` | 67 | `935548ac738f08e3d41cd3b3ac6d3964817ae494` | `fc16285c6584a54ae59b752a846375b38b681652` |
 | `refs/heads/merge-rehearsal` | 75 | `4017270b4ecb3b1d2966bdec8f565a8549b2a631` | `a107232ae52af7c9cbd5305eea5bfb52d3834823` |
 
-注（2026-09-17 更新）：`refs/heads/master` 的重写后 history tip 是 `82a45dea…`，其上另有 3 个**重写后新建**提交（`.gitignore` `c6a5e7d` → 映射落库 `f730665`；见 §5），故新 tip = `f730665`。3 条非 master 分支在 task-37 各新增 1 个 `.gitignore` 提交（`a107232` / `6e6b00c` / `fc16285`），故 tip 按上表更新。**§3 的 108 条 old→new 映射本身不受影响**：新增提交不在映射表内，被映射的 108 个旧提交逐一对应关系未变（§P6 已独立验证 108/108、0 错配）。
+注（2026-09-17 更新）：`refs/heads/master` 的重写后 history tip 是 `82a45dea…`，其上依次是**重写后新建**提交 `.gitignore` `c6a5e7d` → 映射落库 `f730665` → §P6 文书更正 `f751da6`（见 §5），故本表记录的新 tip = `f751da6`。**本表自身所在的这份文书提交会使 master tip 再前进 1 个提交**（自指不可回填，属预期；不影响 §3）。3 条非 master 分支在 task-37 各新增 1 个 `.gitignore` 提交（`a107232` / `6e6b00c` / `fc16285`），故 tip 按上表更新。**§3 的 108 条 old→new 映射本身不受影响**：新增提交不在映射表内，被映射的 108 个旧提交逐一对应关系未变（§P6 已独立验证 108/108、0 错配）。
 
 ## 5. 重写后新建的提交（无对应旧 id）
 
@@ -167,6 +167,7 @@ git -C E:\dshHome\mc-mod-spotlight-attachment\taclight filter-branch -f --index-
 |---|---|---|---|
 | `c6a5e7df5c7c425fe31aa2c6b5c5a492a3552892` | repo: 证据图移出历史后忽略 docs/evidence/**/*.png (Phase 1 option D) | `82a45dea2e12b8fb7f50e4fb34cffaaf574746e8` | `master` |
 | `f730665c0c62fb77db514a96e17ddfb764d40221` | docs: 历史重写后的 commit id 映射落库 + 14 份文档加指针行（Task-36 / D15） | `c6a5e7df5c7c425fe31aa2c6b5c5a492a3552892` | `master` |
+| `f751da665ab94bd83655de37f732fa82e43d9bd2` | docs: 映射文书更正（§P6 已验证 + 分支新 tip + 315/322 口径）（Task-38 / D17） | `f730665c0c62fb77db514a96e17ddfb764d40221` | `master` |
 | `a107232ae52af7c9cbd5305eea5bfb52d3834823` | repo: 证据图移出历史后忽略 docs/evidence/**/*.png (Phase 1 option D) | `a0344664c293c8eabe3694081d12ac4c54878b2f` | `merge-rehearsal` |
 | `6e6b00c59273f281ff3283c4599c28469f70f3ca` | repo: 证据图移出历史后忽略 docs/evidence/**/*.png (Phase 1 option D) | `a77e258fa971cb5fd9d191ffc4e20e5e67580b44` | `dh/compat-test` |
 | `fc16285c6584a54ae59b752a846375b38b681652` | repo: 证据图移出历史后忽略 docs/evidence/**/*.png (Phase 1 option D) | `9fc1ea64a2076d7969a8a4e53c3201f3e9217012` | `interop/core-extract` |
