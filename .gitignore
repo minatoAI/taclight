@@ -29,3 +29,6 @@ tools/.session/
 
 # 第三方依赖库(里程碑③用)不入库:红线1 零分发
 libs/*.jar
+
+# 证据图已移出历史(Phase 1 option D,2026-09-17):原件在仓外归档 + ARCHIVE-INDEX.md;禁止再入库
+docs/evidence/**/*.png
