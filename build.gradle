@@ -29,7 +29,7 @@ minecraft {
         }
         client {
             property 'forge.enabledGameTestNamespaces', mod_id
-            args '-mixin.config=taclight.mixins.json'
+            args '-mixin.config=taclight.dev.mixins.json'
             jvmArgs '-Xmx4G'
             // 坑32:原版集成服硬编码 LAN 会话验证,dev 第二客户端无会话必被踢;
             // 本属性使 DevLanAuthHook 关闭集成服验证,仅 dev 生效(生产不带此属性)。
@@ -49,7 +49,7 @@ minecraft {
             workingDirectory project.file('run-observer')
             property 'forge.enabledGameTestNamespaces', mod_id
             property 'taclight.dev.disableLanAuth', 'true'
-            args '-mixin.config=taclight.mixins.json'
+            args '-mixin.config=taclight.dev.mixins.json'
             jvmArgs '-Xmx3G'
             if (project.hasProperty('taclightJoin')) {
                 args '--quickPlayMultiplayer', "${project.property('taclightJoin')}"
@@ -68,7 +68,7 @@ minecraft {
             workingDirectory project.file('run-interop')
             property 'forge.enabledGameTestNamespaces', mod_id
             property 'taclight.dev.disableLanAuth', 'true'
-            args '-mixin.config=taclight.mixins.json'
+            args '-mixin.config=taclight.dev.mixins.json'
             jvmArgs '-Xmx3G'
             if (project.hasProperty('taclightUser')) {
                 args '--username', "${project.property('taclightUser')}"
@@ -200,9 +200,12 @@ tasks.register('copyInlineCore', Copy) {
     into file("$buildDir/generated/resources-extra/shader_patches/inline")
 }
 sourceSets.main.resources.srcDir file("$buildDir/generated/resources-extra")
+// D3b:dev 合并 mixin config 也走 resources(dev 运行只认一条 -mixin.config;发布变体在 jar 里排除它)
+sourceSets.main.resources.srcDir file("$buildDir/generated/dev-mixins")
 
 tasks.named('processResources', ProcessResources).configure {
     dependsOn tasks.named('copyInlineCore')
+    dependsOn tasks.named('generateDevMixinsJson')
     var replaceProperties = [
             minecraft_version: minecraft_version, minecraft_version_range: minecraft_version_range,
             forge_version: forge_version, forge_version_range: forge_version_range,
@@ -217,6 +220,24 @@ tasks.named('processResources', ProcessResources).configure {
 tasks.named('jar', Jar).configure {
     dependsOn 'generateRefmap'
     from("$buildDir/generated/refmap") { include 'taclight.refmap.json' }
+    // D3b(2026-09-17,用户拍板):发布变体剔除调试面。
+    //  - dev 变体:= -PdevHarness=true,或本次调用任务名含 runClient(日常 build 不误带调试面);
+    //  - 发布包:debug/ + mixin/debug/ 类、DebugCommandRelay(含 $1 内部类)、两份调试 config
+    //    全部剔除;manifest 只登记核心 config —— 而核心 config 已不含任何 debug. 条目,
+    //    故"required:true + 缺类 ⇒ MixinApplyError"的充分条件不成立(R1 一手源码口径)。
+    def devHarness = findProperty('devHarness') != null
+            ? findProperty('devHarness').toString().toBoolean()
+            : gradle.startParameter.taskNames.any { it.toLowerCase().contains('runclient') }
+    if (!devHarness) {
+        exclude 'dev/taclight/debug/**'
+        exclude 'dev/taclight/mixin/debug/**'
+        exclude 'dev/taclight/client/DebugCommandRelay*.class'
+        exclude 'taclight.debug.mixins.json'
+        exclude 'taclight.dev.mixins.json'
+    }
+    // 空目录条目兜底:exclude 'x/**' 是否连带排掉目录条目在 Ant 语义下无一手依据(R1 §3.3),
+    // 这里显式不写空目录,并让验收按"文件条目"计数。
+    includeEmptyDirs = false
     manifest {
         attributes([
                 'Specification-Title': mod_id,
@@ -225,10 +246,39 @@ tasks.named('jar', Jar).configure {
                 'Implementation-Title': project.name,
                 'Implementation-Version': project.jar.archiveVersion,
                 'Implementation-Vendor': mod_authors,
-                'MixinConfigs': 'taclight.mixins.json'
+                'MixinConfigs': devHarness ? 'taclight.dev.mixins.json' : 'taclight.mixins.json'
         ])
     }
     finalizedBy 'reobfJar'
+}
+
+// D3b(2026-09-17,用户拍板"排调试 class + 按构建类型拆 mixin 配置"):
+// 发布包要干净(核心 config 只列核心混入),而 dev 运行需要"核心 + 调试"两份都生效。
+// 本仓 dev 只传一条 `-mixin.config=<file>`(该形式由哪一层解析未溯源),因此**不依赖**
+// "同名参数能否重复/逗号合并"这类未验证行为:这里把两份配置在构建期合并成
+// `taclight.dev.mixins.json`(名字不同、内容 = 核心 ∪ 调试),dev 运行照旧只传一条,
+// 只是指向合并件。发布变体不打包它,manifest 也不登记它。
+tasks.register('generateDevMixinsJson') {
+    group = 'taclight'
+    def coreJson = file('src/main/resources/taclight.mixins.json')
+    def dbgJson = file('src/main/resources/taclight.debug.mixins.json')
+    def out = file("$buildDir/generated/dev-mixins/taclight.dev.mixins.json")
+    inputs.file coreJson
+    inputs.file dbgJson
+    outputs.file out
+    doLast {
+        def core = new groovy.json.JsonSlurper().parse(coreJson, 'UTF-8')
+        def dbg = new groovy.json.JsonSlurper().parse(dbgJson, 'UTF-8')
+        ['mixins', 'client', 'server'].each { key ->
+            def merged = []
+            if (core[key]) { merged.addAll(core[key]) }
+            if (dbg[key]) { merged.addAll(dbg[key]) }
+            if (merged) { core[key] = merged } else { core.remove(key) }
+        }
+        out.parentFile.mkdirs()
+        out.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(core)) + '\n'
+        logger.lifecycle("[TacLight] dev mixin config written: ${out} (mixins=${core.mixins?.size() ?: 0}, client=${core.client?.size() ?: 0}, required=${core.required})")
+    }
 }
 
 // 纯 JVM 契约测试(离线、无 JUnit 依赖,遵循项目【单一真源】纪律)
