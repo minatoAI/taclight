@@ -1,3 +1,5 @@
+> 本文所述 commit id 为 2026-09-17 历史重写前的旧 id；映射见 `docs/COMMIT-ID-REMAP-2026-09-17.md`
+
 ## 09-07 夜 · knob.ps1 BOM 复发修复(未 push)
 
 - 用户双击 `tools\knob.bat` 即炸:09-07 凌晨改帮助文案时 edit 落盘 strip 了 BOM,

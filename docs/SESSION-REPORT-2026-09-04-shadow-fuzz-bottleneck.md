@@ -1,3 +1,5 @@
+> 本文所述 commit id 为 2026-09-17 历史重写前的旧 id；映射见 `docs/COMMIT-ID-REMAP-2026-09-17.md`
+
 # 进展与瓶颈报告（2026-09-04 12:20 快照，供分析）
 
 > 分支 interop/core-extract；提交 a57dae3（未 push）+ 未提交一批（见 1 节）。

@@ -1,3 +1,5 @@
+> 本文所述 commit id 为 2026-09-17 历史重写前的旧 id；映射见 `docs/COMMIT-ID-REMAP-2026-09-17.md`
+
 # 2026-09-04 Complementary r5.9 前向注入 — 实机证据包(注入命中+锥池可见)
 
 用户要求:"iterationT 有自适应曝光对手电有影响,试试注入 Complementary 是什么样子"。
