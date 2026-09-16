@@ -2,15 +2,17 @@
 
 > 本文件是**仓内副本**（真仓 `docs/COMMIT-ID-REMAP-2026-09-17.md`）；工作区孪生件：`E:\dshHome\ray-traced-spotlight-mod-dev\docs\handoff\commit-id-remap-20260917.md`（内容一致）。
 
-> **状态位：待 pre-reviewer §P6 交叉验证**（本表由执行者 eng-dev 生成；未经独立复核前，请勿把"新 id"当作已复核事实使用）。
+> **状态位：§P6 已验证**——pre-reviewer 用**四种独立方法 + 一个结构证明**（全量树差 108/108 只含 PNG 删除、patch-id 27/27、父提交回映射 108/108、subject 108/108；旧 108 → 新 109 ⇒ `--prune-empty` 一个都没剪 ⇒ 位置配对没有位移机会）得出 **108/108、0 错配**（`docs/review/oldtrack-opt-audit-phase5.md` §P6）。
 
 ## 1. 为什么会有这张表
 
 > 本文件是**仓内副本**（真仓 `docs/COMMIT-ID-REMAP-2026-09-17.md`）；工作区孪生件：`E:\dshHome\ray-traced-spotlight-mod-dev\docs\handoff\commit-id-remap-20260917.md`（内容一致）。
 
-- 2026-09-17 用户拍板方案 **D**：把 314 张已跟踪 PNG（其中 307 张 `docs/evidence/**`）**移出 git 历史**，原件归档到仓外 `E:\dshHome\taclight-evidence-archive-20260917\`（含 `ARCHIVE-INDEX.md`：逐行 sha256/字节/路径）。
+- 2026-09-17 用户拍板方案 **D**：把已跟踪 PNG **移出 git 历史**，原件归档到仓外 `E:\dshHome\taclight-evidence-archive-20260917\`（`ARCHIVE-INDEX.md`：逐行 sha256/字节/路径）。
 - 由此 `taclight` 仓库**全部 89 个含 PNG 的提交被重写**（另有 19 个"PNG 引入之前"的提交不变），**旧 commit id 全部悬空**。
 - 效果（实测）：干净克隆 `.git` **331,467,233 → 80,863,244 B（−75.6%）**；双态共存文件 798 个 **blob 零差异**；发布 jar 重跑仍 **`7CE12F95…` 逐字节一致**。
+
+**口径（2026-09-17 更正，task-37）**：实际**移出历史的 PNG 路径 = 315 条**（master 307 + `dh/compat-test` 8）；**归档 = 322 条目**（307 移出 + 7 功能性保留 + 8 补录），共 255,612,764 B。此前对外写的"**307 / 314**"是 **master 视角、不完整**——漏掉只在 `dh/compat-test` 分支历史上的 8 张 `docs/evidence/2026-09-05-dh-compat/*.png`（`dh_day_clean`/`dh_day_lods`/`dhcomp_off`/`dhcomp_on`/`dhit32_off`/`dhit32_on`/`dhself_off`/`dhself_on`），已于 task-37 用旧 blob 导出补录，见 `ARCHIVE-INDEX.md` **C 节**。
 
 ## 2. 重写命令原文
 
@@ -150,22 +152,27 @@ git -C E:\dshHome\mc-mod-spotlight-attachment\taclight filter-branch -f --index-
 
 | 分支 | 提交数 | 旧 tip | 新 tip |
 |---|---:|---|---|
-| `refs/heads/master` | 106 | `9b3a1642800e5e227c3a2c99b9157eea416b6613` | `c6a5e7df5c7c425fe31aa2c6b5c5a492a3552892` |
-| `refs/heads/dh/compat-test` | 92 | `a9b7ad46a7eea540d0f439ff0b29eaa2f578531c` | `a77e258fa971cb5fd9d191ffc4e20e5e67580b44` |
-| `refs/heads/interop/core-extract` | 67 | `935548ac738f08e3d41cd3b3ac6d3964817ae494` | `9fc1ea64a2076d7969a8a4e53c3201f3e9217012` |
-| `refs/heads/merge-rehearsal` | 75 | `4017270b4ecb3b1d2966bdec8f565a8549b2a631` | `a0344664c293c8eabe3694081d12ac4c54878b2f` |
+| `refs/heads/master` | 106 | `9b3a1642800e5e227c3a2c99b9157eea416b6613` | `f730665c0c62fb77db514a96e17ddfb764d40221` |
+| `refs/heads/dh/compat-test` | 92 | `a9b7ad46a7eea540d0f439ff0b29eaa2f578531c` | `6e6b00c59273f281ff3283c4599c28469f70f3ca` |
+| `refs/heads/interop/core-extract` | 67 | `935548ac738f08e3d41cd3b3ac6d3964817ae494` | `fc16285c6584a54ae59b752a846375b38b681652` |
+| `refs/heads/merge-rehearsal` | 75 | `4017270b4ecb3b1d2966bdec8f565a8549b2a631` | `a107232ae52af7c9cbd5305eea5bfb52d3834823` |
 
-注：`refs/heads/master` 的新 tip 写作"重写后 history tip"（`82a45dea…`）；其后还有 1 个**重写后新建**提交（见 §5）。
+注（2026-09-17 更新）：`refs/heads/master` 的重写后 history tip 是 `82a45dea…`，其上另有 3 个**重写后新建**提交（`.gitignore` `c6a5e7d` → 映射落库 `f730665`；见 §5），故新 tip = `f730665`。3 条非 master 分支在 task-37 各新增 1 个 `.gitignore` 提交（`a107232` / `6e6b00c` / `fc16285`），故 tip 按上表更新。**§3 的 108 条 old→new 映射本身不受影响**：新增提交不在映射表内，被映射的 108 个旧提交逐一对应关系未变（§P6 已独立验证 108/108、0 错配）。
 
 ## 5. 重写后新建的提交（无对应旧 id）
 
 > 本文件是**仓内副本**（真仓 `docs/COMMIT-ID-REMAP-2026-09-17.md`）；工作区孪生件：`E:\dshHome\ray-traced-spotlight-mod-dev\docs\handoff\commit-id-remap-20260917.md`（内容一致）。
 
-| new id | subject | parent |
-|---|---|---|
-| `c6a5e7df5c7c425fe31aa2c6b5c5a492a3552892` | repo: 证据图移出历史后忽略 docs/evidence/**/*.png (Phase 1 option D) | `82a45dea2e12b8fb7f50e4fb34cffaaf574746e8` |
+| new id | subject | parent | 分支 |
+|---|---|---|---|
+| `c6a5e7df5c7c425fe31aa2c6b5c5a492a3552892` | repo: 证据图移出历史后忽略 docs/evidence/**/*.png (Phase 1 option D) | `82a45dea2e12b8fb7f50e4fb34cffaaf574746e8` | `master` |
+| `f730665c0c62fb77db514a96e17ddfb764d40221` | docs: 历史重写后的 commit id 映射落库 + 14 份文档加指针行（Task-36 / D15） | `c6a5e7df5c7c425fe31aa2c6b5c5a492a3552892` | `master` |
+| `a107232ae52af7c9cbd5305eea5bfb52d3834823` | repo: 证据图移出历史后忽略 docs/evidence/**/*.png (Phase 1 option D) | `a0344664c293c8eabe3694081d12ac4c54878b2f` | `merge-rehearsal` |
+| `6e6b00c59273f281ff3283c4599c28469f70f3ca` | repo: 证据图移出历史后忽略 docs/evidence/**/*.png (Phase 1 option D) | `a77e258fa971cb5fd9d191ffc4e20e5e67580b44` | `dh/compat-test` |
+| `fc16285c6584a54ae59b752a846375b38b681652` | repo: 证据图移出历史后忽略 docs/evidence/**/*.png (Phase 1 option D) | `9fc1ea64a2076d7969a8a4e53c3201f3e9217012` | `interop/core-extract` |
 
-- 该提交内容：`.gitignore` 追加 `docs/evidence/**/*.png`（防止归档后的图被再次提交）。
+- 内容：`.gitignore` 追加 `docs/evidence/**/*.png`（防止归档后的图被再次提交）；`master` 上另有 1 个映射落库提交（`f730665`）。
+- 3 条非 master 分支的 `.gitignore` 提交由 task-37（§P6 风险 B）产生：先 `git reset --mixed` 清掉索引里 687 张 `A` 状态的 PNG，再把同样 3 行落到该分支（`interop/core-extract` 因 `.gitignore` 与 master 不同，cherry-pick 冲突后等价手工落地）。
 
 ## 6. 怎么用它
 
@@ -173,7 +180,7 @@ git -C E:\dshHome\mc-mod-spotlight-attachment\taclight filter-branch -f --index-
 
 1. **查新 id**：在 `commit-id-map.tsv` 里 grep 旧 id（支持前 7–12 位前缀）→ 取第 3 列。
 2. **避免二次改写**：文档里写"HEAD/commit X"时，先用本表确认 X 是否已重写；重写后的 id 才是仓库里真实存在的。
-3. **`git` 里还能不能找到旧 id**：能——`refs/original/refs/heads/*` 4 个旧引用仍在（**未** gc）。将来若用户要求压缩本地 `.git`（删 `refs/original` + `reflog expire` + `gc --prune`），旧对象将被回收，届时**只有本表与仓外备份**能还原旧 id。
+3. **`git` 里还能不能找到旧 id**：**压缩后（2026-09-17 task-38，用户批准）已不能**——`refs/original/*` 4 个旧引用已列出并删除，`reflog expire --expire=now --all` + `gc --prune=now` 已执行 ⇒ 旧对象在仓内被回收。旧 id 只存在于：本表 / `commit-id-map.tsv`（与 CSV 版）/ 仓外 `E:\dshHome\taclight-git-postrewrite-20260917`（**压缩前 .git 整份副本，含 `refs/original`**）/ 仓外 `E:\dshHome\taclight-repo-backup-20260917`（**重写前整仓**）。
 4. **文档同步规则**（2026-09-17 起）：
    - **活文档**（`docs/research/**`、`docs/handoff/release-fix-package.md` 等前瞻/计划性文档）：旧 id **就地改为新 id**，文首加指针行。
    - **冻结实测/证据记录**（`docs/evidence/**`）：**不改写正文**（那是当时事实），仅文首加指针行。
@@ -183,5 +190,5 @@ git -C E:\dshHome\mc-mod-spotlight-attachment\taclight filter-branch -f --index-
 
 > 本文件是**仓内副本**（真仓 `docs/COMMIT-ID-REMAP-2026-09-17.md`）；工作区孪生件：`E:\dshHome\ray-traced-spotlight-mod-dev\docs\handoff\commit-id-remap-20260917.md`（内容一致）。
 
-- 本表**未**经第三方独立复核（位置配对 + subject 全等自校验已完成：340 行 0 处不匹配）；等 pre-reviewer §P6 交叉验证后把第 1 行状态位改为"已验证"。
+- 本表**已经第三方独立复核**：pre-reviewer §P6 用四种独立方法 + 一个结构证明验证 **108/108、0 错配**（见第 1 行状态位）。此前自校验（位置配对 + subject 全等，340 行 0 处不匹配）结论一致。
 - 工作区**范围外**仍含旧 id 的文件（不改）：`docs/handoff/lead-v2.md`、`docs/handoff/lead-v3.md`（Lead 自有）、`docs/handoff/release-decisions-brief.md`（Lead 自有）、`docs/review/oldtrack-opt-audit-phase*.md`（pre-reviewer 自有）、**真仓内** `CHANGELOG.md` 与 `docs/**`（跟踪文件，属真仓范围）。
