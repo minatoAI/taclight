@@ -1,0 +1,159 @@
+{
+  "ticket": "t-opt-8l-matrix",
+  "_droppable": false,
+  "_role": "spec",
+  "_what": "[SUPERSEDED by t-opt-synth-matrix.json] Single-client performance ablation (A lights-off / A2 beamIdle early-out / B 64-step exact / C 32-step+TM / D occl table on / E rollback). Light gate = ssbo count (A must be 0, others >=2). Coverage gap: this rig can only reach 2 active lights on a single client, so optimization-3 mode-1 (row_b1, light index >=4) is NOT covered by this ticket set.",
+  "_run": "powershell -NoProfile -ExecutionPolicy Bypass -File tools\\opt-verify-taclight.ps1 -Spec tickets\\t-opt-8l-matrix.json -Session L8 -RelayExtra <observer1>\\run\\taclight-cmds.txt,<observer2>\\run\\taclight-cmds.txt -BenchReps 3 -BenchWarmup 1 -Evidence ...\\qa3\\run-out",
+  "_prereq": "SINGLE CLIENT is enough for every arm in this spec (light gate: A=0, others>=2 = handheld + gun light on the measured client). No observer instances required. Multi-client (>='3' clients) would be needed ONLY to reach the 6-light case that exercises row_b1 -- see dev3/eight-light-coverage-gap.md.",
+  "_recipe": "docs/evidence/2026-09-15-oldtrack-verify/dev3/eight-light-coverage-gap.md",
+  "_primary_metric": "relay !bench x3 (3s window) median avgFPS -- the ticket bench op is SECONDARY only (instant mc.getFps())",
+  "_roi": "per shot: Y-mean over the beam/pool ROI; floor = the 3 same-config shots of that arm; signal must exceed 3x floor; never use raw changed%; exclude the TACZ thin white ballistic line and the HUD from the ROI mask",
+  "_judgment": {
+    "light_gate_fails": "setup problem, NOT a product result: fix the client count/lamps and rerun (ssbo count is GPU-readback evidence)",
+    "A_to_B": "total light cost (denominator); A must show count=0",
+    "A2_vs_B": "optimization-1 upper bound (early-out); there is no knob that disables beamIdle, so A2 (density 0 on all lights) is the closest control",
+    "B_to_C": "optimization-2 (32 steps + temporal reuse)",
+    "C_to_D": "optimization-3 as far as this rig can reach: with 2 lights the occl-table path runs block0 / 4-light table only. The mode-1 path (row_b1, light index >=4) is UNREACHABLE on a single client and is therefore NOT covered.",
+    "D_vs_E": "occl off rollback must land next to C; a gap means the table path diverges from exact DDA",
+    "compare_to_docs23": "only same-round deltas and directions may be compared with docs/23 section 2 (4K single/double light cone20); never absolute values",
+    "row_b1_unreachable": "PROVEN unreachable here: scan of all run/logs (661 files incl. receipts) shows ssbo count only ever 0/1/2; self lights are <=2 (ClientSpotlightUploader.java:93-128) and remote lights only come from OTHER players in mc.level.players() (L130/L299-316); row_b1 needs light index >=4 (composite1.fsh:147-153). No light-spawning backdoor exists in src."
+  },
+  "scoped": "window 1280x800 (options.txt fullscreen:false + overrideWidth 1280/overrideHeight 800) / dev save \"test\" / scene wall / pose wall_front(2000.0,121.5,8.0,yaw180,pitch5) / midnight + doDaylightCycle false + weather clear + doMobSpawning false / wait 20 / >=5 active lights (multi-client) / cone default / TM on at ticket tail / single main instance measured, observers only supply lights",
+  "recipe": "See docs/evidence/2026-09-15-oldtrack-verify/dev3/eight-light-recipe.md -- the rig has NEVER run >2 lights (proved: max ssbo count=2 over every log 08-26..09-16); >=5 lights requires >=3 clients (main + 2..3 observer instances) within remoteLightMaxDist=48, each holding flashlight on + gun light (remote lights travel through server-synced entity data, PlayerLightAccess.java:24-45); the main client must have -RelayExtra pointing at every observer run/taclight-cmds.txt.",
+  "sessions": [
+    {
+      "id": "L8",
+      "display": "window 1280x800 (HDR on proxy)",
+      "expectPng": "1280x800",
+      "fullscreen": false,
+      "tailRelay": [
+        "!gun auto",
+        "!beam 0.25",
+        "!occl on",
+        "!tm on",
+        "!beamonly off",
+        "!scat off",
+        "!beamcap off",
+        "!selflight on"
+      ],
+      "arms": [
+        {
+          "id": "A",
+          "ticket": "t-opt-8l-arm-a",
+          "desc": "beam 0.25 / occl off / tm on / selflight off",
+          "relay": [
+            "!selflight off",
+            "!gun off",
+            "!beam 0.25",
+            "!occl off"
+          ],
+          "needLampOff": true,
+          "requireCamera": "first",
+          "shotPrefix": "opt-8l-A",
+          "minLights": 0,
+          "maxLights": 0,
+          "postRelay": [],
+          "postRestore": [],
+          "expect": "关灯基线(全灭)：ssbo count 必须=0；这是\"灯总开销\"的分母"
+        },
+        {
+          "id": "A2",
+          "ticket": "t-opt-8l-arm-a2",
+          "desc": "beam 0 / occl off / tm off / selflight on",
+          "relay": [
+            "!selflight on",
+            "!gun auto",
+            "!beam 0",
+            "!occl off"
+          ],
+          "needLampOff": false,
+          "requireCamera": "first",
+          "shotPrefix": "opt-8l-A2",
+          "minLights": 2,
+          "maxLights": -1,
+          "postRelay": [],
+          "postRestore": [],
+          "expect": "优化1 早退：灯有效但密度全 0 → beamIdle 预扫描命中，整支 raymarch 跳过；与 B 之差=早退上界"
+        },
+        {
+          "id": "B",
+          "ticket": "t-opt-8l-arm-b",
+          "desc": "beam 0.25 / occl off / tm off / selflight on",
+          "relay": [
+            "!selflight on",
+            "!gun auto",
+            "!beam 0.25",
+            "!occl off"
+          ],
+          "needLampOff": false,
+          "requireCamera": "first",
+          "shotPrefix": "opt-8l-B",
+          "minLights": 2,
+          "maxLights": -1,
+          "postRelay": [],
+          "postRestore": [],
+          "expect": "64 步精确（旧行为基准）：A→B 的差=灯总开销"
+        },
+        {
+          "id": "C",
+          "ticket": "t-opt-8l-arm-c",
+          "desc": "beam 0.25 / occl off / tm on / selflight on",
+          "relay": [
+            "!selflight on",
+            "!gun auto",
+            "!beam 0.25",
+            "!occl off"
+          ],
+          "needLampOff": false,
+          "requireCamera": "first",
+          "shotPrefix": "opt-8l-C",
+          "minLights": 2,
+          "maxLights": -1,
+          "postRelay": [],
+          "postRestore": [],
+          "expect": "优化2（32 步＋时间复用）：B→C 的差=优化2 收益"
+        },
+        {
+          "id": "D",
+          "ticket": "t-opt-8l-arm-d",
+          "desc": "beam 0.25 / occl on / tm on / selflight on",
+          "relay": [
+            "!selflight on",
+            "!gun auto",
+            "!beam 0.25",
+            "!occl on"
+          ],
+          "needLampOff": false,
+          "requireCamera": "first",
+          "shotPrefix": "opt-8l-D",
+          "minLights": 2,
+          "maxLights": -1,
+          "postRelay": [],
+          "postRestore": [],
+          "expect": "优化3（8 灯遮挡查表，灯4..7 走 row_b1）：C→D 的差=优化3 收益；本轮首次真正压到该分支"
+        },
+        {
+          "id": "E",
+          "ticket": "t-opt-8l-arm-e",
+          "desc": "beam 0.25 / occl off / tm on / selflight on",
+          "relay": [
+            "!selflight on",
+            "!gun auto",
+            "!beam 0.25",
+            "!occl off"
+          ],
+          "needLampOff": false,
+          "requireCamera": "first",
+          "shotPrefix": "opt-8l-E",
+          "minLights": 2,
+          "maxLights": -1,
+          "postRelay": [],
+          "postRestore": [],
+          "expect": "回退验证：应与 C 同量级（occl off 一键回精确 DDA）"
+        }
+      ]
+    }
+  ],
+  "_coverage_gap": "本 rig 单客户端上限 2 盏，row_b1（灯索引≥4）不可达 ⇒ 优化3 的块1 路径不在本票覆盖范围",
+  "_superseded_by": "tickets/t-opt-synth-matrix.json (T11 !synth fixture: same arms, real >=5-light counts, plus the 800p/480p occlTable8 single-variable control). Keep this file only as the 2-light single-client fallback."
+}

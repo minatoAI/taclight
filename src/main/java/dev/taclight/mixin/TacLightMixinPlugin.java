@@ -29,6 +29,9 @@ public class TacLightMixinPlugin implements IMixinConfigPlugin {
         // 旁路 = 核心功能(不依赖 TaCZ):Player 前缀公共 mixin + 位置链快照目标 accessor
         if (mixinClassName.startsWith("dev.taclight.mixin.Player")) return true;
         if (mixinClassName.startsWith("dev.taclight.mixin.LivingEntityLerpAccess")) return true;
+        // task-27 killer trap:诊断开关,运行时 -Dtaclight.usingTrap 无 TaCZ 也必须能开
+        // (默认关闭零开销;陷阱本身只读日志,不改逻辑)。
+        if (mixinClassName.startsWith("dev.taclight.mixin.debug.")) return true;
         // interop 注入(方案C 里程碑2):一律放行,自守卫交给 @Mixin(targets) 字符串解析
         // ——目标类不加载(Oculus 不在场)mixin 就永不应用,无需在此探测。
         // 铁律(2026-09-03 实机取证,坑79):shouldApplyMixin 在配置准备期被调用,此处

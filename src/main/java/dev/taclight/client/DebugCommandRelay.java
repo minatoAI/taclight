@@ -159,7 +159,26 @@ public final class DebugCommandRelay {
             TacLightMod.LOGGER.info("[TacLight] RELAY back -> screen closed");
             return;
         }
+        // T17 动作层(默认关,重启清零):!agent goto <x> <y> <z> [run] | hold fwd|jump|none <ticks> |
+        // sprint on|off | stop | status。与 !atten 等 !a* 分支互不前缀包含(第 3 字符即不同)。
+        if (line.equals("!agent") || line.startsWith("!agent ")) {
+            String arg = line.length() > 6 ? line.substring(6).trim() : "";
+            TacLightMod.LOGGER.info("[TacLight] RELAY agent -> {}", dev.taclight.debug.AgentInput.configure(arg));
+            return;
+        }
         // 灯光控制(L 键的程序化等价 —— 键注入不可靠,灯光状态走文件通道)
+        if (line.equals("!synth") || line.startsWith("!synth ")) {
+            // T11 测试光源夹具:向 SSBO 追加 N 盏合成灯(默认关=0,重启清零)。
+            // 命名坑(先例见 L230"必须排在 !beam 之前(startsWith 前缀包含)"):本中继用
+            // startsWith 前缀匹配,开关名不得与既有分支前缀包含 —— 若叫 "!lights" 会被下面的
+            // !light(翻转)整条吞掉,故用 !synth;本分支与其它 !s* 分支(!selflight/!scat/
+            // !shot/!sweep)互不前缀包含。精确匹配规约同 !rec/!lan/!back:equals 或 " " 后缀,
+            // 防 !synthx 之类误命中。
+            String arg = line.length() > 6 ? line.substring(6).trim() : "";
+            TacLightMod.LOGGER.info("[TacLight] RELAY synth -> {}",
+                    dev.taclight.debug.SynthLights.configure(arg));
+            return;
+        }
         if (line.startsWith("!light")) {
             ClientLightState.toggle();
             // 08-31 实测坑:L 键路径(InjectionEvent) toggle 后会 sendSetLight 上报服务端,

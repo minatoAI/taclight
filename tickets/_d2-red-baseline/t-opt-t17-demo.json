@@ -1,0 +1,103 @@
+{
+  "ticket": "t-opt-t17-demo",
+  "_droppable": false,
+  "_synth": false,
+  "_role": "spec",
+  "_what": "T17/T20 demo spec: prove the ported action layer moves the player in the player-view rig (face=true runs facing the travel direction, face=false proves steering/movement decoupling) and that the default-OFF control does not move at all. DISCIPLINE (T20): (1) pose in a face=true arm must NOT pin yaw -- the action layer turns the player; (2) shots must be taken INSIDE the motion window (spaced wait_ticks), otherwise the \"run\" images are all identical post-stop frames; (3) use target=eat needs an edible item selected first (inv select 10 = porkchopx4); (4) act verb=place needs explicit x/y/z.",
+  "_judgment": {
+    "moved": "walkrun/noface: dump pos differs from A by >=4 blocks on the target axis; log has AGENT sprint confirm ... attempted=true effective(tick-end)=true and AGENT dir self-check with the matching combo",
+    "default_off": "control: stays at A within 0.01 blocks and its log slice has no RELAY agent line except the explicit !agent stop",
+    "restore": "after postRelay !agent stop the inputs are cleared and setSprinting(false) (log: RELAY agent -> agent=off (inputs restored, sprint cleared))",
+    "decoupling": "noface: yRot stays 180.00 for the whole window while x advances (steering and movement are independent)",
+    "pose_discipline": "In a face=true arm the pose op MUST NOT pin yaw (the action layer turns the player; B4 failed with \"settle timeout want yaw=180.00 but yaw=-90.00\"). Shots must be taken inside the motion window, otherwise the run images are identical post-stop frames.",
+    "thresholds": "T18-D3 calibration: displacement >=3.0 blocks (5.2-block target, 3.7 observed in the 0.75s window), arrival residual <=0.25 (AgentInput.ARRIVE_R=0.35; measured 0.13). Do NOT set a threshold that can never pass.",
+    "default_off_criterion": "Default-OFF is judged ONLY by two identical state pos readings plus the absence of RELAY agent lines. PNG identity is NOT a criterion: HUD/held-item animation makes control run1/2/3 differ.",
+    "display_gate": "Driver locates images by <shotPrefix>-N, so ticket shot names are <prefix>-1/-2/-3 (inv9), and the driver only accepts PNGs whose mtime is >= arm start (stale same-named PNGs are ignored, not matched as a fake green).",
+    "place_criterion": "act verb=place must report ok AND the world must change: the receipt now carries blockBefore/blockAfter/supportAfter for the clicked support block (T21 root cause: the old implementation clicked the TARGET cell itself, so BlockItem placed one block away or into a solid block -> InteractionResult.FAIL / useOn=FAIL).",
+    "sampling_window": "state samples sit inside the motion window (t~2 and t~26 after pose) because the relay starts the walk before the ticket runs; a sample taken after the walk finishes cannot show displacement.",
+    "equip_criterion": "inv action=equip slot=<head|chest|legs|feet> moves an armor piece from backpack 0-35 into the vanilla armor slot 36-39 (or unequips into an empty slot) and echoes armorBefore/armorAfter plus the slot states. Criterion = state.armor or the slot contents change (not merely ok=true)."
+  },
+  "_run": "powershell -NoProfile -ExecutionPolicy Bypass -File tools\\opt-verify-taclight.ps1 -Spec tickets\\t-opt-t17-demo.json -Session D -BenchReps 1 -BenchWarmup 0 -Evidence ...\\qa7\\run-out-D",
+  "_prereq": "Window 1280x800; client restarted after compileJava syncShaderPack (T17 added AgentInput + AgentInputMixin + the !agent relay knob). Run tools\\check-synth-spec.ps1 first (T17 spec has no synth/paired arms: it only checks the tickets parse).",
+  "scoped": "window 1280x800 / dev save test / scene wall / start A = wall_front(2000.0,121.5,8.0,yaw180,pitch5) / target B ~5 blocks away / single client / T17 action layer (default OFF)",
+  "sessions": [
+    {
+      "id": "D",
+      "display": "window 1280x800 agent demo",
+      "expectPng": "1280x800",
+      "fullscreen": false,
+      "tailRelay": [
+        "!gun auto",
+        "!beam 0.25",
+        "!occl on",
+        "!tm on",
+        "!beamonly off",
+        "!synth 0",
+        "!agent stop"
+      ],
+      "arms": [
+        {
+          "id": "d-walkrun",
+          "ticket": "t-opt-t17-demo-walkrun",
+          "desc": "face=true (run default): !agent goto 2005.2 121.0 8.0 run -> turns to the travel direction + sprint; 3 shots inside the motion window; eat (slot 10) + place(x/y/z)",
+          "relay": [
+            "!selflight on",
+            "!gun auto",
+            "!beam 0.25",
+            "!agent goto 2005.2 121.0 8.0 run"
+          ],
+          "needLampOff": false,
+          "requireCamera": "first",
+          "shotPrefix": "agent-walkrun",
+          "minLights": 0,
+          "maxLights": -1,
+          "requireFlags": 0,
+          "postRelay": [
+            "!agent stop"
+          ],
+          "postRestore": []
+        },
+        {
+          "id": "d-control",
+          "ticket": "t-opt-t17-demo-control",
+          "desc": "DEFAULT OFF: no !agent relay",
+          "relay": [
+            "!selflight on",
+            "!gun auto",
+            "!beam 0.25",
+            "!agent stop"
+          ],
+          "needLampOff": false,
+          "requireCamera": "first",
+          "shotPrefix": "agent-control",
+          "minLights": 0,
+          "maxLights": -1,
+          "requireFlags": 0,
+          "postRelay": [],
+          "postRestore": []
+        },
+        {
+          "id": "d-noface",
+          "ticket": "t-opt-t17-demo-noface",
+          "desc": "face=false: move without turning (decoupling control)",
+          "relay": [
+            "!selflight on",
+            "!gun auto",
+            "!beam 0.25",
+            "!agent goto 2005.2 121.0 8.0 run face=false"
+          ],
+          "needLampOff": false,
+          "requireCamera": "first",
+          "shotPrefix": "agent-noface",
+          "minLights": 0,
+          "maxLights": -1,
+          "requireFlags": 0,
+          "postRelay": [
+            "!agent stop"
+          ],
+          "postRestore": []
+        }
+      ]
+    }
+  ]
+}

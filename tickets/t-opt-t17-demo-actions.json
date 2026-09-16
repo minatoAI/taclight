@@ -1,0 +1,222 @@
+{
+  "ticket": "t-opt-t17-demo-actions",
+  "trial": "t1",
+  "rec": true,
+  "shot_prefix": "agent-actions",
+  "_expect_block_after": "minecraft:stone_bricks",
+  "_role": "static action-class arm (no !agent relay): place / use-block / equip end-to-end, judged on WORLD STATE and SLOT CONTENTS (D2/T20)",
+  "_expect": "place: ok=True with blockBefore=minecraft:air, blockAfter=minecraft:stone_bricks, supportAfter=minecraft:smooth_stone at 2003,121,10, PLUS the in-band post-probe 'execute if block 2003 121 10 minecraft:stone_bricks' => rc=1 in the receipt. use-block: 'use target=block' on the platform top (2003,120,9) reaches tier=place PLUS the post-probe on 2003,121,9 => rc=1. equip: the setup makes armor38=diamond_chestplatex1 and hotbar.1=leather_chestplatex1, so the swap moves the leather into armor38 and the displaced diamond into s1 => state armor 8 -> 3 (NOT 8 -> 8) and BOTH slot contents change. Probe lines print '(rc=1)' on pass and '(rc=0)' on fail; a failed probe means the world-state assertion FAILED (judge by the receipt, never by ok=true alone).",
+  "_preconditions": "dev save test / scene wall / player gamemode creative / window 1280x800. The ticket rebuilds its own inputs with 'item replace' (hotbar.4 = 16 stone_bricks, armor.chest = diamond_chestplate, hotbar.1 = leather_chestplate) and resets both probe cells with setblock, so it is RE-RUNNABLE and does not depend on leftovers from an earlier round.",
+  "_probe_mechanism": "stage = external read of a block cell: 'execute if block X Y Z minecraft:air' (pre, replaceability basis) and 'execute if block X Y Z minecraft:<non-air>' (post, independent world-change proof). Vanilla /execute with a condition and no run returns 1 when the condition passes and 0 when it fails; TicketBridge.runServerCmd records that value as '(rc=N)' in the receipt. First in-band use of this mechanism: if rc turns out not to be 1/0 as expected, the probe rows go red and the 判据 must be re-derived -- do NOT count it as a pass.",
+  "ops": [
+    {
+      "op": "state",
+      "what": "all"
+    },
+    {
+      "op": "state",
+      "what": "lamp"
+    },
+    {
+      "op": "pose",
+      "x": 2000.0,
+      "y": 121.5,
+      "z": 8.0,
+      "yaw": 180.0,
+      "pitch": 5.0
+    },
+    {
+      "op": "wait_ticks",
+      "n": 2
+    },
+    {
+      "op": "state",
+      "what": "all"
+    },
+    {
+      "op": "wait_ticks",
+      "n": 8
+    },
+    {
+      "op": "shot",
+      "name": "agent-actions-1"
+    },
+    {
+      "op": "wait_ticks",
+      "n": 8
+    },
+    {
+      "op": "shot",
+      "name": "agent-actions-2"
+    },
+    {
+      "op": "wait_ticks",
+      "n": 8
+    },
+    {
+      "op": "shot",
+      "name": "agent-actions-3"
+    },
+    {
+      "op": "state",
+      "what": "all"
+    },
+    {
+      "op": "state",
+      "what": "lamp"
+    },
+    {
+      "op": "command",
+      "line": "execute run item replace entity @s hotbar.4 with minecraft:stone_bricks 16"
+    },
+    {
+      "op": "inv",
+      "action": "select",
+      "slot": 4
+    },
+    {
+      "op": "state",
+      "what": "held"
+    },
+    {
+      "op": "state",
+      "what": "all"
+    },
+    {
+      "op": "assert",
+      "checks": [
+        {
+          "what": "inv",
+          "op": "contains",
+          "value": "4:stone_bricksx16"
+        }
+      ]
+    },
+    {
+      "op": "command",
+      "line": "setblock 2003 121 10 minecraft:air"
+    },
+    {
+      "op": "command",
+      "line": "execute if block 2003 121 10 minecraft:air"
+    },
+    {
+      "op": "act",
+      "verb": "place",
+      "x": 2003.0,
+      "y": 121.0,
+      "z": 10.0
+    },
+    {
+      "op": "command",
+      "line": "execute if block 2003 121 10 minecraft:stone_bricks"
+    },
+    {
+      "op": "state",
+      "what": "all"
+    },
+    {
+      "op": "command",
+      "line": "setblock 2003 121 9 minecraft:air"
+    },
+    {
+      "op": "command",
+      "line": "execute if block 2003 121 9 minecraft:air"
+    },
+    {
+      "op": "use",
+      "target": "block",
+      "x": 2003,
+      "y": 120,
+      "z": 9,
+      "_probe_cell": [2003, 121, 9]
+    },
+    {
+      "op": "command",
+      "line": "execute if block 2003 121 9 minecraft:stone_bricks"
+    },
+    {
+      "op": "state",
+      "what": "all"
+    },
+    {
+      "op": "state",
+      "what": "armor"
+    },
+    {
+      "op": "state",
+      "what": "all"
+    },
+    {
+      "op": "command",
+      "line": "execute run item replace entity @s armor.chest with minecraft:diamond_chestplate 1"
+    },
+    {
+      "op": "command",
+      "line": "execute run item replace entity @s hotbar.1 with minecraft:leather_chestplate 1"
+    },
+    {
+      "op": "state",
+      "what": "all"
+    },
+    {
+      "op": "assert",
+      "checks": [
+        {
+          "what": "inv",
+          "op": "contains",
+          "value": "38:diamond_chestplatex1"
+        },
+        {
+          "what": "inv",
+          "op": "contains",
+          "value": "1:leather_chestplatex1"
+        }
+      ]
+    },
+    {
+      "op": "state",
+      "what": "armor"
+    },
+    {
+      "op": "inv",
+      "action": "equip",
+      "slot": "chest",
+      "_expect_kind": "equip-different-piece",
+      "_expect_armor_before": 8,
+      "_expect_armor_after": 3,
+      "_expect_slot_source": "leather_chestplatex1",
+      "_expect_slot_armor": "diamond_chestplatex1"
+    },
+    {
+      "op": "state",
+      "what": "armor"
+    },
+    {
+      "op": "state",
+      "what": "all"
+    },
+    {
+      "op": "assert",
+      "checks": [
+        {
+          "what": "armor",
+          "op": "eq",
+          "value": 3
+        },
+        {
+          "what": "inv",
+          "op": "contains",
+          "value": "1:diamond_chestplatex1"
+        }
+      ]
+    },
+    {
+      "op": "state",
+      "what": "all"
+    },
+    {
+      "op": "dump"
+    }
+  ]
+}

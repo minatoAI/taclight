@@ -1,0 +1,114 @@
+{
+  "ticket": "t-opt-synth-a-t8",
+  "trial": "t1",
+  "rec": true,
+  "shot_prefix": "synth-a-t8",
+  "_arm": "a-t8",
+  "_total_count": 0,
+  "_synth_n": 0,
+  "_role": "T11 synth-light arm a-t8 (lights-off baseline: BOTH self lamps off AND all synthetic lights off => total ssbo count=0; tm=on, occl=off, density=0.25)",
+  "_expect": "关灯基线(全灭)：自身 2 盏与合成灯全部关闭 ⇒ ssbo count 必须=0；这是\"灯总开销\"的分母",
+  "_min_lights": 0,
+  "_max_lights": 0,
+  "_require_flags": 0,
+  "_requires_relay": [
+    "!selflight off",
+    "!gun off",
+    "!beam 0.25",
+    "!occl off",
+    "!synth 0"
+  ],
+  "_conversion": "total ssbo count = 2 (self handheld + gun) + N (!synth N); !synth 0 = off/reset; MAX_SYNTH = 6 (SSBO cap 8)",
+  "_scoped": "window 1280x800 or 1280x480 (per session; options.txt overrideHeight + restart) / dev save test / scene wall / pose wall_front(2000.0,121.5,8.0,yaw180,pitch5) / midnight+doDaylightCycle false+weather clear+doMobSpawning false / wait 20 / synthetic-light fixture !synth N (total ssbo count = 2+N) / cone default / single client",
+  "comment": "T11 合成灯夹具臂 a-t8（关灯基线）：!selflight off + !gun off + !synth 0 ⇒ count=0（驱动 maxLights:0 硬门）。注意：本臂**不用**合成灯，`!synth` 必须是 0（首版生成器把 6 无差别套进来，导致 count=6 撞 maxLights:0 —— 现已修，并用 tools/check-synth-spec.ps1 固化校验）。",
+  "ops": [
+    {
+      "op": "state",
+      "what": "all"
+    },
+    {
+      "op": "scene",
+      "name": "wall"
+    },
+    {
+      "op": "command",
+      "line": "gamerule doDaylightCycle false"
+    },
+    {
+      "op": "command",
+      "line": "time set midnight"
+    },
+    {
+      "op": "command",
+      "line": "weather clear"
+    },
+    {
+      "op": "command",
+      "line": "gamerule doMobSpawning false"
+    },
+    {
+      "op": "light",
+      "mode": "off"
+    },
+    {
+      "op": "tm",
+      "mode": "on"
+    },
+    {
+      "op": "wait_ticks",
+      "n": 10
+    },
+    {
+      "op": "state",
+      "what": "lamp"
+    },
+    {
+      "op": "assert",
+      "checks": [
+        {
+          "what": "lamp",
+          "op": "eq",
+          "value": "off"
+        }
+      ]
+    },
+    {
+      "op": "pose",
+      "x": 2000.0,
+      "y": 121.5,
+      "z": 8.0,
+      "yaw": 180.0,
+      "pitch": 5.0
+    },
+    {
+      "op": "wait_ticks",
+      "n": 20
+    },
+    {
+      "op": "bench"
+    },
+    {
+      "op": "shot",
+      "name": "synth-a-t8-1"
+    },
+    {
+      "op": "shot",
+      "name": "synth-a-t8-2"
+    },
+    {
+      "op": "shot",
+      "name": "synth-a-t8-3"
+    },
+    {
+      "op": "tm",
+      "mode": "on"
+    },
+    {
+      "op": "state",
+      "what": "all"
+    },
+    {
+      "op": "dump"
+    }
+  ]
+}

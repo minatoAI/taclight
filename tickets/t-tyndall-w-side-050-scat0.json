@@ -1,0 +1,121 @@
+{
+  "ticket": "t-tyndall-w-side-050-scat0",
+  "trial": "t1",
+  "rec": true,
+  "shot_prefix": "tyndall-w-side-050-scat0",
+  "_arm": "w-side-050-scat0",
+  "_session": "W",
+  "_role": "W6 window/third-back, beam 0.5, scat 0",
+  "_expect": "侧向 + 纯侧面相位，应最强",
+  "_requires_relay": [
+    "!gun auto",
+    "!beam 0.5",
+    "!occl on",
+    "!scat 0",
+    "!beamonly off",
+    "!beamcap off"
+  ],
+  "_camera_gate": "third",
+  "_scoped": "session display mode is asserted per arm via PNG IHDR; save=test; scene=wall; pose wall_front(2000.0,121.5,8.0,yaw180,pitch5); midnight + doDaylightCycle false + weather clear + doMobSpawning false; wait 20; single client; light on (flashlight) + !gun auto (dual lamp); tm=on (default) for every arm; every arm also takes one post-shot under !beamonly on",
+  "comment": "Tyndall/volumetric visibility arm: W6 window/third-back, beam 0.5, scat 0 | expect: 侧向 + 纯侧面相位，应最强 | relay pre-state is set by tools\\opt-verify-taclight.ps1 (occl/beam/scat/beamonly have no ticket op) | post-shot under !beamonly on isolates the volume beam | ticket bench op is SECONDARY only (instant mc.getFps) -- the primary number is the relay 3s !bench median",
+  "ops": [
+    {
+      "op": "state",
+      "what": "all"
+    },
+    {
+      "op": "scene",
+      "name": "wall"
+    },
+    {
+      "op": "command",
+      "line": "gamerule doDaylightCycle false"
+    },
+    {
+      "op": "command",
+      "line": "time set midnight"
+    },
+    {
+      "op": "command",
+      "line": "weather clear"
+    },
+    {
+      "op": "command",
+      "line": "gamerule doMobSpawning false"
+    },
+    {
+      "op": "light",
+      "mode": "on"
+    },
+    {
+      "op": "tm",
+      "mode": "on"
+    },
+    {
+      "op": "wait_ticks",
+      "n": 10
+    },
+    {
+      "op": "state",
+      "what": "lamp"
+    },
+    {
+      "op": "assert",
+      "checks": [
+        {
+          "what": "lamp",
+          "op": "eq",
+          "value": "on"
+        }
+      ]
+    },
+    {
+      "op": "act",
+      "verb": "camera",
+      "mode": "thirdback"
+    },
+    {
+      "op": "pose",
+      "x": 2000.0,
+      "y": 121.5,
+      "z": 8.0,
+      "yaw": 180.0,
+      "pitch": 5.0
+    },
+    {
+      "op": "wait_ticks",
+      "n": 20
+    },
+    {
+      "op": "bench"
+    },
+    {
+      "op": "shot",
+      "name": "tyndall-w-side-050-scat0-1"
+    },
+    {
+      "op": "shot",
+      "name": "tyndall-w-side-050-scat0-2"
+    },
+    {
+      "op": "shot",
+      "name": "tyndall-w-side-050-scat0-3"
+    },
+    {
+      "op": "act",
+      "verb": "camera",
+      "mode": "first"
+    },
+    {
+      "op": "tm",
+      "mode": "on"
+    },
+    {
+      "op": "state",
+      "what": "all"
+    },
+    {
+      "op": "dump"
+    }
+  ]
+}

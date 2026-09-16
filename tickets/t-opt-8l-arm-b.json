@@ -1,0 +1,111 @@
+{
+  "ticket": "t-opt-8l-arm-b",
+  "trial": "t1",
+  "rec": true,
+  "shot_prefix": "opt-8l-B",
+  "_arm": "B",
+  "_session": "L8",
+  "_role": "8-light perf ablation arm B (beam=0.25, occl=off, selflight=on, gun=auto)",
+  "_expect": "64 步精确（旧行为基准）：A→B 的差=灯总开销",
+  "_min_lights": 2,
+  "_max_lights": -1,
+  "_requires_relay": [
+    "!selflight on",
+    "!gun auto",
+    "!beam 0.25",
+    "!occl off"
+  ],
+  "_relay_note": "occl/beam/selflight have no ticket op; the driver writes them through DebugCommandRelay and MUST fan out (-RelayExtra) to every observer instance, because remote lights are built from the server-synced entity data of each remote player.",
+  "_scoped": "window 1280x800 (options.txt fullscreen:false + overrideWidth 1280/overrideHeight 800) / dev save \"test\" / scene wall / pose wall_front(2000.0,121.5,8.0,yaw180,pitch5) / midnight + doDaylightCycle false + weather clear + doMobSpawning false / wait 20 / >=5 active lights (multi-client) / cone default / TM on at ticket tail / single main instance measured, observers only supply lights",
+  "comment": "8-light ablation arm B | expect: 64 步精确（旧行为基准）：A→B 的差=灯总开销 | light/tm are set by ticket ops; density is EXPLICIT (!beam 0.25) because the config beamDensity moved 0.05->0.25 and 'beam-off alias' would silently drift. | light gate: ssbo count must be >= 5 from the driver GPU-readback !diag.",
+  "ops": [
+    {
+      "op": "state",
+      "what": "all"
+    },
+    {
+      "op": "scene",
+      "name": "wall"
+    },
+    {
+      "op": "command",
+      "line": "gamerule doDaylightCycle false"
+    },
+    {
+      "op": "command",
+      "line": "time set midnight"
+    },
+    {
+      "op": "command",
+      "line": "weather clear"
+    },
+    {
+      "op": "command",
+      "line": "gamerule doMobSpawning false"
+    },
+    {
+      "op": "light",
+      "mode": "on"
+    },
+    {
+      "op": "tm",
+      "mode": "off"
+    },
+    {
+      "op": "wait_ticks",
+      "n": 10
+    },
+    {
+      "op": "state",
+      "what": "lamp"
+    },
+    {
+      "op": "assert",
+      "checks": [
+        {
+          "what": "lamp",
+          "op": "eq",
+          "value": "on"
+        }
+      ]
+    },
+    {
+      "op": "pose",
+      "x": 2000.0,
+      "y": 121.5,
+      "z": 8.0,
+      "yaw": 180.0,
+      "pitch": 5.0
+    },
+    {
+      "op": "wait_ticks",
+      "n": 20
+    },
+    {
+      "op": "bench"
+    },
+    {
+      "op": "shot",
+      "name": "opt-8l-B-1"
+    },
+    {
+      "op": "shot",
+      "name": "opt-8l-B-2"
+    },
+    {
+      "op": "shot",
+      "name": "opt-8l-B-3"
+    },
+    {
+      "op": "tm",
+      "mode": "on"
+    },
+    {
+      "op": "state",
+      "what": "all"
+    },
+    {
+      "op": "dump"
+    }
+  ]
+}

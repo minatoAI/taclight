@@ -1,0 +1,114 @@
+{
+  "ticket": "t-opt-synth-c-t5",
+  "trial": "t1",
+  "rec": true,
+  "shot_prefix": "synth-c-t5",
+  "_arm": "c-t5",
+  "_total_count": 5,
+  "_synth_n": 3,
+  "_role": "T11 synth-light arm c-t5 (total ssbo count=5 = 2 self + 3 synth; tm=on, occl=off, density=0.25)",
+  "_expect": "T=5：首次出现灯槽 4（row_b1 候选）",
+  "_min_lights": 5,
+  "_max_lights": -1,
+  "_require_flags": 0,
+  "_requires_relay": [
+    "!selflight on",
+    "!gun auto",
+    "!beam 0.25",
+    "!occl off",
+    "!synth 3"
+  ],
+  "_conversion": "total ssbo count = 2 (self handheld + gun) + N (!synth N); !synth 0 = off/reset; MAX_SYNTH = 6 (SSBO cap 8)",
+  "_scoped": "window 1280x800 or 1280x480 (per session; options.txt overrideHeight + restart) / dev save test / scene wall / pose wall_front(2000.0,121.5,8.0,yaw180,pitch5) / midnight+doDaylightCycle false+weather clear+doMobSpawning false / wait 20 / synthetic-light fixture !synth N (total ssbo count = 2+N) / cone default / single client",
+  "comment": "T11 合成灯夹具臂 c-t5：headless 上限解除。count=5(=2+3)；density 显式 !beam 0.25（A2 用 0 触发 beamIdle 早退）；occl=off（要求 header flags 含 bit4=0x10，驱动灯数门硬校验）；tm=on。relay 由 tools/opt-verify-taclight.ps1 写 run/taclight-cmds.txt；合成灯几何/参数见 dev4 文档与 SYNTH echo 日志。",
+  "ops": [
+    {
+      "op": "state",
+      "what": "all"
+    },
+    {
+      "op": "scene",
+      "name": "wall"
+    },
+    {
+      "op": "command",
+      "line": "gamerule doDaylightCycle false"
+    },
+    {
+      "op": "command",
+      "line": "time set midnight"
+    },
+    {
+      "op": "command",
+      "line": "weather clear"
+    },
+    {
+      "op": "command",
+      "line": "gamerule doMobSpawning false"
+    },
+    {
+      "op": "light",
+      "mode": "on"
+    },
+    {
+      "op": "tm",
+      "mode": "on"
+    },
+    {
+      "op": "wait_ticks",
+      "n": 10
+    },
+    {
+      "op": "state",
+      "what": "lamp"
+    },
+    {
+      "op": "assert",
+      "checks": [
+        {
+          "what": "lamp",
+          "op": "eq",
+          "value": "on"
+        }
+      ]
+    },
+    {
+      "op": "pose",
+      "x": 2000.0,
+      "y": 121.5,
+      "z": 8.0,
+      "yaw": 180.0,
+      "pitch": 5.0
+    },
+    {
+      "op": "wait_ticks",
+      "n": 20
+    },
+    {
+      "op": "bench"
+    },
+    {
+      "op": "shot",
+      "name": "synth-c-t5-1"
+    },
+    {
+      "op": "shot",
+      "name": "synth-c-t5-2"
+    },
+    {
+      "op": "shot",
+      "name": "synth-c-t5-3"
+    },
+    {
+      "op": "tm",
+      "mode": "on"
+    },
+    {
+      "op": "state",
+      "what": "all"
+    },
+    {
+      "op": "dump"
+    }
+  ]
+}

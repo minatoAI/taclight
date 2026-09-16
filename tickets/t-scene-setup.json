@@ -1,0 +1,15 @@
+{
+  "ticket": "t-scene-setup",
+  "comment": "场景基线(trial t1，t13-setup 固化＋trial)：wall 预设＋锁夜＋开灯＋wall_front 机位(2000.0,121.5,8.0,yaw180,pitch5)。一切消融/E2E 的第 1 票，保证机位光照可比。",
+  "rec": true,
+  "trial": "t1",
+  "ops": [
+    {"op": "scene", "name": "wall"},
+    {"op": "command", "line": "gamerule doDaylightCycle false"},
+    {"op": "command", "line": "time set midnight"},
+    {"op": "command", "line": "weather clear"},
+    {"op": "command", "line": "taclight light on @s"},
+    {"op": "pose", "pitch": 5.0, "x": 2000.0, "y": 121.5, "yaw": 180.0, "z": 8.0},
+    {"op": "wait_ticks", "n": 40}
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "ticket": "t-recon",
+  "comment": "SOP第0步侦察(trial t0): 只读 state all，不碰世界。每次E2E/消融前先跑，拿到背包占用、手持、位姿、灯态，再按实际占用填写清场票的 toss 槽位（toss 空槽会直接 fail，见 t25-item-clean 教训）。",
+  "trial": "t0",
+  "ops": [
+    {"op": "state", "what": "all"}
+  ]
+}

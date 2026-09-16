@@ -1,0 +1,87 @@
+{
+  "ticket": "t-opt-t17-demo-walkrun",
+  "trial": "t1",
+  "rec": true,
+  "shot_prefix": "agent-walkrun",
+  "_role": "face=true (run default) turns to the travel direction + sprint; movement-only arm (no world mutation)",
+  "_expect": "A is set with 'tp @s 2000.0 121.5 8.0 ~ 5.0' (position + pitch only; yaw untouched, so nothing fights the action layer's turn -- inv12). Early state at t~2 and a later state are INSIDE the motion window (pos must change between them); 3 shots in the same window; x displacement >=3.0; arrival residual <=0.25; use eat ok + food/saturation change. The action-class ops (place / use-block / equip) live in t-opt-t17-demo-actions (arm d-actions) so this arm never mutates the world.",
+  "_scoped": "window 1280x800 / dev save test / scene wall / A = (2000.0,121.5,8.0) via command tp (yaw not pinned) / B = 2005.2,121.0,8.0 / single client / T17 action layer (default OFF)",
+  "ops": [
+    {
+      "op": "state",
+      "what": "all"
+    },
+    {
+      "op": "state",
+      "what": "lamp"
+    },
+    {
+      "op": "command",
+      "line": "tp @s 2000.0 121.5 8.0 ~ 5.0"
+    },
+    {
+      "op": "wait_ticks",
+      "n": 2
+    },
+    {
+      "op": "state",
+      "what": "all"
+    },
+    {
+      "op": "wait_ticks",
+      "n": 8
+    },
+    {
+      "op": "shot",
+      "name": "agent-walkrun-1"
+    },
+    {
+      "op": "wait_ticks",
+      "n": 8
+    },
+    {
+      "op": "shot",
+      "name": "agent-walkrun-2"
+    },
+    {
+      "op": "wait_ticks",
+      "n": 8
+    },
+    {
+      "op": "shot",
+      "name": "agent-walkrun-3"
+    },
+    {
+      "op": "state",
+      "what": "all"
+    },
+    {
+      "op": "wait_ticks",
+      "n": 40
+    },
+    {
+      "op": "state",
+      "what": "all"
+    },
+    {
+      "op": "state",
+      "what": "lamp"
+    },
+    {
+      "op": "inv",
+      "action": "select",
+      "slot": 2
+    },
+    {
+      "op": "use",
+      "target": "eat"
+    },
+    {
+      "op": "state",
+      "what": "all"
+    },
+    {
+      "op": "dump"
+    }
+  ]
+}

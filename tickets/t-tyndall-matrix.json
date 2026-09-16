@@ -1,0 +1,388 @@
+{
+  "ticket": "t-tyndall-matrix",
+  "_droppable": false,
+  "_role": "spec",
+  "_what": "Tyndall/volumetric-visibility decision matrix. Rows are display mode (W vs F), columns are density !beam / phase !scat / camera. Every arm additionally takes one !beamonly post-shot.",
+  "_run": "powershell -NoProfile -ExecutionPolicy Bypass -File tools\\opt-verify-taclight.ps1 -Spec tickets\\t-tyndall-matrix.json -Session W   (then -Session F after switching fullscreen:true and restarting the client; -Session W4 needs a human to press F4)",
+  "_judgment": {
+    "phase_caveat": "ALL 8 W arms are axis-collinear (thirdback/thirdfront keep the camera on the beam axis): center-pixel ph = 0.0160 = the phase minimum, identical to first person. Density pairs (W1 vs W2, W4 vs W5) therefore have almost no image leverage -- T7 already measured 0.072/255 for 0.05->0.5 at the minimum. Only off-center pixels gain (vertical edge x8.9, horizontal edge x14.4); a true x25 cell needs the camera OFF the beam axis (W4 F4, or an observer-instance remote light).",
+    "W_has_beam_F_not": "display mode (window vs fullscreen) is the cause -- report as display口径, not a render regression (both sides are at the same phase minimum, so this comparison stays valid)",
+    "W7_has_beam": "negative control failed: the ROI metric cannot separate beam from no-beam -- fix the metric before judging anything else",
+    "W1_and_W5_no_beam": "product regression: escalate with the per-arm DIAG (count/flags/cam) as counter-evidence; still cannot distinguish \"density not uploaded\" from \"phase minimum\" until the vlParams dump patch (dumpLight0 +4 floats at offsets 80/84/88/92) is approved",
+    "W4_free_visible_and_W4_free_005_not": "H4 can ONLY be judged in the freecam cell (camera off-axis): if beam 0.5 shows a cone there and 0.05 does not, the user-remembered Tyndall came from the manual !beam override (memory-only, cleared on restart)",
+    "W2_vs_W3_difference_below_floor": "expected at the phase minimum -- do not read it as \"scat has no effect\"; re-test scat in a freecam/observer cell"
+  },
+  "_roi": "per shot: node tools/lumastats.js <png> --bbox x0,y0,x1,y1 (Y-mean of the cone region) ; floor = the 3 consecutive same-config shots of that arm; signal must exceed 3x floor; never use raw changed%",
+  "scoped": "session display mode is asserted per arm via PNG IHDR; save=test; scene=wall; pose wall_front(2000.0,121.5,8.0,yaw180,pitch5); midnight + doDaylightCycle false + weather clear + doMobSpawning false; wait 20; single client; light on (flashlight) + !gun auto (dual lamp); tm=on (default) for every arm; every arm also takes one post-shot under !beamonly on",
+  "sessions": [
+    {
+      "id": "W",
+      "display": "window 1280x800 (HDR ON, proxy: user reports system HDR stays on in windowed)",
+      "expectPng": "1280x800",
+      "fullscreen": false,
+      "tailRelay": [
+        "!gun auto",
+        "!beam 0.25",
+        "!occl on",
+        "!tm on",
+        "!beamonly off",
+        "!scat off",
+        "!beamcap off"
+      ],
+      "arms": [
+        {
+          "id": "w-fp-005",
+          "ticket": "t-tyndall-w-fp-005",
+          "relay": [
+            "!gun auto",
+            "!beam 0.05",
+            "!occl on",
+            "!scat off",
+            "!beamonly off",
+            "!beamcap off"
+          ],
+          "desc": "W1 window/first, beam 0.05, scat default",
+          "needLampOff": false,
+          "requireCamera": "first",
+          "shotPrefix": "tyndall-w-fp-005",
+          "postRelay": [
+            "!beamonly on"
+          ],
+          "postRestore": [
+            "!beamonly off"
+          ],
+          "postTag": "beamonly",
+          "expect": "有束=今天配置的口径；若此格无束→直接进产品回归分支（与旧图同窗口同机位）"
+        },
+        {
+          "id": "w-fp-050",
+          "ticket": "t-tyndall-w-fp-050",
+          "relay": [
+            "!gun auto",
+            "!beam 0.5",
+            "!occl on",
+            "!scat off",
+            "!beamonly off",
+            "!beamcap off"
+          ],
+          "desc": "W2 window/first, beam 0.5 (用户当年档), scat default",
+          "needLampOff": false,
+          "requireCamera": "first",
+          "shotPrefix": "tyndall-w-fp-050",
+          "postRelay": [
+            "!beamonly on"
+          ],
+          "postRestore": [
+            "!beamonly off"
+          ],
+          "postTag": "beamonly",
+          "expect": "H4 判决格1：束应显著强于 W1（密度 10x）"
+        },
+        {
+          "id": "w-fp-050-scat0",
+          "ticket": "t-tyndall-w-fp-050-scat0",
+          "relay": [
+            "!gun auto",
+            "!beam 0.5",
+            "!occl on",
+            "!scat 0",
+            "!beamonly off",
+            "!beamcap off"
+          ],
+          "desc": "W3 window/first, beam 0.5, scat 0 (纯侧面相位)",
+          "needLampOff": false,
+          "requireCamera": "first",
+          "shotPrefix": "tyndall-w-fp-050-scat0",
+          "postRelay": [
+            "!beamonly on"
+          ],
+          "postRestore": [
+            "!beamonly off"
+          ],
+          "postTag": "beamonly",
+          "expect": "相位对照：轴向应比 W2 更弱（f=0→轴向归零）"
+        },
+        {
+          "id": "w-side-005",
+          "ticket": "t-tyndall-w-side-005",
+          "relay": [
+            "!gun auto",
+            "!beam 0.05",
+            "!occl on",
+            "!scat off",
+            "!beamonly off",
+            "!beamcap off"
+          ],
+          "desc": "W4 window/third-back, beam 0.05",
+          "needLampOff": false,
+          "requireCamera": "third",
+          "shotPrefix": "tyndall-w-side-005",
+          "postRelay": [
+            "!beamonly on"
+          ],
+          "postRestore": [
+            "!beamonly off"
+          ],
+          "postTag": "beamonly",
+          "expect": "确定性离轴视角 + 今天密度"
+        },
+        {
+          "id": "w-side-050",
+          "ticket": "t-tyndall-w-side-050",
+          "relay": [
+            "!gun auto",
+            "!beam 0.5",
+            "!occl on",
+            "!scat off",
+            "!beamonly off",
+            "!beamcap off"
+          ],
+          "desc": "W5 window/third-back, beam 0.5",
+          "needLampOff": false,
+          "requireCamera": "third",
+          "shotPrefix": "tyndall-w-side-050",
+          "postRelay": [
+            "!beamonly on"
+          ],
+          "postRestore": [
+            "!beamonly off"
+          ],
+          "postTag": "beamonly",
+          "expect": "H4 判决格2（侧向视角）：束应显著强于 W4"
+        },
+        {
+          "id": "w-side-050-scat0",
+          "ticket": "t-tyndall-w-side-050-scat0",
+          "relay": [
+            "!gun auto",
+            "!beam 0.5",
+            "!occl on",
+            "!scat 0",
+            "!beamonly off",
+            "!beamcap off"
+          ],
+          "desc": "W6 window/third-back, beam 0.5, scat 0",
+          "needLampOff": false,
+          "requireCamera": "third",
+          "shotPrefix": "tyndall-w-side-050-scat0",
+          "postRelay": [
+            "!beamonly on"
+          ],
+          "postRestore": [
+            "!beamonly off"
+          ],
+          "postTag": "beamonly",
+          "expect": "侧向 + 纯侧面相位，应最强"
+        },
+        {
+          "id": "w-fp-050-beam0",
+          "ticket": "t-tyndall-w-fp-050-beam0",
+          "relay": [
+            "!gun auto",
+            "!beam 0",
+            "!occl on",
+            "!scat off",
+            "!beamonly off",
+            "!beamcap off"
+          ],
+          "desc": "W7 window/first, beam 0 (负对照)",
+          "needLampOff": false,
+          "requireCamera": "first",
+          "shotPrefix": "tyndall-w-fp-050-beam0",
+          "postRelay": [
+            "!beamonly on"
+          ],
+          "postRestore": [
+            "!beamonly off"
+          ],
+          "postTag": "beamonly",
+          "expect": "必须无束：ROI 落到 floor 水平"
+        },
+        {
+          "id": "w-side-050-occloff",
+          "ticket": "t-tyndall-w-side-050-occloff",
+          "relay": [
+            "!gun auto",
+            "!beam 0.5",
+            "!occl off",
+            "!scat off",
+            "!beamonly off",
+            "!beamcap off"
+          ],
+          "desc": "W8 window/third-back, beam 0.5, occl off (优化3对照)",
+          "needLampOff": false,
+          "requireCamera": "third",
+          "shotPrefix": "tyndall-w-side-050-occloff",
+          "postRelay": [
+            "!beamonly on"
+          ],
+          "postRestore": [
+            "!beamonly off"
+          ],
+          "postTag": "beamonly",
+          "expect": "应与 W5 同量级（不明显变暗/变亮）"
+        }
+      ]
+    },
+    {
+      "id": "F",
+      "display": "fullscreen 4K (HDR OFF, proxy: user reports entering fullscreen disables system HDR)",
+      "expectPng": "3840x2160",
+      "fullscreen": true,
+      "tailRelay": [
+        "!gun auto",
+        "!beam 0.25",
+        "!occl on",
+        "!tm on",
+        "!beamonly off",
+        "!scat off",
+        "!beamcap off"
+      ],
+      "arms": [
+        {
+          "id": "f-fp-005",
+          "ticket": "t-tyndall-f-fp-005",
+          "relay": [
+            "!gun auto",
+            "!beam 0.05",
+            "!occl on",
+            "!scat off",
+            "!beamonly off",
+            "!beamcap off"
+          ],
+          "desc": "F1 fullscreen4K/first, beam 0.05",
+          "needLampOff": false,
+          "requireCamera": "first",
+          "shotPrefix": "tyndall-f-fp-005",
+          "postRelay": [
+            "!beamonly on"
+          ],
+          "postRestore": [
+            "!beamonly off"
+          ],
+          "postTag": "beamonly",
+          "expect": "与 W1 同配置：比较全屏 vs 窗口的 ROI"
+        },
+        {
+          "id": "f-fp-050",
+          "ticket": "t-tyndall-f-fp-050",
+          "relay": [
+            "!gun auto",
+            "!beam 0.5",
+            "!occl on",
+            "!scat off",
+            "!beamonly off",
+            "!beamcap off"
+          ],
+          "desc": "F2 fullscreen4K/first, beam 0.5",
+          "needLampOff": false,
+          "requireCamera": "first",
+          "shotPrefix": "tyndall-f-fp-050",
+          "postRelay": [
+            "!beamonly on"
+          ],
+          "postRestore": [
+            "!beamonly off"
+          ],
+          "postTag": "beamonly",
+          "expect": "与 W2 同配置：显示口径对决"
+        },
+        {
+          "id": "f-side-050",
+          "ticket": "t-tyndall-f-side-050",
+          "relay": [
+            "!gun auto",
+            "!beam 0.5",
+            "!occl on",
+            "!scat off",
+            "!beamonly off",
+            "!beamcap off"
+          ],
+          "desc": "F3 fullscreen4K/third-back, beam 0.5",
+          "needLampOff": false,
+          "requireCamera": "third",
+          "shotPrefix": "tyndall-f-side-050",
+          "postRelay": [
+            "!beamonly on"
+          ],
+          "postRestore": [
+            "!beamonly off"
+          ],
+          "postTag": "beamonly",
+          "expect": "与 W5 同配置：显示口径对决（离轴）"
+        }
+      ]
+    },
+    {
+      "id": "W4",
+      "display": "window 1280x800 + human F4 freecam (requireCamera=freecam waits for the FreeCamera DIAG line)",
+      "expectPng": "1280x800",
+      "fullscreen": false,
+      "tailRelay": [
+        "!gun auto",
+        "!beam 0.25",
+        "!occl on",
+        "!tm on",
+        "!beamonly off",
+        "!scat off",
+        "!beamcap off"
+      ],
+      "arms": [
+        {
+          "id": "w4-free-050",
+          "ticket": "t-tyndall-w4-free-050",
+          "relay": [
+            "!gun auto",
+            "!beam 0.5",
+            "!occl on",
+            "!scat off",
+            "!beamonly off",
+            "!beamcap off"
+          ],
+          "desc": "W4-1 window/freecam(人按F4), beam 0.5",
+          "needLampOff": false,
+          "requireCamera": "freecam",
+          "shotPrefix": "tyndall-w4-free-050",
+          "postRelay": [
+            "!beamonly on"
+          ],
+          "postRestore": [
+            "!beamonly off"
+          ],
+          "postTag": "beamonly",
+          "expect": "真垂直侧视：应看到完整锥"
+        },
+        {
+          "id": "w4-free-005",
+          "ticket": "t-tyndall-w4-free-005",
+          "relay": [
+            "!gun auto",
+            "!beam 0.05",
+            "!occl on",
+            "!scat off",
+            "!beamonly off",
+            "!beamcap off"
+          ],
+          "desc": "W4-2 window/freecam(人按F4), beam 0.05",
+          "needLampOff": false,
+          "requireCamera": "freecam",
+          "shotPrefix": "tyndall-w4-free-005",
+          "postRelay": [
+            "!beamonly on"
+          ],
+          "postRestore": [
+            "!beamonly off"
+          ],
+          "postTag": "beamonly",
+          "expect": "同上但回到今天密度：用于分离密度与视角"
+        }
+      ]
+    }
+  ],
+  "_phase_geometry": {
+    "formula": "ph = 0.4 * (f + (1-f)*(1-cosT^2)), f = BEAM_SIDE_FLOOR = 0.04",
+    "values": "axial cosT=1 -> 0.0160 (x1) | vertical edge 35deg -> 0.1423 (x8.9) | horizontal edge 48.2deg -> 0.2301 (x14.4) | perpendicular cosT=0 -> 0.4000 (x25.0)",
+    "fov": "options.txt:25 fov:0.5 => 70deg vertical, 48.2deg horizontal half-angle at 1280x800",
+    "source": "composite1.fsh:139 ; SpotlightData.java:27 ; ClientSpotlightUploader.java:606-609"
+  }
+}

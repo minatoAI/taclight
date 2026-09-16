@@ -1,0 +1,111 @@
+{
+  "ticket": "t-opt-8l-arm-d",
+  "trial": "t1",
+  "rec": true,
+  "shot_prefix": "opt-8l-D",
+  "_arm": "D",
+  "_session": "L8",
+  "_role": "8-light perf ablation arm D (beam=0.25, occl=on, selflight=on, gun=auto)",
+  "_expect": "优化3 的**可达部分**：occl on ⇒ 查表路径（2 盏灯 = 块0/4 灯表）。注意：row_b1（灯索引≥4）在本 rig 不可达，本臂**不覆盖**优化3 的块1 路径；C→D 的差只代表\"查表 vs 逐采样 DDA\"在 2 灯下的收益",
+  "_min_lights": 2,
+  "_max_lights": -1,
+  "_requires_relay": [
+    "!selflight on",
+    "!gun auto",
+    "!beam 0.25",
+    "!occl on"
+  ],
+  "_relay_note": "occl/beam/selflight have no ticket op; the driver writes them through DebugCommandRelay and MUST fan out (-RelayExtra) to every observer instance, because remote lights are built from the server-synced entity data of each remote player.",
+  "_scoped": "window 1280x800 (options.txt fullscreen:false + overrideWidth 1280/overrideHeight 800) / dev save \"test\" / scene wall / pose wall_front(2000.0,121.5,8.0,yaw180,pitch5) / midnight + doDaylightCycle false + weather clear + doMobSpawning false / wait 20 / >=5 active lights (multi-client) / cone default / TM on at ticket tail / single main instance measured, observers only supply lights",
+  "comment": "D 臂（可达版）：本 rig 单客户端上限 2 盏，row_b1（灯索引≥4）不可达 ⇒ 优化3 的块1 路径不在本票覆盖范围。relay 由驱动 fan-out；密度显式 !beam 0.25（config 已由 0.05 改 0.25，\"beam-off alias\" 会漂）。",
+  "ops": [
+    {
+      "op": "state",
+      "what": "all"
+    },
+    {
+      "op": "scene",
+      "name": "wall"
+    },
+    {
+      "op": "command",
+      "line": "gamerule doDaylightCycle false"
+    },
+    {
+      "op": "command",
+      "line": "time set midnight"
+    },
+    {
+      "op": "command",
+      "line": "weather clear"
+    },
+    {
+      "op": "command",
+      "line": "gamerule doMobSpawning false"
+    },
+    {
+      "op": "light",
+      "mode": "on"
+    },
+    {
+      "op": "tm",
+      "mode": "on"
+    },
+    {
+      "op": "wait_ticks",
+      "n": 10
+    },
+    {
+      "op": "state",
+      "what": "lamp"
+    },
+    {
+      "op": "assert",
+      "checks": [
+        {
+          "what": "lamp",
+          "op": "eq",
+          "value": "on"
+        }
+      ]
+    },
+    {
+      "op": "pose",
+      "x": 2000.0,
+      "y": 121.5,
+      "z": 8.0,
+      "yaw": 180.0,
+      "pitch": 5.0
+    },
+    {
+      "op": "wait_ticks",
+      "n": 20
+    },
+    {
+      "op": "bench"
+    },
+    {
+      "op": "shot",
+      "name": "opt-8l-D-1"
+    },
+    {
+      "op": "shot",
+      "name": "opt-8l-D-2"
+    },
+    {
+      "op": "shot",
+      "name": "opt-8l-D-3"
+    },
+    {
+      "op": "tm",
+      "mode": "on"
+    },
+    {
+      "op": "state",
+      "what": "all"
+    },
+    {
+      "op": "dump"
+    }
+  ]
+}

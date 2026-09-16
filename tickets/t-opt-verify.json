@@ -1,0 +1,76 @@
+{
+  "ticket": "t-opt-verify",
+  "_droppable": false,
+  "_role": "manifest",
+  "_warning": "本文件**不是**可投放票据（没有 ops 数组，丢进 inbox 只会得到一条 parse fail 回执）。它是六臂清单/交接规格，实际执行走 tools/opt-verify-taclight.ps1（每臂一份 tickets/t-opt-arm-*.json）。",
+  "_why_not_one_ticket": "六臂里有三处状态只能由继电器 run/taclight-cmds.txt 设置：occl（C/D/E 分界）、beam（A2 密度 0）、gun 锥灯（A 臂双灯全灭）。TicketBridge.KNOWN_OPS（TicketBridge.java:80-83）与 OpCatalog（OpCatalog.java:51-108）只有 18 个 op，没有 occl/beam/gun；/taclight 服务端命令树只有 kit|cam|scene|light（TacLightCommand.java:35-69）。因此单张六臂票在旧 rig 上无法自包含区分 C/D/E，硬写会静默产出 C=D=E 的假数据。详见 docs/evidence/2026-09-15-oldtrack-verify/dev/env-and-ticket.md §5。",
+  "_scoped": "旧 TacLight rig（Forge dev，runClient -PtaclightQuickPlay=test）：1280x800 全屏、渲染距离12、fancy、ao on、particles 0、vsync off、maxFps 260、单进程；场景 wall；锁 midnight + doDaylightCycle false + weather clear + doMobSpawning false；机位 wall_front(2000.0,121.5,8.0,yaw180,pitch5)；每臂 wait 20 后 bench×3 + shot×3；tm 每臂显式设置、票尾 tm=on。与 docs/23 §2 冻结表（3840x2160 单开）绝对值不可比，只比同轮 delta 与方向。",
+  "_bench_protocol": "主数字 = 驱动在每臂票据跑完后经继电器发 !bench ×3（ClientEvents 3s 帧窗，src/main/java/dev/taclight/client/ClientEvents.java:181-210），取中位；副数字 = 票内 bench op ×3（mc.getFps() 瞬时，TicketBridge.java:967-974）。两者都带文件路径，禁口头数字。",
+  "_arm_order": ["A", "A2", "B", "C", "D", "E"],
+  "arms": [
+    {
+      "arm": "A",
+      "desc": "关灯基线（双灯全灭）——task-13/15 缺的那一臂",
+      "ticket": "tickets/t-opt-arm-a.json",
+      "relay_pre": ["!gun off", "!beam 0.25", "!occl off"],
+      "in_ticket": {"light": "off", "tm": "on"},
+      "assert": "lamp eq off",
+      "shots": ["opt-verify-A-1", "opt-verify-A-2", "opt-verify-A-3"],
+      "expect": "lampHandheld=false && lampGun=false"
+    },
+    {
+      "arm": "A2",
+      "desc": "灯开 + 密度 0（!beam 0）→ 验优化1 beamIdle 早退",
+      "ticket": "tickets/t-opt-arm-a2.json",
+      "relay_pre": ["!gun auto", "!beam 0", "!occl off"],
+      "in_ticket": {"light": "on", "tm": "on"},
+      "assert": "lamp eq on",
+      "shots": ["opt-verify-A2-1", "opt-verify-A2-2", "opt-verify-A2-3"],
+      "expect": "双灯 on；与 B 臂同路径但密度 0，差值即早退收益上界（旧行为全量空转）"
+    },
+    {
+      "arm": "B",
+      "desc": "tm off + occl off = 64 步精确参考",
+      "ticket": "tickets/t-opt-arm-b.json",
+      "relay_pre": ["!gun auto", "!beam 0.25", "!occl off"],
+      "in_ticket": {"light": "on", "tm": "off->on(票尾)"},
+      "assert": "lamp eq on",
+      "shots": ["opt-verify-B-1", "opt-verify-B-2", "opt-verify-B-3"]
+    },
+    {
+      "arm": "C",
+      "desc": "tm on + occl off = 32 步（验优化2）",
+      "ticket": "tickets/t-opt-arm-c.json",
+      "relay_pre": ["!gun auto", "!beam 0.25", "!occl off"],
+      "in_ticket": {"light": "on", "tm": "on"},
+      "assert": "lamp eq on",
+      "shots": ["opt-verify-C-1", "opt-verify-C-2", "opt-verify-C-3"]
+    },
+    {
+      "arm": "D",
+      "desc": "tm on + occl on = 8 灯遮挡查表（验优化3，L67 门 + L149-153 row_b1）",
+      "ticket": "tickets/t-opt-arm-d.json",
+      "relay_pre": ["!gun auto", "!beam 0.25", "!occl on"],
+      "in_ticket": {"light": "on", "tm": "on"},
+      "assert": "lamp eq on",
+      "shots": ["opt-verify-D-1", "opt-verify-D-2", "opt-verify-D-3"]
+    },
+    {
+      "arm": "E",
+      "desc": "D 之后回退 occl off，验回退臂完好（≈C）",
+      "ticket": "tickets/t-opt-arm-e.json",
+      "relay_pre": ["!gun auto", "!beam 0.25", "!occl off"],
+      "in_ticket": {"light": "on", "tm": "on"},
+      "assert": "lamp eq on",
+      "shots": ["opt-verify-E-1", "opt-verify-E-2", "opt-verify-E-3"]
+    }
+  ],
+  "_tail_reset": ["!gun auto", "!beam 0.25", "!occl on", "!tm on"],
+  "_evidence": {
+    "driver": "tickets/../tools/opt-verify-taclight.ps1",
+    "per_arm_result": "run/taclight-agent/outbox/<ticket>.result.json -> 拷贝到 docs/evidence/2026-09-15-oldtrack-verify/dev/run-out/",
+    "relay_benches": "run/logs/latest.log 的 [TacLight] BENCH ... 行 -> run-out/logs/<arm>.log.txt 原样切片",
+    "shots": "run/screenshots/taclight-opt-verify-<arm>-<n>.png",
+    "archive": "同名重跑旧回执自动进 run/taclight-agent/outbox/archive/<ticket>.result.<trial>.<stamp>-p<pid>.json（TicketBridge.java:1091,1111-1133；实证 run/taclight-agent/outbox/archive/t27-eat.result.t1.20260915-053001-p25924.json）"
+  }
+}

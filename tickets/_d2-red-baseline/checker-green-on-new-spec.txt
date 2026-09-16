@@ -1,0 +1,6 @@
+-- session D (4 arms, expectPng 1280x800) [non-synth spec]
+   OK   d-walkrun      
+   OK   d-control      
+   OK   d-noface       
+   OK   d-actions      
+RESULT: all arms self-consistent

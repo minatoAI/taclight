@@ -1,0 +1,116 @@
+{
+  "ticket": "t-tyndall-f-fp-050",
+  "trial": "t1",
+  "rec": true,
+  "shot_prefix": "tyndall-f-fp-050",
+  "_arm": "f-fp-050",
+  "_session": "F",
+  "_role": "F2 fullscreen4K/first, beam 0.5",
+  "_expect": "与 W2 同配置：显示口径对决",
+  "_requires_relay": [
+    "!gun auto",
+    "!beam 0.5",
+    "!occl on",
+    "!scat off",
+    "!beamonly off",
+    "!beamcap off"
+  ],
+  "_camera_gate": "first",
+  "_scoped": "session display mode is asserted per arm via PNG IHDR; save=test; scene=wall; pose wall_front(2000.0,121.5,8.0,yaw180,pitch5); midnight + doDaylightCycle false + weather clear + doMobSpawning false; wait 20; single client; light on (flashlight) + !gun auto (dual lamp); tm=on (default) for every arm; every arm also takes one post-shot under !beamonly on",
+  "comment": "Tyndall/volumetric visibility arm: F2 fullscreen4K/first, beam 0.5 | expect: 与 W2 同配置：显示口径对决 | relay pre-state is set by tools\\opt-verify-taclight.ps1 (occl/beam/scat/beamonly have no ticket op) | post-shot under !beamonly on isolates the volume beam | ticket bench op is SECONDARY only (instant mc.getFps) -- the primary number is the relay 3s !bench median",
+  "ops": [
+    {
+      "op": "state",
+      "what": "all"
+    },
+    {
+      "op": "scene",
+      "name": "wall"
+    },
+    {
+      "op": "command",
+      "line": "gamerule doDaylightCycle false"
+    },
+    {
+      "op": "command",
+      "line": "time set midnight"
+    },
+    {
+      "op": "command",
+      "line": "weather clear"
+    },
+    {
+      "op": "command",
+      "line": "gamerule doMobSpawning false"
+    },
+    {
+      "op": "light",
+      "mode": "on"
+    },
+    {
+      "op": "tm",
+      "mode": "on"
+    },
+    {
+      "op": "wait_ticks",
+      "n": 10
+    },
+    {
+      "op": "state",
+      "what": "lamp"
+    },
+    {
+      "op": "assert",
+      "checks": [
+        {
+          "what": "lamp",
+          "op": "eq",
+          "value": "on"
+        }
+      ]
+    },
+    {
+      "op": "pose",
+      "x": 2000.0,
+      "y": 121.5,
+      "z": 8.0,
+      "yaw": 180.0,
+      "pitch": 5.0
+    },
+    {
+      "op": "wait_ticks",
+      "n": 20
+    },
+    {
+      "op": "bench"
+    },
+    {
+      "op": "shot",
+      "name": "tyndall-f-fp-050-1"
+    },
+    {
+      "op": "shot",
+      "name": "tyndall-f-fp-050-2"
+    },
+    {
+      "op": "shot",
+      "name": "tyndall-f-fp-050-3"
+    },
+    {
+      "op": "act",
+      "verb": "camera",
+      "mode": "first"
+    },
+    {
+      "op": "tm",
+      "mode": "on"
+    },
+    {
+      "op": "state",
+      "what": "all"
+    },
+    {
+      "op": "dump"
+    }
+  ]
+}

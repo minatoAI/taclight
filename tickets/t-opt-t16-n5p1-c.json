@@ -1,0 +1,115 @@
+{
+  "ticket": "t-opt-t16-n5p1-c",
+  "trial": "t1",
+  "rec": true,
+  "shot_prefix": "synth-t16-n5p1-c",
+  "_arm": "t16-n5p1-c",
+  "_pair": "n5-1",
+  "_role_kind": "c",
+  "_dist": 0,
+  "_mode": "slots",
+  "_synth_n": 3,
+  "_total_count": 5,
+  "_min_lights": 5,
+  "_max_lights": -1,
+  "_require_flags": 0,
+  "_requires_relay": [
+    "!selflight on",
+    "!gun auto",
+    "!beam 0.25",
+    "!occl off",
+    "!synth 3 mode=slots"
+  ],
+  "_scoped": "window 1280x800 / dev save test / scene wall / pose wall_front(2000.0,121.5,8.0,yaw180,pitch5) / midnight+clear+doMobSpawning false / wait 20 / single client + !synth n mode=slots (fixed 8-slot nested geometry) / relay !bench x3 (3s) median = PRIMARY",
+  "comment": "T16 arm t16-n5p1-c (pair=n5-1, kind=c): NESTED fixed-8-slot geometry (!synth 3 mode=slots) => slot positions do NOT depend on N, so N is a nested subset. total ssbo count=5=2+3 (nested scan 4/5/6/8; 4 = slots 0..3 only = block0 control). Contribution self-proof is in the SYNTH echo (d2roi/term/gatePass).",
+  "ops": [
+    {
+      "op": "state",
+      "what": "all"
+    },
+    {
+      "op": "scene",
+      "name": "wall"
+    },
+    {
+      "op": "command",
+      "line": "gamerule doDaylightCycle false"
+    },
+    {
+      "op": "command",
+      "line": "time set midnight"
+    },
+    {
+      "op": "command",
+      "line": "weather clear"
+    },
+    {
+      "op": "command",
+      "line": "gamerule doMobSpawning false"
+    },
+    {
+      "op": "light",
+      "mode": "on"
+    },
+    {
+      "op": "tm",
+      "mode": "on"
+    },
+    {
+      "op": "wait_ticks",
+      "n": 10
+    },
+    {
+      "op": "state",
+      "what": "lamp"
+    },
+    {
+      "op": "assert",
+      "checks": [
+        {
+          "what": "lamp",
+          "op": "eq",
+          "value": "on"
+        }
+      ]
+    },
+    {
+      "op": "pose",
+      "x": 2000.0,
+      "y": 121.5,
+      "z": 8.0,
+      "yaw": 180.0,
+      "pitch": 5.0
+    },
+    {
+      "op": "wait_ticks",
+      "n": 20
+    },
+    {
+      "op": "bench"
+    },
+    {
+      "op": "shot",
+      "name": "synth-t16-n5p1-c-1"
+    },
+    {
+      "op": "shot",
+      "name": "synth-t16-n5p1-c-2"
+    },
+    {
+      "op": "shot",
+      "name": "synth-t16-n5p1-c-3"
+    },
+    {
+      "op": "tm",
+      "mode": "on"
+    },
+    {
+      "op": "state",
+      "what": "all"
+    },
+    {
+      "op": "dump"
+    }
+  ]
+}

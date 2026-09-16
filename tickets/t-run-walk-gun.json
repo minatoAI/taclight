@@ -1,0 +1,22 @@
+{
+  "ticket": "t-run-walk-gun",
+  "comment": "v0.3 跑走持枪双臂(trial t1)：A臂疾跑(4格，sprint 5.6m/s)+第三人称shot跑姿；B臂走回+shot走姿。持枪变体：把give行换成taclight kit取枪并inv select切手，枪口灯朝向差异（跑向左/走向前）由第二视角（run-observer联机号，进wall区架机位截图）取证，本票只收本机第三人称+姿态数。跑前需food>6（先吃或recon确认），否则sprint门fail是正确的。前置：t-scene-setup机位。",
+  "rec": true,
+  "trial": "t1",
+  "ops": [
+    {"op": "act", "verb": "camera", "mode": "thirdback"},
+    {"op": "act", "verb": "sprint", "on": true},
+    {"op": "act", "verb": "move", "x": 1996.0, "y": 121.5, "z": 8.0, "sprint": true},
+    {"op": "wait_ticks", "n": 10},
+    {"op": "shot", "name": "t-run-gun"},
+    {"op": "state", "what": "pose2"},
+    {"op": "assert", "checks": [{"what": "sprinting", "op": "eq", "value": true}, {"what": "moveYaw", "op": "ge", "value": 80}, {"what": "moveYaw", "op": "le", "value": 100}]},
+    {"op": "act", "verb": "sprint", "on": false},
+    {"op": "act", "verb": "move", "x": 2000.0, "y": 121.5, "z": 8.0},
+    {"op": "wait_ticks", "n": 10},
+    {"op": "shot", "name": "t-walk-gun"},
+    {"op": "state", "what": "pose2"},
+    {"op": "assert", "checks": [{"what": "sprinting", "op": "eq", "value": false}]},
+    {"op": "act", "verb": "camera", "mode": "first"}
+  ]
+}

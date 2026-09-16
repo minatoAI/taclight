@@ -1,0 +1,114 @@
+{
+  "ticket": "t-opt-paired-pf01-c8f",
+  "trial": "t1",
+  "rec": true,
+  "shot_prefix": "synth-pf01-c8f",
+  "_arm": "pf01-c8f",
+  "_pair": "f1",
+  "_role_kind": "c",
+  "_dist": 32,
+  "_synth_n": 6,
+  "_total_count": 8,
+  "_min_lights": 8,
+  "_max_lights": -1,
+  "_require_flags": 0,
+  "_requires_relay": [
+    "!selflight on",
+    "!gun auto",
+    "!beam 0.25",
+    "!occl off",
+    "!synth 6 32"
+  ],
+  "_scoped": "window 1280x800 (options.txt fullscreen:false + override 1280x800) / dev save test / scene wall / pose wall_front(2000.0,121.5,8.0,yaw180,pitch5) / midnight+clear+doMobSpawning false / wait 20 / single client + !synth fixture / relay !bench x3 (3s) median = PRIMARY / ticket bench = SECONDARY",
+  "comment": "T13 paired-interleaved arm pf01-c8f (pair=f1, kind=c): total ssbo count=8=2+6; dist=32 (0=near legacy 2.5/6, 32=far geometry); density explicit !beam 0.25; tm=on; occl=off. Relays are written by tools/opt-verify-taclight.ps1; do NOT reorder arms of the session (interleaving is the whole point).",
+  "ops": [
+    {
+      "op": "state",
+      "what": "all"
+    },
+    {
+      "op": "scene",
+      "name": "wall"
+    },
+    {
+      "op": "command",
+      "line": "gamerule doDaylightCycle false"
+    },
+    {
+      "op": "command",
+      "line": "time set midnight"
+    },
+    {
+      "op": "command",
+      "line": "weather clear"
+    },
+    {
+      "op": "command",
+      "line": "gamerule doMobSpawning false"
+    },
+    {
+      "op": "light",
+      "mode": "on"
+    },
+    {
+      "op": "tm",
+      "mode": "on"
+    },
+    {
+      "op": "wait_ticks",
+      "n": 10
+    },
+    {
+      "op": "state",
+      "what": "lamp"
+    },
+    {
+      "op": "assert",
+      "checks": [
+        {
+          "what": "lamp",
+          "op": "eq",
+          "value": "on"
+        }
+      ]
+    },
+    {
+      "op": "pose",
+      "x": 2000.0,
+      "y": 121.5,
+      "z": 8.0,
+      "yaw": 180.0,
+      "pitch": 5.0
+    },
+    {
+      "op": "wait_ticks",
+      "n": 20
+    },
+    {
+      "op": "bench"
+    },
+    {
+      "op": "shot",
+      "name": "synth-pf01-c8f-1"
+    },
+    {
+      "op": "shot",
+      "name": "synth-pf01-c8f-2"
+    },
+    {
+      "op": "shot",
+      "name": "synth-pf01-c8f-3"
+    },
+    {
+      "op": "tm",
+      "mode": "on"
+    },
+    {
+      "op": "state",
+      "what": "all"
+    },
+    {
+      "op": "dump"
+    }
+  ]
+}

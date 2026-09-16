@@ -1,0 +1,124 @@
+{
+  "ticket": "t-opt-t17-demo-walkrun",
+  "trial": "t1",
+  "rec": true,
+  "shot_prefix": "agent-walkrun",
+  "_role": "face=true(run default) turns to travel direction + sprint",
+  "_expect": "early state at t~2 and mid state at t~26 are INSIDE the motion window (pos must change between them); 3 shots in the same window; x displacement >=3.0; arrival residual <=0.25; use eat ok + food/saturation change; act place ok + blockBefore != blockAfter at 2003,121,11; equip: inv action=equip slot=chest must report armorBefore/armorAfter and the armor state must change",
+  "_scoped": "window 1280x800 / dev save test / scene wall / A = wall_front(2000.0,121.5,8.0) / B = 2005.2,121.0,8.0 / single client / T17 action layer (default OFF)",
+  "ops": [
+    {
+      "op": "state",
+      "what": "all"
+    },
+    {
+      "op": "state",
+      "what": "lamp"
+    },
+    {
+      "op": "pose",
+      "x": 2000.0,
+      "y": 121.5,
+      "z": 8.0,
+      "yaw": -90.0,
+      "pitch": 5.0
+    },
+    {
+      "op": "wait_ticks",
+      "n": 2
+    },
+    {
+      "op": "state",
+      "what": "all"
+    },
+    {
+      "op": "wait_ticks",
+      "n": 8
+    },
+    {
+      "op": "shot",
+      "name": "agent-walkrun-1"
+    },
+    {
+      "op": "wait_ticks",
+      "n": 8
+    },
+    {
+      "op": "shot",
+      "name": "agent-walkrun-2"
+    },
+    {
+      "op": "wait_ticks",
+      "n": 8
+    },
+    {
+      "op": "shot",
+      "name": "agent-walkrun-3"
+    },
+    {
+      "op": "state",
+      "what": "all"
+    },
+    {
+      "op": "wait_ticks",
+      "n": 40
+    },
+    {
+      "op": "state",
+      "what": "all"
+    },
+    {
+      "op": "state",
+      "what": "lamp"
+    },
+    {
+      "op": "inv",
+      "action": "select",
+      "slot": 2
+    },
+    {
+      "op": "use",
+      "target": "eat"
+    },
+    {
+      "op": "inv",
+      "action": "select",
+      "slot": 4
+    },
+    {
+      "op": "state",
+      "what": "all"
+    },
+    {
+      "op": "act",
+      "verb": "place",
+      "x": 2003.0,
+      "y": 121.0,
+      "z": 11.0
+    },
+    {
+      "op": "state",
+      "what": "armor"
+    },
+    {
+      "op": "inv",
+      "action": "equip",
+      "slot": "chest"
+    },
+    {
+      "op": "state",
+      "what": "armor"
+    },
+    {
+      "op": "state",
+      "what": "all"
+    },
+    {
+      "op": "state",
+      "what": "all"
+    },
+    {
+      "op": "dump"
+    }
+  ]
+}

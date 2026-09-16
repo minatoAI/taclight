@@ -1,0 +1,19 @@
+{
+  "ticket": "t-item-flow",
+  "comment": "v0.2 F1黄金链(trial t1，t25-item-final True 原样固化): floor清场(toss recon 实占槽，本模板按 wall 前哨位 38/1 留空，跑前先对 t-recon 结果改槽号)→give→open→drag 进快捷栏→select→use-air→shot→state armor→assert(甲8＋包内有物)。use-air 对不可右键物是 noop（t25-item-full 教训：只对可用物期待动作）。",
+  "rec": true,
+  "trial": "t1",
+  "ops": [
+    {"op": "inv", "action": "toss", "slot": 38},
+    {"op": "inv", "action": "toss", "slot": 1},
+    {"op": "command", "line": "give @s minecraft:diamond_chestplate 1"},
+    {"op": "inv", "action": "open"},
+    {"op": "inv", "action": "drag", "from": 1, "to": 7},
+    {"op": "inv", "action": "select", "slot": 7},
+    {"op": "use", "target": "air"},
+    {"op": "wait_ticks", "n": 10},
+    {"op": "shot", "name": "t-item-flow-a"},
+    {"op": "state", "what": "armor"},
+    {"op": "assert", "checks": [{"op": "eq", "value": 8, "what": "armor"}, {"op": "contains", "value": "diamond_chestplate", "what": "inv"}]}
+  ]
+}
