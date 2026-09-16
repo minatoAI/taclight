@@ -1,0 +1,24 @@
+#version 120
+
+/* gbuffers_textured · M1 G-Buffer 写出(粒子等;云回退链落点)。 */
+/* DRAWBUFFERS:0123 */
+#include "/lib/taclight_gbuffer.glsl"
+
+uniform sampler2D gtexture;
+uniform sampler2D lightmap;
+
+varying vec2 texcoord;
+varying vec2 lmcoord;
+varying vec4 glcolor;
+varying vec3 tnormal;
+varying vec3 vposView;
+
+void main() {
+    vec4 albedo = texture2D(gtexture, texcoord) * glcolor;
+    vec3 nrm = normalize(tnormal);
+    if (!gl_FrontFacing) nrm = -nrm;
+    gl_FragData[0] = vec4(albedo.rgb * texture2D(lightmap, lmcoord).rgb, albedo.a);
+    gl_FragData[1] = vec4(taclight_encode_normal(nrm), lmcoord);
+    gl_FragData[2] = vec4(albedo.rgb, 0.3);
+    gl_FragData[3] = vec4(vposView, 1.0); // 视图空间位置(32F)
+}
