@@ -58,18 +58,21 @@ public class InteropStatusContract {
         check(Files.isRegularFile(relay), "找到 DebugCommandRelay 源文件");
         if (!Files.isRegularFile(relay)) return;
         String src = new String(Files.readAllBytes(relay), StandardCharsets.UTF_8);
-        int at = src.indexOf("!interop");
-        check(at > 0, "存在 !interop 分支");
+        // ★ 注释剥离后再定位分支:javadoc 里也提到 "!interop"(用法配方/历史说明),
+        // 直接在原文里 indexOf 会落到注释里(2026-09-19 本契约自己踩过一次)。
+        String code = stripComments(src);
+        int at = code.indexOf("startsWith(\"!interop\")");
+        check(at > 0, "存在 !interop 分支(注释剥离后定位)");
         if (at <= 0) return;
-        int end = src.indexOf("\n        }", at);
-        String branch = end > at ? src.substring(at, end) : src.substring(at);
+        int end = code.indexOf("\n        }", at);
+        String branch = end > at ? code.substring(at, end) : code.substring(at);
         check(branch.contains("RuntimePackInjector.statusReport()"), "分支调用 statusReport()(正文)");
         check(branch.contains("registeredTemplates()"), "分支附模板清单");
         check(branch.contains("rawPackName()"), "分支附当前 shaderPack 原始名");
         check(branch.contains("hashComparison("), "分支附哈希对照");
         check(branch.contains("RELAY interop |"), "分支逐行入日志(可被 latest.log 检索)");
         // 前缀吞并检查:!interop 之前不得存在其它 !i* 的 startswith 分支
-        String before = src.substring(0, at);
+        String before = code.substring(0, at);
         check(!before.contains("startsWith(\"!i"),
                 "!interop 不被更早的 !i* 分支吞掉(无前缀包含)");
 
@@ -79,12 +82,12 @@ public class InteropStatusContract {
         Path inj = Path.of("src/main/java/dev/taclight/interop/RuntimePackInjector.java");
         check(Files.isRegularFile(inj), "找到 RuntimePackInjector 源文件");
         if (!Files.isRegularFile(inj)) return;
-        String code = stripComments(new String(Files.readAllBytes(inj), StandardCharsets.UTF_8));
-        int mAt = code.indexOf("private static Resolution matchTemplate(");
+        String injCode = stripComments(new String(Files.readAllBytes(inj), StandardCharsets.UTF_8));
+        int mAt = injCode.indexOf("private static Resolution matchTemplate(");
         check(mAt > 0, "matchTemplate 方法存在");
         if (mAt <= 0) return;
-        int mEnd = code.indexOf("\n    private static String describeDrift(", mAt);
-        String body = mEnd > mAt ? code.substring(mAt, mEnd) : code.substring(mAt);
+        int mEnd = injCode.indexOf("\n    private static String describeDrift(", mAt);
+        String body = mEnd > mAt ? injCode.substring(mAt, mEnd) : injCode.substring(mAt);
         check(body.contains("PackFingerprint.matchesPackName(rawName, t.packName)"),
                 "★ matchTemplate 走归一化匹配 PackFingerprint.matchesPackName(改回精确相等即红)");
         check(!body.contains(".equals(t.packName)"),

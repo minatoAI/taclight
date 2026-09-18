@@ -13,11 +13,33 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 
 /**
- * 文件命令中继(调试自动化专用):轮询 run/taclight-cmds.txt,逐行执行后清空文件。
+ * 文件命令中继(调试自动化专用):轮询 <b>{@code <gameDir>/taclight-cmds.txt}</b>
+ * (路径 = {@code FMLPaths.GAMEDIR.get().resolve("taclight-cmds.txt")},见下方字段),逐行执行后清空文件。
+ *
+ * <p><b>★ 路径口径(2026-09-19 修正,原 javadoc 写"run/taclight-cmds.txt"误导过一次真机轮)</b>:
+ * 监听的是 <b>gameDir 根目录</b>下的 {@code taclight-cmds.txt},<b>不是</b> {@code <gameDir>/run/…}。
+ * 旧写法只在 <b>dev 实例</b>成立——dev 运行里 gameDir 本身就是 {@code taclight/run}
+ * (所以 dev 用 {@code run\taclight-cmds.txt} 是对的);而独立实例(qa 的
+ * {@code qa9-m1-smoke\game-full})gameDir = 实例根 ⇒ 必须写
+ * {@code E:\dshHome\qa9-m1-smoke\game-full\taclight-cmds.txt},
+ * 写到 {@code game-full\run\taclight-cmds.txt} <b>永远不会被消费</b>。</p>
+ *
+ * <p><b>★ 只存在于 dev/调试构建(发布 jar 故意剔除,见 build.gradle 的 exclude)</b>:
+ * {@code build.gradle} 把 {@code dev/taclight/client/DebugCommandRelay*.class} 与
+ * {@code dev/taclight/debug/**} 从发布包剔除 ⇒ <b>用发布 jar 的实例里本通道不存在,
+ * "零 RELAY 行"是预期而非故障</b>(反回归断言见 {@code InteropPackagingContract})。
+ * 理由:该通道是"任何本地程序可写、写了即驱动客户端命令"的无守卫写入口,
+ * 与 modtest-mcp 令牌+审计的设计取向冲突;将来若要开放,只许放行只读子集
+ * ({@code !interop}/{@code !diag} 类 status 查询)并另设开关/变体。</p>
  *
  * <p>为什么存在:本机实测(dev 实例)客户端命令树为空(登录后 ClientboundCommandsPacket
  * 未生效,聊天框输入任何命令都被本地预览拒绝),且物理/PostMessage 键注入受焦点态
  * 影响时灵时不效。文件通道三者全免:AI 直接写文件,模组客户端 tick 消费。</p>
+ *
+ * <p><b>用法配方(逐字)</b>:进世界后把 UTF-8 无 BOM、一行 {@code !interop} + 换行
+ * <b>覆盖写</b>入 {@code <gameDir>/taclight-cmds.txt} ⇒ ≤0.5s(2Hz 轮询)内日志出现
+ * {@code [TacLight] RELAY exec: !interop} 与多行 {@code [TacLight] RELAY interop | …},
+ * 且该文件被<b>截断为 0 字节</b>(消费的可判定证据)。主菜单/无连接时不消费且文件保留。</p>
  *
  * <p>行语法:
  *  <ul>

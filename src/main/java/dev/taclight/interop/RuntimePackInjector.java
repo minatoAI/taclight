@@ -225,7 +225,15 @@ public final class RuntimePackInjector {
         }
     }
 
-    /** 不支持包的提示(计划 §1):日志恒有;聊天栏尽力而为。首次 + 每次 reload(2s 去抖)。 */
+    /**
+     * 不支持包的提示(计划 §1):日志恒有;聊天栏尽力而为。首次 + 每次 reload(2s 去抖)。
+     *
+     * <p><b>★ 文案可操作性(2026-09-19 修正)</b>:旧文案写"游戏内 !interop 看详情"——
+     * <b>根本不存在客户端命令路径</b>({@code !interop} 只能走 dev 的文件中继),这句把
+     * 我们自己的验收人 qa 都误导成"客户端命令路径"⇒ 现改为给出<b>可执行动作</b>:
+     * 日志搜 {@code interop} / 写 {@code <gameDir>/taclight-cmds.txt}(并注明该通道仅 dev 构建存在)。
+     * 发布 jar 里该文件通道被剔除(build.gradle exclude),故聊天栏必须写清"日志"这条人人可用的路径。</p>
+     */
     private static void announce(String packName, String reason) {
         long now = System.currentTimeMillis();
         Long last = LAST_ANNOUNCE.get(packName);
@@ -240,7 +248,9 @@ public final class RuntimePackInjector {
                 try {
                     if (mc.player != null) {
                         mc.player.displayClientMessage(Component.literal(
-                                "[TacLight] 光影包 \"" + packName + "\" 暂不支持锥形照明注入(日志搜 interop;游戏内 !interop 看详情)"),
+                                "[TacLight] 光影包 \"" + packName + "\" 暂不支持锥形照明注入(本包不生效,零改动)。"
+                                        + "可做:①日志搜 interop 看原因;"
+                                        + "②dev 实例把 !interop 写入 <gameDir>/taclight-cmds.txt 看逐文件详情"),
                                 false);
                     }
                 } catch (Throwable ignored) {

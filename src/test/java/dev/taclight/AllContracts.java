@@ -74,6 +74,10 @@ public class AllContracts {
         // !interop 诊断工具契约(2026-09-19):内容层五要素(纯逻辑)+ 接线层(源码文本级)。
         System.out.println("== InteropStatusContract ==");
         dev.taclight.interop.InteropStatusContract.main(args);
+        // 发布包边界反回归(2026-09-19):发布 jar 不得含调试通道类;dev 构建树必须含(剔除≠没编译);
+        // build.gradle 剔除规则在;监听路径 = <gameDir>/taclight-cmds.txt;文案不得再指"游戏内 !interop"。
+        System.out.println("== InteropPackagingContract ==");
+        dev.taclight.interop.InteropPackagingContract.main(args);
         System.out.println("== InlineCoreContract ==");
         InlineCoreContract.main(args);
         System.out.println("== UploaderSemanticContract ==");
