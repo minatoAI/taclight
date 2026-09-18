@@ -258,21 +258,34 @@ public final class RuntimePackInjector {
     }
 
     private static void publish(Resolution r, boolean injected) {
+        String templateLine = r.template == null ? null
+                : "family=" + r.template.familyId + " packName=" + r.template.packName;
+        status = formatStatus(r.rawName, r.matchKey, r.root, templateLine,
+                r.template == null ? null : r.channel(), r.detail, r.fileOutcomes, injected);
+    }
+
+    /**
+     * 状态文本<b>纯格式化</b>(2026-09-19):{@code !interop} 诊断工具的正文。
+     * 抽成纯函数以便离线断言"五要素齐全"——原始名 / 归一化匹配键 / 包根 / 模板+通道 /
+     * 逐文件结果(+ 无模板时给原因)。真机只差"文件中继把这段打进日志"这一步。
+     */
+    public static String formatStatus(String rawName, String matchKey, String root,
+                                     String templateLine, String channelLine, String detail,
+                                     String fileOutcomes, boolean injected) {
         StringBuilder sb = new StringBuilder("interop 状态(最近一次解析):\n");
-        sb.append("  shaderPack(原始名) = \"").append(r.rawName).append("\"\n");
-        sb.append("  归一化匹配键      = \"").append(r.matchKey).append("\"  (仅用于匹配;路径解析用原始名)\n");
-        sb.append("  包根              = ").append(r.root).append('\n');
-        if (r.template == null) {
+        sb.append("  shaderPack(原始名) = \"").append(rawName).append("\"\n");
+        sb.append("  归一化匹配键      = \"").append(matchKey).append("\"  (仅用于匹配;路径解析用原始名)\n");
+        sb.append("  包根              = ").append(root).append('\n');
+        if (templateLine == null) {
             sb.append("  模板              = (无)  ⇒ 零注入\n");
-            sb.append("  原因              = ").append(r.detail).append('\n');
+            sb.append("  原因              = ").append(detail).append('\n');
         } else {
-            sb.append("  模板              = family=").append(r.template.familyId)
-                    .append(" packName=").append(r.template.packName).append('\n');
-            sb.append("  通道              = ").append(r.channel()).append("  (").append(r.detail).append(")\n");
-            sb.append("  逐文件结果        = ").append(r.fileOutcomes).append('\n');
+            sb.append("  模板              = ").append(templateLine).append('\n');
+            sb.append("  通道              = ").append(channelLine).append("  (").append(detail).append(")\n");
+            sb.append("  逐文件结果        = ").append(fileOutcomes).append('\n');
         }
         sb.append("  最近一次          = ").append(injected ? "注入成功" : "本程序源未注入(见上)");
-        status = sb.toString();
+        return sb.toString();
     }
 
     /** 诊断用:已登记模板清单。 */

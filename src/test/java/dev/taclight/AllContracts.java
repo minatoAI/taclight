@@ -71,6 +71,9 @@ public class AllContracts {
         // 断言"锚点逐字全中 ⇒ 可注入";包不可得时退化为合成 fixture 并大声标注 FIXTURE=。
         System.out.println("== InteropAnchorFixtureContract ==");
         dev.taclight.interop.InteropAnchorFixtureContract.main(args);
+        // !interop 诊断工具契约(2026-09-19):内容层五要素(纯逻辑)+ 接线层(源码文本级)。
+        System.out.println("== InteropStatusContract ==");
+        dev.taclight.interop.InteropStatusContract.main(args);
         System.out.println("== InlineCoreContract ==");
         InlineCoreContract.main(args);
         System.out.println("== UploaderSemanticContract ==");
