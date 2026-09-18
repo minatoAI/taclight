@@ -54,6 +54,14 @@ public class TemplateLibraryContract {
                         && rule.ops.get(0).content.equals("#version 430 core"),
                 "版本算子锚 = 运行时实证形态(坑80:patchComposite 输入经 Iris 规范化,\n"
                         + "#version 行为双空格,锚必须按 DUMP 实测文本编写)");
+        // 2026-09-19 闸门换位:锚 = 运行时(双空格)首选 + 原始文件(单空格)备选,逐字不做模糊匹配;
+        // 离线 fixture(原始文件口径)与真机运行时(规范化口径)因此都能判定"锚点在不在"。
+        check(rule.ops.get(0).anchors != null && rule.ops.get(0).anchors.contains("#version 330"),
+                "版本算子备选锚 = 原始文件形态(#version 单空格): " + rule.ops.get(0).anchors);
+        check(t.requiredSymbols != null
+                        && t.requiredSymbols.contains("taclight_surface_lighting(")
+                        && t.requiredSymbols.contains("taclight_shoulder3("),
+                "注后自检必需签名: " + t.requiredSymbols);
         check(rule.ops.get(2).content.contains("taclight_surface_lighting(viewPos, gbuffer.albedo"),
                 "调用点算子 = 2.0 core 新签名(非路线 P 旧签名)");
         // 2026-09-03 真实感调参(用户体感"光晕太亮照不清"):调用点必须与宿主物理量纲一致。
@@ -126,6 +134,13 @@ public class TemplateLibraryContract {
         check(fRule.ops.get(1).anchor.equals("#version  130")
                         && fRule.ops.get(1).content.contains("GL_ARB_shader_storage_buffer_object"),
                 "extension 算子锚 = 运行时实测形态(#version 双空格,宿主 SSBO 同式)");
+        check(fRule.ops.get(1).anchors != null && fRule.ops.get(1).anchors.contains("#version 130"),
+                "extension 算子备选锚 = 原始文件形态(#version 单空格;2026-09-19 闸门换位): "
+                        + fRule.ops.get(1).anchors);
+        check(t.requiredSymbols != null
+                        && t.requiredSymbols.contains("taclight_surface_lighting(")
+                        && t.requiredSymbols.contains("taclight_shoulder3("),
+                "注后自检必需签名: " + t.requiredSymbols);
         check(fRule.ops.get(2).anchor.equals("void DoLighting("),
                 "片元内联锚 = void DoLighting( 定义行(运行时片元半体 2960 行实测)");
         // 2026-09-03 晚:内联核心从"DoLighting 函数体内"搬到"顶点 main 体内

@@ -25,6 +25,8 @@ public final class TemplateLibrary {
         public String op;
         public String anchor;
         public String content;
+        /** 备选锚点(逐字;2026-09-19 新增:运行时/原始文件两种形态,见 PatchExecutor 类注释)。 */
+        public List<String> anchors;
     }
 
     public static final class FileRule {
@@ -39,6 +41,8 @@ public final class TemplateLibrary {
         public String packName;
         public Map<String, String> packHash;
         public List<FileRule> files;
+        /** 注入后必须出现的符号(注后自检;2026-09-19 新增)。空 = 只查 marker/括号。 */
+        public List<String> requiredSymbols = List.of();
     }
 
     private static volatile String inlineCoreCache;
@@ -92,6 +96,13 @@ public final class TemplateLibrary {
                     t.packHash.put(e.getKey(), e.getValue().getAsString());
                 }
             }
+            if (root.has("requiredSymbols") && root.get("requiredSymbols").isJsonArray()) {
+                List<String> syms = new ArrayList<>();
+                for (var se : root.getAsJsonArray("requiredSymbols")) {
+                    if (se.isJsonPrimitive()) syms.add(se.getAsString());
+                }
+                t.requiredSymbols = List.copyOf(syms);
+            }
             t.files = new ArrayList<>();
             for (var fe : root.getAsJsonArray("files")) {
                 if (!fe.isJsonObject()) return Optional.empty();
@@ -115,6 +126,18 @@ public final class TemplateLibrary {
                     op.anchor = oo.has("anchor") && !oo.get("anchor").isJsonNull()
                             ? oo.get("anchor").getAsString() : null;
                     op.content = reqString(oo, "content");
+                    if (oo.has("anchors") && oo.get("anchors").isJsonArray()) {
+                        List<String> alts = new ArrayList<>();
+                        for (var ae : oo.getAsJsonArray("anchors")) {
+                            if (ae.isJsonPrimitive()) {
+                                String a = ae.getAsString();
+                                if (a != null && !a.isBlank() && !a.equals(op.anchor)) alts.add(a);
+                            }
+                        }
+                        op.anchors = List.copyOf(alts);
+                    } else {
+                        op.anchors = List.of();
+                    }
                     if ("insertAtEnd".equals(op.op)) {
                         if (op.content == null) return Optional.empty();
                     } else if (op.anchor == null || op.content == null) {

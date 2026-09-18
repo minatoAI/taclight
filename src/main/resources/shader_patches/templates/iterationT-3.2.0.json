@@ -2,13 +2,14 @@
   "familyId": "iterationT",
   "packName": "iterationT 3.2.0",
   "packHash": { "shaders/composite.fsh": "addc5c6008d98522" },
+  "requiredSymbols": ["taclight_surface_lighting(", "taclight_shoulder3("],
   "files": [
     {
       "file": "shaders/composite.fsh",
       "selector": "finalComposite += HeldLighting(viewPos, viewDir, gbuffer.normalL",
       "selectorCount": 1,
       "ops": [
-        { "op": "replaceFirst", "anchor": "#version  330", "content": "#version 430 core" },
+        { "op": "replaceFirst", "anchor": "#version  330", "anchors": ["#version  330", "#version 330"], "content": "#version 430 core" },
         {
           "op": "insertBeforeLine",
           "anchor": "vec3 HeldLighting(vec3 viewPos, vec3 viewDir, vec3 normal, float roughness, vec3 ao, bool isHand){",

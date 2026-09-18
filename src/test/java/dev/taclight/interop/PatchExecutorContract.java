@@ -25,7 +25,73 @@ public class PatchExecutorContract {
         unknownOp();
         contentVerbatim();
         lastLine();
+        anchorAlternatives();
+        selfCheckGate();
         System.out.println("PatchExecutorContract: ALL PASS (" + checks + " checks)");
+    }
+
+    /**
+     * 备选锚点(2026-09-19):首选未命中时按序试备选,<b>仍逐字</b>(不做模糊匹配);
+     * 全部未命中 = 中止,且失败原因必须可操作(算子序号 + 试过的锚点)。
+     */
+    private static void anchorAlternatives() {
+        String t = "#version 130\nbody";
+        String r = PatchExecutor.apply(t, null, null, List.of(
+                new PatchExecutor.Op("insertAfterLine", "#version  130", "EXT", List.of("#version 130"))));
+        check(r != null && r.contains("EXT"),
+                "★ 备选锚点:首选(运行时双空格)未命中 ⇒ 用备选(原始文件单空格)注入成功");
+        check(PatchExecutor.apply(t, null, null, List.of(
+                new PatchExecutor.Op("insertAfterLine", "#version  130", "EXT", List.of("#version 999")))) == null,
+                "首选与备选都未命中 = 中止(不给模糊匹配留口子)");
+        PatchExecutor.Result res = PatchExecutor.applyDetailed(t, "body", 1, List.of(
+                new PatchExecutor.Op("insertAfterLine", "#version  130", "EXT", List.of("#version 999"))),
+                List.of());
+        check(!res.ok() && res.failure.contains("算子 #1") && res.failure.contains("#version  130")
+                        && res.failure.contains("#version 999"),
+                "★ 失败原因可操作(算子序号 + 试过的锚点): " + res.failure);
+        check(res.selectorHit, "selector 命中但注入失败 ⇒ selectorHit=true(调用方据此报因)");
+        check(!PatchExecutor.applyDetailed("zzz", "body", 1, List.of(
+                        new PatchExecutor.Op("insertAtEnd", null, "x")), List.of()).selectorHit,
+                "selector 未命中 ⇒ selectorHit=false(调用方静默:该源不是本模板目标)");
+        check(new PatchExecutor.Op("insertAtEnd", null, "x", List.of("a", "a", " "))
+                .anchors().equals(List.of("a")),
+                "备选锚点去空白/去重(insertAtEnd 无首选锚点 ⇒ 只剩去重后的 a)");
+    }
+
+    /**
+     * 注后自检(硬裁定 ②):marker 计数恒等 / 必需签名齐全 / 宿主括号平衡未破坏。
+     * marker 不变式 = "原文 0 + 注入内容 N ⇒ 结果恰 N"(真实模板 N=3:两个 patch 区标记 + 内联核自带一个)。
+     */
+    private static void selfCheckGate() {
+        String t = "a\nANCHOR\nb";
+        List<PatchExecutor.Op> good = List.of(new PatchExecutor.Op("insertAfterLine", "ANCHOR",
+                "/* TACLIGHT_PATCH_BEGIN x */\nvec3 f() { return vec3(1.0); }"));
+        check(PatchExecutor.applyDetailed(t, "ANCHOR", 1, good, List.of("vec3 f(")).ok(),
+                "自检通过:marker 计数恒等 + 必需签名在 + 宿主括号平衡");
+        PatchExecutor.Result missing = PatchExecutor.applyDetailed(t, "ANCHOR", 1, good,
+                List.of("taclight_surface_lighting("));
+        check(!missing.ok() && missing.failure.contains("缺必需签名"),
+                "自检:缺必需签名 ⇒ 不注入: " + missing.failure);
+        // 真实模板形态:一次注入落地 3 个 marker(两个区标记 + 内联核自带)必须被接受
+        List<PatchExecutor.Op> three = List.of(new PatchExecutor.Op("insertAfterLine", "ANCHOR",
+                "/* TACLIGHT_PATCH_BEGIN a */\n/* TACLIGHT_PATCH_BEGIN core */\n/* TACLIGHT_PATCH_BEGIN b */"));
+        check(PatchExecutor.applyDetailed(t, "ANCHOR", 1, three, List.of()).ok(),
+                "自检:注入内容含 3 个 marker(真实模板形态)⇒ 通过,不误杀");
+        // 恒等不变式:结果 marker 数 ≠ 注入内容 marker 数 ⇒ 拒(直接调 selfCheck 制造"意外多出")
+        check(PatchExecutor.selfCheck("a",
+                        "a\n/* TACLIGHT_PATCH_BEGIN x */\n/* TACLIGHT_PATCH_BEGIN y */",
+                        good, List.of()) != null,
+                "自检:结果 marker 数多于注入内容所含 ⇒ 拒(意外复制被抓)");
+        PatchExecutor.Result unbalanced = PatchExecutor.applyDetailed(t, "ANCHOR", 1, List.of(
+                new PatchExecutor.Op("insertAfterLine", "ANCHOR", "if (x) {")), List.of());
+        check(!unbalanced.ok() && unbalanced.failure.contains("花括号"),
+                "自检:注入片段破坏宿主括号平衡 ⇒ 不注入: " + unbalanced.failure);
+        check(PatchExecutor.applyDetailed(t, "ANCHOR", 2, good, List.of()).failure.contains("selector 命中 1 次"),
+                "selectorCount 不符的原因含实际次数");
+        // 无 marker 的合成注入(旧契约路径)不得被 marker 自检误杀
+        check(PatchExecutor.apply("a\nb", null, null,
+                List.of(new PatchExecutor.Op("insertAtEnd", null, "c = 1"))) != null,
+                "旧 apply() 合成用例(注入内容无 marker)不被自检误杀(向后兼容)");
     }
 
     private static void markerConstant() {

@@ -35,6 +35,62 @@ public final class PackFingerprint {
         return Optional.empty();
     }
 
+    /**
+     * 包名<b>匹配键</b>(2026-09-19 interop 包名闸门修复;只用于比较,<b>绝不可用于路径解析</b>)。
+     *
+     * <p>背景:用户用 {@code ComplementaryReimagined_r5.9.3.zip} 时零注入。Oculus 写进
+     * {@code config/oculus.properties} 的 {@code shaderPack=} 是<b>文件名原样</b>(带 {@code .zip}
+     * 与版本后缀),而模板登记的是开发机<b>目录包名</b>({@code ComplementaryReimagined} /
+     * {@code iterationT 3.2.0}),{@code name.equals(t.packName)} 直接失败 ⇒ 无模板 ⇒ 零注入
+     * (任何 {@code .zip} 包都注入不了)。实测:用户日志 2026-09-19 03:16:17
+     * {@code 包 "ComplementaryReimagined_r5.9.3.zip" 暂无注入模板}。</p>
+     *
+     * <p><b>★ F4(2026-09-19 硬裁定 ①)</b>:归一化后的键<b>只能</b>用于模板匹配。
+     * {@link #resolvePackRoot} 必须拿<b>原始名</b>({@code ComplementaryReimagined_r5.9.3.zip})
+     * —— 磁盘上的文件名带后缀,拿归一化键去 resolve 会找不到包根,名字修好了照样零注入。
+     * 调用方:{@code RuntimePackInjector} 用原始名解析包根、用本键匹配模板。</p>
+     *
+     * <p>规则:trim → 去结尾 {@code .zip}(大小写不敏感,只去一次)→ 连续 {@code [ _-]}
+     * 折叠成一个空格 → 去结尾 {@code /} → 小写。</p>
+     */
+    public static String packMatchKey(String rawName) {
+        if (rawName == null) return "";
+        String s = rawName.trim();
+        if (s.length() >= 4 && s.regionMatches(true, s.length() - 4, ".zip", 0, 4)) {
+            s = s.substring(0, s.length() - 4);
+        }
+        s = s.replaceAll("[ _-]+", " ").trim();
+        while (s.endsWith("/")) s = s.substring(0, s.length() - 1).trim();
+        return s.toLowerCase(java.util.Locale.ROOT);
+    }
+
+    /**
+     * 包名匹配(2026-09-19):归一化后<b>精确相等</b>,或"模板名 + 版本后缀"。
+     *
+     * <p>版本后缀规则 = 余下部分匹配 {@code " ?[a-z]?\d[\w.\- ]*"}:
+     * <ul>
+     *   <li>{@code ComplementaryReimagined_r5.9.3.zip} → 键 {@code complementaryreimagined r5.9.3}
+     *       ⇒ 余 {@code " r5.9.3"} 命中(可选单字母 + 版本号)✓</li>
+     *   <li>{@code iterationT-3.2.0.zip} → 键 {@code iterationt 3.2.0} ⇒ 与模板键精确相等 ✓</li>
+     *   <li>{@code ComplementaryReimaginedExtra} → 余 {@code "extra"} <b>不</b>命中
+     *       (分隔符后必须是"可选单字母+数字")⇒ 同前缀异包不误命中 ✓</li>
+     *   <li>{@code iterationT 3.2.0 (taclight)}(本机路线P派生包)→ 余 {@code " (taclight)"}
+     *       <b>不</b>命中 ✓(派生包已内联,不该再注入一次)</li>
+     * </ul>
+     * 残余风险(如实):{@code ComplementaryReimagined_2} 这类"数字后缀但语义不同"的包会被判为
+     * 候选——但<b>闸门不在名字</b>:候选仍要过哈希快速通道或"锚点逐字全中 + 注后自检"的真闸门
+     * (见 {@code RuntimePackInjector}),锚点不中则零注入。</p>
+     */
+    public static boolean matchesPackName(String rawName, String templatePackName) {
+        String a = packMatchKey(rawName);
+        String b = packMatchKey(templatePackName);
+        if (a.isEmpty() || b.isEmpty()) return false;
+        if (a.equals(b)) return true;
+        if (!a.startsWith(b)) return false;
+        String rest = a.substring(b.length());
+        return rest.matches(" ?[a-z]?\\d[\\w.\\- ]*");
+    }
+
     /** 包根定位:绝对路径优先(存在即用),否则 shaderpacks 目录下按名找。 */
     public static Optional<Path> resolvePackRoot(Path shaderpacksDir, String packName) {
         if (shaderpacksDir == null || packName == null || packName.isBlank()) return Optional.empty();

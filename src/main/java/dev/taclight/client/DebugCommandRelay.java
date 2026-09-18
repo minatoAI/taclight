@@ -125,6 +125,24 @@ public final class DebugCommandRelay {
             ClientEvents.dumpDiag();
             return;
         }
+        if (line.startsWith("!interop")) {
+            // 2026-09-19 interop 注入自助诊断(用户"光影包没生效"的唯一可操作通道):
+            // 原始包名 → 归一化匹配键 → 包根 → 模板/通道 → 逐文件结果;另附模板清单与哈希对照。
+            // 与既有分支无前缀包含(!i* 仅此一条)。
+            StringBuilder sb = new StringBuilder(dev.taclight.interop.RuntimePackInjector.statusReport());
+            sb.append("\n  已登记模板 = ")
+                    .append(String.join(" | ", dev.taclight.interop.RuntimePackInjector.registeredTemplates()));
+            String raw = dev.taclight.interop.RuntimePackInjector.rawPackName();
+            sb.append("\n  当前 shaderPack = ").append(raw);
+            var cmp = dev.taclight.interop.RuntimePackInjector.hashComparison(raw);
+            for (var e : cmp.entrySet()) {
+                sb.append("\n  哈希 ").append(e.getKey()).append(" = ").append(e.getValue());
+            }
+            for (String l : sb.toString().split("\n")) {
+                TacLightMod.LOGGER.info("[TacLight] RELAY interop | {}", l);
+            }
+            return;
+        }
         if (line.equals("!lan") || line.startsWith("!lan ")) {
             // 直调服务端开 LAN(2026-09-04 双端漏光环境:/publish 走客户端命令树被
             // 本地预解析拒"未知或不完整的命令";此处绕过命令分发器,直接调集成服

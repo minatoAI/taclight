@@ -24,7 +24,54 @@ public class PackFingerprintContract {
         absolutePath();
         sha256Vector();
         fingerprintMatch();
+        packNameMatching();
+        pathMustUseRawName();
         System.out.println("PackFingerprintContract: ALL PASS (" + checks + " checks)");
+    }
+
+    /**
+     * 包名层(2026-09-19 用户 zip 包零注入修复):归一化 + 版本后缀容错 + 反例。
+     * 正例 = 用户实测的真实形态;反例 = 必须挡住"同前缀异包/派生包"。
+     */
+    private static void packNameMatching() {
+        check(PackFingerprint.packMatchKey("ComplementaryReimagined_r5.9.3.zip")
+                        .equals("complementaryreimagined r5.9.3"),
+                "匹配键:去 .zip + 折叠分隔符 + 小写 ⇒ " + PackFingerprint.packMatchKey("ComplementaryReimagined_r5.9.3.zip"));
+        check(PackFingerprint.matchesPackName("ComplementaryReimagined_r5.9.3.zip", "ComplementaryReimagined"),
+                "★ 用户实测形态(带 .zip + 版本后缀)命中 complementary 模板");
+        check(PackFingerprint.matchesPackName("ComplementaryReimagined", "ComplementaryReimagined"),
+                "目录包(无后缀)精确命中(开发机形态,回归)");
+        check(PackFingerprint.matchesPackName("iterationT-3.2.0.zip", "iterationT 3.2.0"),
+                "连字符 zip 命中 iterationT 模板(分隔符折叠)");
+        check(PackFingerprint.matchesPackName("iterationT 3.2.0.zip", "iterationT 3.2.0"),
+                "空格 zip 命中 iterationT 模板");
+        check(PackFingerprint.matchesPackName("ITERATIONT 3.2.0", "iterationT 3.2.0"),
+                "大小写不敏感");
+        check(!PackFingerprint.matchesPackName("ComplementaryReimaginedExtra.zip", "ComplementaryReimagined"),
+                "★ 反例:同前缀异包(…Extra)不命中(版本后缀规则要求分隔符+可选单字母+数字)");
+        check(!PackFingerprint.matchesPackName("iterationT 3.2.0 (taclight)", "iterationT 3.2.0"),
+                "★ 反例:路线P 派生包不命中(已内联,不该二次注入)");
+        check(!PackFingerprint.matchesPackName("OtherPack_r1.zip", "ComplementaryReimagined"),
+                "反例:无关包不命中");
+        check(!PackFingerprint.matchesPackName("", "ComplementaryReimagined")
+                        && !PackFingerprint.matchesPackName(null, "ComplementaryReimagined")
+                        && !PackFingerprint.matchesPackName("ComplementaryReimagined", ""),
+                "空名/null/空模板名 = 不命中");
+    }
+
+    /**
+     * ★ F4 钉死(硬裁定 ①):归一化键只许用于<b>匹配</b>,路径解析必须用<b>原始名</b>。
+     * 同一份输入:匹配成功、但用归一化键 resolve 必须失败 —— 后人"顺手"把名字归一化就会红。
+     */
+    private static void pathMustUseRawName() throws Exception {
+        Path root = Files.createTempDirectory("taclight-fp-rawname");
+        Files.writeString(root.resolve("MyPack_r1.0.zip"), "x");
+        check(PackFingerprint.resolvePackRoot(root, "MyPack_r1.0.zip").isPresent(),
+                "★ F4:路径解析用原始名(带 .zip)⇒ 找到包根");
+        check(!PackFingerprint.resolvePackRoot(root, PackFingerprint.packMatchKey("MyPack_r1.0.zip")).isPresent(),
+                "★ F4:拿归一化键(" + PackFingerprint.packMatchKey("MyPack_r1.0.zip") + ")去 resolve ⇒ 找不到(故绝不可用于路径)");
+        check(PackFingerprint.matchesPackName("MyPack_r1.0.zip", "MyPack"),
+                "★ F4:同一对的匹配键命中模板(匹配与路径两条路各自正确)");
     }
 
     private static void propertiesParse() {

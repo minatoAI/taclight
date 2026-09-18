@@ -67,6 +67,10 @@ public class AllContracts {
         TemplateLibraryContract.main(args);
         System.out.println("== PackFingerprintContract ==");
         PackFingerprintContract.main(args);
+        // 锚点层离线判据(2026-09-19 闸门换位):读真实包 fixture(本机为用户 r5.9.3 zip),
+        // 断言"锚点逐字全中 ⇒ 可注入";包不可得时退化为合成 fixture 并大声标注 FIXTURE=。
+        System.out.println("== InteropAnchorFixtureContract ==");
+        dev.taclight.interop.InteropAnchorFixtureContract.main(args);
         System.out.println("== InlineCoreContract ==");
         InlineCoreContract.main(args);
         System.out.println("== UploaderSemanticContract ==");
