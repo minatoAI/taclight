@@ -10,14 +10,26 @@ import java.util.regex.Pattern;
 /**
  * 分类接线 + 双路径镜像契约(2026-09-18 雪地菱形阵列根因轮)。纯 JVM,不加载 MC。
  *
- * <p>Java 体素路径的形状采样要真 Level/BlockState,契约测试跑不到(无 registry bootstrap);
- * 因此这里用<b>源码文本级断言</b>钉住"接线"这一层,配合 {@code VoxelClassifyContract}
- * 的纯逻辑断言(= 语义层),两层一起覆盖根因①②③:</p>
+ * <p><b>层级声明(Lead 复核项 ③,防误读)</b>:本契约的断言是<b>源码文本级</b>,
+ * <b>不是运行时行为断言</b>——"文本断言变红"只证明"接线被改坏了",不证明"运行时行为已验"。
+ * 运行时那一层由 {@code VoxelRealRegistryContract}(真 registry + 真 {@code Blocks.*} +
+ * 直接调用生产 {@code VoxelGrid.classify})与 {@code VoxelClassifyContract}(纯逻辑分档表)
+ * 承担;三者互不替代:</p>
+ * <ul>
+ *   <li>{@code VoxelClassifyContract} —— 纯逻辑(合成 AABB 夹具):分档表 + 位置相关语义;</li>
+ *   <li>{@code VoxelRealRegistryContract} —— 运行时(真方块):真碰撞形 ⇒ 分类码;</li>
+ *   <li>本契约 —— 文本:接线(CURSOR/缓存键/兜底)+ 双路径镜像一致性;</li>
+ *   <li>{@code BoundedIdentityCacheContract} —— 纯逻辑:形状身份缓存的<b>有界性</b>。</li>
+ * </ul>
+ *
+ * <p>本契约钉住:</p>
  * <ul>
  *   <li>根因② 接线:{@code CURSOR.set(x, y, z)} 必须在 {@code getCollisionShape(level, CURSOR)}
- *       之前,且旧的 {@code isSolidRender(level, CURSOR)} 已被移除;</li>
- *   <li>根因③ 缓存策略:{@code CLASS_CACHE.put} 只出现在形状分支之前(位置无关档),
- *       形状分支(从 {@code CURSOR.set} 起的尾部)不得写入缓存、不得回 {@code CODE_SOLID};</li>
+ *       之前,且旧的 {@code isSolidRender(level, CURSOR)} 已被移除;{@code classify} 包私有 +
+ *       形参 {@code BlockGetter}(供真 registry 契约直接驱动);</li>
+ *   <li>根因③ 缓存策略:形状分支不得写 {@code CLASS_CACHE}(位置无关档)且不得回
+ *       {@code CODE_SOLID};形状键必须是 {@code VoxelShape} 实例,且由有界
+ *       {@code BoundedIdentityCache} 承载;</li>
  *   <li>镜像一致性:{@code block.properties} 的 2001/2002 与 {@code VoxelGrid} 的
  *       VEG_IDS/LEAF_IDS 同源;新增的 2003(透光档)与着色器 0.0 分支对齐。</li>
  * </ul>
@@ -32,7 +44,9 @@ public class VoxelGridWiringContract {
         String adapter = read("pack/shaders/lib/taclight_adapter.glsl");
 
         // ---------------- 1. 根因②:坐标必须用上 ----------------
-        String body = methodBody(grid, "private static int classify(");
+        String body = methodBody(grid, "static int classify(");
+        check(grid.contains("static int classify(BlockGetter level, BlockState state, int x, int y, int z)"),
+                "classify 为包私有 + 形参 BlockGetter(供 VoxelRealRegistryContract 直接驱动生产方法,测的路径 = 生产路径)");
         check(body.contains("CURSOR.set(x, y, z)"), "classify 内出现 CURSOR.set(x, y, z)(坐标真正被使用)");
         int setAt = body.indexOf("CURSOR.set(x, y, z)");
         int shapeAt = body.indexOf("getCollisionShape(level, CURSOR)");
@@ -45,20 +59,33 @@ public class VoxelGridWiringContract {
         int elseAt = body.lastIndexOf("else {", setAt);
         check(elseAt > 0, "形状分支是 classify 内的 else { ... } 块");
         String shapeBranch = balancedBlock(body, body.indexOf('{', elseAt));
-        check(shapeBranch.contains("VoxelClassifier.centerColumnTopY"), "形状分支用 VoxelClassifier.centerColumnTopY 取中心列顶高");
-        check(shapeBranch.contains("VoxelClassifier.codeForTopHeight"), "形状分支用 VoxelClassifier.codeForTopHeight 落档(不再是兜底实心)");
+        check(shapeBranch.contains("getCollisionShape(level, CURSOR)")
+                        && shapeBranch.contains("getOcclusionShape(level, CURSOR)"),
+                "形状分支同时取碰撞形与遮挡形(C 口径:守卫读 coll、占比读 occ)");
+        check(shapeBranch.contains("VoxelClassifier.codeForShapes"), "形状分支用 VoxelClassifier.codeForShapes 落档(不再是兜底实心)");
         check(!shapeBranch.contains("CODE_SOLID"),
                 "形状分支不得回 CODE_SOLID(旧兜底 = 雪层整格实心 ⇒ 方格阵列;违反即本断言变红)");
         check(!shapeBranch.contains("CLASS_CACHE"), "形状分支不写位置无关档的 CLASS_CACHE(位置相关结论不得按 state 冻结)");
-        check(shapeBranch.contains("SHAPE_CACHE.get(shape)") && shapeBranch.contains("SHAPE_CACHE.put(shape, shapeCode)"),
-                "形状分支以 VoxelShape 实例为缓存键(位置相关性已编码在 shape 中 ⇒ 不存在根因③的冻结,同时免逐格 toAabbs 分配)");
+        check(shapeBranch.contains("SHAPE_CACHE.get(occ)")
+                        && shapeBranch.contains("SHAPE_CACHE.put(occ, new ShapeCode(coll, shapeCode))"),
+                "形状缓存主键 = occ 形状实例(占比真源),值里带 coll 实例");
+        check(shapeBranch.contains("hit.coll() == coll"),
+                "命中还需 coll 身份一致(守卫 1/2 读 coll;只按 occ 命中在模组方块常量 occ + 变 coll 时会误命中)");
         check(!shapeBranch.contains("get(state)") && !shapeBranch.contains("put(state"),
                 "形状缓存键必须是形状而非 BlockState(键回退到 state 即等于重演根因③)");
+        // 有界性接线(Lead 复核项 ①):上限必须真的接上纯类,而不是裸露 IdentityHashMap
+        check(grid.contains("private static final int SHAPE_CACHE_CAP = 4096;"),
+                "SHAPE_CACHE 容量常量 = 4096");
+        check(grid.contains("new BoundedIdentityCache<>(SHAPE_CACHE_CAP)")
+                        && grid.contains("BoundedIdentityCache<VoxelShape, ShapeCode> SHAPE_CACHE"),
+                "SHAPE_CACHE 由 BoundedIdentityCache 承载(有界性语义在纯类里,由 BoundedIdentityCacheContract 断言)");
+        check(!shapeBranch.contains("SHAPE_CACHE.clear()"),
+                "形状分支不自带清空逻辑(上限+清空已内聚到 BoundedIdentityCache,避免两处口径分叉)");
         int putAt = body.indexOf("CLASS_CACHE.put");
         check(putAt > setAt,
                 "唯一的 CLASS_CACHE.put 位于形状分支之后 ⇒ 形状分支已 return、不可达(位置相关结论永不入 state 级缓存)");
         check(!body.contains("CODE_SOLID"),
-                "classify 方法体内不出现 CODE_SOLID(实心只能经 codeForTopHeight 依真实形状产出)");
+                "classify 方法体内不出现 CODE_SOLID(实心只能经 codeForShapes 依真实形状产出)");
         check(!body.contains("默认实心"), "classify 内不再有\"默认实心\"兜底");
 
         // ---------------- 3. 镜像一致性:2001/2002 与 Java ID 表同源 ----------------

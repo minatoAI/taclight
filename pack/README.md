@@ -30,6 +30,20 @@ pack/shaders/
 └── final.(vsh|fsh)             # M2 合成:bloom 叠加 → 曝光 → ACES → split-tone → 暗角 → 颗粒
 ```
 
+## 材质分类(block.properties)与状态谓词
+
+遮挡系数分档(2026-09-18 起):`block.2003` 薄片档 **0.0** / `block.2001` 中低档 **0.25**
+(镂空植被 + 半砖 bottom/楼梯 bottom/雪 3–7 层)/ `block.2002` 树叶 **0.6** / 其余实心 **1.0**。
+
+**改这个文件前必读(Oculus 1.8.0 实测)**:状态过滤只能写 `minecraft:name:key=value`(冒号);
+写成 `minecraft:name[key=value]` 会被解析成**不存在的** `minecraft:minecraft` 而**静默失效**;
+未知但格式合法的 ID 会被静默跳过;格式非法的 ID 会抛异常中止整包加载。该结论由**发布的**
+`BlockEntry.parse` 对全部 226 个 token 回读校验(0 mismatch)得出,不是推测。
+
+Java 体素路径按**运行时碰撞形 + 遮挡形**分档(C 口径:守卫读碰撞形、占比读遮挡形),
+覆盖面大于本清单(含模组方块);本清单只能列原版 ID,故 `!voxel off` 的 SSO 回退路径在
+清单之外仍会漂移 —— **以 Java 体素路径为主路径**。
+
 ## 安装
 
 1. 安装 Forge 1.20.1 + Oculus 1.8.0 + Embeddium ≥0.3.31(不支持 OptiFine);

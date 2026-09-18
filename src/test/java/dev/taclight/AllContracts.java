@@ -13,11 +13,13 @@ import dev.taclight.channel.RemotePosSnapContract;
 import dev.taclight.channel.RemoteLookPredictorContract;
 import dev.taclight.channel.SpotlightBufferLayoutContract;
 import dev.taclight.channel.UploaderSemanticContract;
+import dev.taclight.channel.BoundedIdentityCacheContract;
 import dev.taclight.channel.VoxelClassifyContract;
 import dev.taclight.channel.VoxelDdaContract;
 import dev.taclight.channel.VoxelFieldContract;
 import dev.taclight.client.BobViewControlContract;
 import dev.taclight.client.VoxelGridWiringContract;
+import dev.taclight.client.VoxelRealRegistryContract;
 import dev.taclight.client.CameraSweepContract;
 import dev.taclight.client.TpFallbackControlContract;
 import dev.taclight.client.TpOffscreenRenderGateContract;
@@ -53,6 +55,8 @@ public class AllContracts {
         VoxelDdaContract.main(args);
         System.out.println("== VoxelClassifyContract ==");
         VoxelClassifyContract.main(args);
+        System.out.println("== BoundedIdentityCacheContract ==");
+        BoundedIdentityCacheContract.main(args);
         System.out.println("== VoxelGridWiringContract ==");
         VoxelGridWiringContract.main(args);
         System.out.println("== ShaderCoreContract ==");
@@ -115,6 +119,10 @@ public class AllContracts {
         PlayerLightSyncContract.main(args);
         System.out.println("== LightStatePersistenceContract ==");
         LightStatePersistenceContract.main(args);
+        // 真 registry 契约放最后:bootstrap 若在本机 JavaExec 环境不可用,它会大声失败,
+        // 但前面的结果已全部打印(不会掩盖其它契约的结论)。
+        System.out.println("== VoxelRealRegistryContract ==");
+        VoxelRealRegistryContract.main(args);
         System.out.println("AllContracts: ALL PASS");
     }
 }

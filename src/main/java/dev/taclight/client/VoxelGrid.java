@@ -1,11 +1,13 @@
 package dev.taclight.client;
 
+import dev.taclight.channel.BoundedIdentityCache;
 import dev.taclight.channel.SpotlightData;
 import dev.taclight.channel.VoxelClassifier;
 import dev.taclight.channel.VoxelField;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
@@ -22,26 +24,30 @@ import java.util.Set;
  * 供 LightBuffer 经 SSBO 尾段上传,GLSL 做 Amanatides-Woo DDA 步进。
  *
  * <p>分类与 pack/shaders/block.properties 同源(SSO 消费的 colortex3.a 语义):
- * 2001 软植被 / 2002 树叶 / 其余实心;空气与流体(水/熔岩,gbuffers_water 不写
- * colortex3)透光。性能护栏:chunk section hasOnlyAir 整段跳过 + <b>位置无关档</b>的
- * BlockState 分类身份缓存(位置相关档的缓存策略见下);实测构建耗时经
- * {@code !voxel status} 观察。</p>
+ * 2001 中低档 0.25 / 2002 树叶 0.6 / 2003 薄片档 0.0(2026-09-18 新增)/ 其余实心 1.0;
+ * 空气与流体(水/熔岩,gbuffers_water 不写 colortex3)透光。性能护栏:chunk section
+ * hasOnlyAir 整段跳过 + <b>位置无关档</b>的 BlockState 分类身份缓存(位置相关档的缓存策略见下);
+ * 实测构建耗时经 {@code !voxel status} 观察。</p>
  *
  * <p><b>2026-09-18 雪地方格阵列根因轮</b>(用户真机实测 v0.10.0):旧兜底"非空气/
  * 非树叶/非软植被/非流体 ⇒ 整格实心"把雪层(1/8 格高)等非满方块当整格遮挡 ⇒ 光斑
  * 成规则菱形阵列。两条根因的处置:
  * <ol>
  *   <li><b>①</b> 新增"形状分档"——非两张 ID 表的方块不再默认实心,改由
- *       {@link VoxelClassifier}(真实碰撞形顶高 h → EMPTY/VEG/SOLID)判定;</li>
+ *       {@link VoxelClassifier} 判定(C 口径:守卫 1 {@code coll} 空⇒EMPTY /
+ *       守卫 2 {@code coll maxY>1.0}⇒SOLID / 其余按 <b>{@code occ} 遮挡形实心占比</b>
+ *       分档 0.25/0.9);</li>
  *   <li><b>②</b> {@code x/y/z} 与 {@code CURSOR.set(...)} 必须用上——旧代码的 CURSOR
  *       从未 set ⇒ {@code isSolidRender} 永远在世界原点求值;</li>
  *   <li><b>③</b> 缓存策略(显式二选一,取任务书推荐的 (i)):<b>位置无关档
  *       (空气 / 树叶 / 软植被 ID / 流体)按 state 身份走 {@code CLASS_CACHE};
  *       形状分档是位置相关的,一律不入 state 级缓存,改以 {@code VoxelShape} <b>实例</b>为键
- *       走 {@code SHAPE_CACHE}</b> —— 位置相关性已被形状本身编码(同实例必同码),
- *       既不会重演根因③,也免掉逐格 {@code toAabbs()} 分配(实测该方法每次调用都新建 ArrayList)。
- *       仍未验证的只有:fence/wall 这类"每次新形状实例"的位置相关方块在极端场景下的
- *       命中率与构建耗时增幅(需真机 {@code !voxel status} 的 lastBuildMs 对比)。</li>
+ *       走<b>有界</b> {@code SHAPE_CACHE}({@link BoundedIdentityCache},cap
+ *       {@link #SHAPE_CACHE_CAP})</b> —— 位置相关性已被形状本身编码(同实例必同码),
+ *       既不会重演根因③,也免掉逐格 {@code toAabbs()} 分配(实测该方法每次调用都新建 ArrayList);
+ *       容量上限防"fence/wall 每次新实例 ⇒ 身份键缓存无限增长"的内存泄漏。
+ *       仍未验证的只有:fence/wall 这类位置相关方块在极端场景下的命中率与构建耗时增幅
+ *       (需真机 {@code !voxel status} 的 lastBuildMs 对比)。</li>
  * </ol></p>
  *
  * <p>运行时开关(客户端本地,DebugCommandRelay):{@code !voxel <on|off|status>},
@@ -73,19 +79,34 @@ public final class VoxelGrid {
      */
     private static final java.util.IdentityHashMap<BlockState, Integer> CLASS_CACHE = new java.util.IdentityHashMap<>();
     /**
-     * 位置相关档的"形状身份"缓存:键 = {@code getCollisionShape} 解析出的 {@code VoxelShape} 实例。
+     * 位置相关档的"形状身份"缓存:<b>主键 = {@code getOcclusionShape} 的 {@code VoxelShape} 实例</b>
+     * (occ 是分档占比的真源,Lead 复核项 ③),值里再存 {@code getCollisionShape} 实例做一致性校验
+     * —— 因为守卫 1/2 读的是 coll(空 / maxY&gt;1.0),只按 occ 命中在"模组方块返回常量 occ 而
+     * coll 随位置变化"时会误命中。校验成本 = 一次引用比较。
      *
-     * <p>为什么以形状为键是安全的(而不是"看起来修了"):分类码是形状(盒列表)的<b>纯函数</b>,
-     * 而形状实例已编码全部位置相关性(栅栏/墙的连接、楼梯朝向、模组方块随坐标变化的形状,
-     * 差异必然体现为不同实例)⇒ 同一实例必然同码,不存在"按 BlockState 冻结首次位置求值"。
-     * 同时省掉位置无关方块(雪层/地毯/半砖/台阶/满方块返回 Block 级静态实例)的逐格
-     * {@code toAabbs()} 分配 —— 该方法每次调用都 {@code Lists.newArrayList()}。
-     * 位置相关方块(fence/wall 的 {@code Shapes.or} 每次新实例)不命中 ⇒ 每格重算(正确,只是慢),
-     * 由 4096 上限清空兜底。渲染线程单线程访问。</p>
+     * <p>为什么以形状实例为键是安全的(而不是"看起来修了"):分类码是 (coll, occ) 盒列表的
+     * <b>纯函数</b>,而形状实例已编码全部位置相关性(栅栏/墙的连接、楼梯朝向、模组方块随坐标
+     * 变化的形状,差异必然体现为不同实例)⇒ 同一对实例必然同码,不存在"按 BlockState 冻结首次
+     * 位置求值"的根因③。同时省掉位置无关方块(雪层/地毯/半砖/台阶/满方块返回 Block 级静态实例)
+     * 的逐格 {@code toAabbs()} 分配 —— 实测该方法每次调用都 {@code Lists.newArrayList()}。</p>
+     *
+     * <p><b>有界性(Lead 复核项 ①)</b>:位置相关方块(fence/wall 的 {@code Shapes.or})每次解析
+     * 都产生<b>新实例</b> ⇒ 无界身份键缓存会随帧数持续增长 = 内存泄漏。故用
+     * {@link BoundedIdentityCache}:容量 {@link #SHAPE_CACHE_CAP},写满即整体清空
+     * (不区分冷热)。命中率下降只影响速度,不影响正确性(缓存不承载语义)。
+     * 有界性由 {@code BoundedIdentityCacheContract} 断言;此处仅断言接线。</p>
      */
-    private static final java.util.IdentityHashMap<VoxelShape, Integer> SHAPE_CACHE = new java.util.IdentityHashMap<>();
-    /** 形状分档的 AABB 暂存(渲染线程单线程;避免逐格分配;不足时按需扩容)。 */
-    private static double[] SHAPE_SCRATCH = new double[VoxelClassifier.BOX_STRIDE * 8];
+    private static final int SHAPE_CACHE_CAP = 4096;
+    private static final BoundedIdentityCache<VoxelShape, ShapeCode> SHAPE_CACHE =
+            new BoundedIdentityCache<>(SHAPE_CACHE_CAP);
+
+    /** 形状分档缓存值:碰撞形实例(校验用)+ 分类码。仅未命中时分配一次。 */
+    private record ShapeCode(VoxelShape coll, int code) {}
+
+    /** 碰撞形 AABB 暂存(渲染线程单线程;避免逐格分配;不足时按需扩容)。 */
+    private static double[] COLL_SCRATCH = new double[VoxelClassifier.BOX_STRIDE * 8];
+    /** 遮挡形 AABB 暂存(占比真源)。 */
+    private static double[] OCC_SCRATCH = new double[VoxelClassifier.BOX_STRIDE * 8];
 
     // 与 pack/shaders/block.properties 的 2001/2002 分类同源(ASCII 清单,镜像维护)
     // 注:2001/2002 之外的原版方块不再"默认实心" —— 由形状分档判定(见 classify);
@@ -186,19 +207,24 @@ public final class VoxelGrid {
     }
 
     /**
-     * 分类(2026-09-18 雪地方格阵列根因轮重写)。
+     * 分类(2026-09-18 雪地方格阵列根因轮重写;C 口径)。
      *
      * <p>两级:<b>位置无关档</b>(空气 / 树叶 ID / 软植被 ID / 流体,与
      * block.properties 的 2001/2002 同源)按 state 身份缓存;<b>位置相关档</b>
-     * (其余所有方块,含雪层/地毯/半砖/楼梯/栅栏/模组方块)按当前格真实碰撞形分档,
-     * 且不入 {@link #CLASS_CACHE}(见该字段注释的缓存策略)。</p>
+     * (其余所有方块,含雪层/地毯/半砖/楼梯/栅栏/模组方块)按当前格真实
+     * <b>碰撞形 + 遮挡形</b>分档,且不入 {@link #CLASS_CACHE}(见该字段注释的缓存策略)。</p>
      *
      * <p>根因②:形状查询前必须 {@code CURSOR.set(x, y, z)};旧代码从不 set ⇒
      * {@code isSolidRender} 永远在世界原点求值。{@code VoxelGridWiringContract}
-     * 以源码文本钉住"set 先于 getCollisionShape、形状分支不含 CODE_SOLID、形状分支不写
-     * CLASS_CACHE(改走 SHAPE_CACHE 且键 = 形状实例)"。</p>
+     * 以源码文本钉住"set 先于两个形状查询、形状分支不含 CODE_SOLID、形状分支不写
+     * CLASS_CACHE(改走有界 SHAPE_CACHE 且主键 = occ 实例)"。</p>
+     *
+     * <p><b>可见性</b>:包私有 + 形参类型 {@link BlockGetter}(而非 Level),以便
+     * {@code VoxelRealRegistryContract} 用真 registry 的 {@code Blocks.*} +
+     * {@code EmptyBlockGetter.INSTANCE} <b>直接驱动本生产方法</b>(而不是在测试里复制一份
+     * 分档逻辑)——"测的路径 = 生产路径"。</p>
      */
-    private static int classify(Level level, BlockState state, int x, int y, int z) {
+    static int classify(BlockGetter level, BlockState state, int x, int y, int z) {
         Integer cached = CLASS_CACHE.get(state);
         if (cached != null) return cached;
         int code;
@@ -212,33 +238,44 @@ public final class VoxelGrid {
             else {
                 // 位置相关档:必须按当前格 set CURSOR(根因②)。
                 CURSOR.set(x, y, z);
-                VoxelShape shape = state.getCollisionShape(level, CURSOR);
-                // 缓存键 = 形状实例(位置相关性已编码在 shape 中,根因③不成立);命中即免逐格 toAabbs 分配。
-                Integer shapeHit = SHAPE_CACHE.get(shape);
-                if (shapeHit != null) return shapeHit;
-                List<AABB> boxes = shape.toAabbs();
-                int n = boxes.size();
-                if (SHAPE_SCRATCH.length < n * VoxelClassifier.BOX_STRIDE) {
-                    SHAPE_SCRATCH = new double[n * VoxelClassifier.BOX_STRIDE];
+                VoxelShape coll = state.getCollisionShape(level, CURSOR);
+                VoxelShape occ = state.getOcclusionShape(level, CURSOR);
+                // 缓存主键 = occ 实例(占比真源);命中还需 coll 身份一致(守卫 1/2 读 coll)。
+                ShapeCode hit = SHAPE_CACHE.get(occ);
+                if (hit != null && hit.coll() == coll) return hit.code();
+                List<AABB> collBoxes = coll.toAabbs();
+                List<AABB> occBoxes = occ.toAabbs();
+                int collN = collBoxes.size();
+                int occN = occBoxes.size();
+                if (COLL_SCRATCH.length < collN * VoxelClassifier.BOX_STRIDE) {
+                    COLL_SCRATCH = new double[collN * VoxelClassifier.BOX_STRIDE];
                 }
-                for (int i = 0; i < n; i++) {
-                    AABB b = boxes.get(i);
-                    int o = i * VoxelClassifier.BOX_STRIDE;
-                    SHAPE_SCRATCH[o] = b.minX;
-                    SHAPE_SCRATCH[o + 1] = b.minY;
-                    SHAPE_SCRATCH[o + 2] = b.minZ;
-                    SHAPE_SCRATCH[o + 3] = b.maxX;
-                    SHAPE_SCRATCH[o + 4] = b.maxY;
-                    SHAPE_SCRATCH[o + 5] = b.maxZ;
+                if (OCC_SCRATCH.length < occN * VoxelClassifier.BOX_STRIDE) {
+                    OCC_SCRATCH = new double[occN * VoxelClassifier.BOX_STRIDE];
                 }
-                int shapeCode = VoxelClassifier.codeForTopHeight(VoxelClassifier.centerColumnTopY(SHAPE_SCRATCH, n));
-                if (SHAPE_CACHE.size() > 4096) SHAPE_CACHE.clear();
-                SHAPE_CACHE.put(shape, shapeCode);
+                fill(collBoxes, COLL_SCRATCH);
+                fill(occBoxes, OCC_SCRATCH);
+                int shapeCode = VoxelClassifier.codeForShapes(COLL_SCRATCH, collN, OCC_SCRATCH, occN);
+                SHAPE_CACHE.put(occ, new ShapeCode(coll, shapeCode));
                 return shapeCode;
             }
         }
         CLASS_CACHE.put(state, code);
         if (CLASS_CACHE.size() > 4096) CLASS_CACHE.clear(); // 防极端模组包状态爆炸
         return code;
+    }
+
+    /** 把盒列表平铺进暂存数组(容量由调用方保证)。 */
+    private static void fill(List<AABB> boxes, double[] scratch) {
+        for (int i = 0; i < boxes.size(); i++) {
+            AABB b = boxes.get(i);
+            int o = i * VoxelClassifier.BOX_STRIDE;
+            scratch[o] = b.minX;
+            scratch[o + 1] = b.minY;
+            scratch[o + 2] = b.minZ;
+            scratch[o + 3] = b.maxX;
+            scratch[o + 4] = b.maxY;
+            scratch[o + 5] = b.maxZ;
+        }
     }
 }

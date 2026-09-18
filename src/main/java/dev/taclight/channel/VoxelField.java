@@ -13,9 +13,12 @@ import java.util.List;
  * 步进根治屏幕空间 SSO 的"视锥外遮挡者不投影"漏光。</p>
  *
  * <p>2026-09-18 雪地方格阵列根因轮:码 0 的语义从"空气/流体"扩为
- * <b>"空气 / 流体 / 薄片(碰撞形顶高 ≤ 0.25 格:雪 1-2 层、地毯、绊线、铁轨等)"</b>,
- * 码 1 兼收"0.25 &lt; 顶高 &lt; 0.9 的部分高度方块"(半砖/楼梯 bottom 等)。
- * 2bit 格式本身未动(4 码不变),分档规则见 {@link VoxelClassifier}。</p>
+ * <b>"空气 / 流体 / 无碰撞形方块(绊线/铁轨/蛛网) / 遮挡形实心占比 ≤ 0.25 的薄片
+ * (雪 1-2 层、地毯、活板门等)"</b>,码 1 兼收"占比 0.25~0.9 的部分高度方块"
+ * (半砖 bottom/top、楼梯 bottom/top、雪 3-7 层等)。
+ * 2bit 格式本身未动(4 码不变);C 口径(守卫 1 coll 空⇒EMPTY / 守卫 2 coll maxY&gt;1.0⇒SOLID /
+ * 其余按 <b>occ 遮挡形占比</b>分档)见 {@link VoxelClassifier},判据更正见
+ * {@code docs/判据更正-2026-09-18-体素分档顶高口径.md}。</p>
  *
  * <p>纯 JVM 可测(契约 = VoxelFieldContract + VoxelClassifyContract);方块采样与节流在
  * dev.taclight.client.VoxelGrid。本类自研,零第三方照搬(红线 1)。</p>
