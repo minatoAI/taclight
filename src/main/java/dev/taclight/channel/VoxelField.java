@@ -12,7 +12,12 @@ import java.util.List;
  * (SpotlightBufferLayout.OFF_VOX_*)上传,GLSL 侧做 Amanatides-Woo DDA 光线
  * 步进根治屏幕空间 SSO 的"视锥外遮挡者不投影"漏光。</p>
  *
- * <p>纯 JVM 可测(契约 = VoxelFieldContract);方块采样与节流在
+ * <p>2026-09-18 雪地方格阵列根因轮:码 0 的语义从"空气/流体"扩为
+ * <b>"空气 / 流体 / 薄片(碰撞形顶高 ≤ 0.25 格:雪 1-2 层、地毯、绊线、铁轨等)"</b>,
+ * 码 1 兼收"0.25 &lt; 顶高 &lt; 0.9 的部分高度方块"(半砖/楼梯 bottom 等)。
+ * 2bit 格式本身未动(4 码不变),分档规则见 {@link VoxelClassifier}。</p>
+ *
+ * <p>纯 JVM 可测(契约 = VoxelFieldContract + VoxelClassifyContract);方块采样与节流在
  * dev.taclight.client.VoxelGrid。本类自研,零第三方照搬(红线 1)。</p>
  */
 public final class VoxelField {

@@ -18,7 +18,7 @@ Photon / 旧项目代码;仅使用公开数学公式与官方色度常量)。
 ```
 pack/shaders/
 ├── shaders.properties          # ASCII-only;禁止声明 bufferObject.7(铁律2)
-├── block.properties            # 植被材质分类(遮挡系数:软植被0.25/树叶0.6/实心1.0)
+├── block.properties            # 材质分类(遮挡系数:薄片档0.0/中低档0.25/树叶0.6/实心1.0)
 ├── lib/taclight_common.glsl    # SSBO ABI 镜像 + 坐标入口 + 照明数学 + SSO(430 include)
 ├── lib/taclight_gbuffer.glsl   # 八面体法线编解码 + G-Buffer 布局契约(版本无关)
 ├── lib/taclight_style.glsl     # 风格层数学:IGN/HG/ACES/split-tone/暗角(版本无关)
