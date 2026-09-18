@@ -7,6 +7,7 @@
     "shaders/program/gbuffers_hand.glsl": "ce008e0543a81a5d"
   },
   "requiredSymbols": ["taclight_surface_lighting(", "taclight_shoulder3("],
+  "knownGoodPacks": ["ComplementaryReimagined_r5.9.3.zip"],
   "files": [
     {
       "file": "shaders/program/gbuffers_terrain.glsl",

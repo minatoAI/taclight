@@ -43,6 +43,13 @@ public final class TemplateLibrary {
         public List<FileRule> files;
         /** 注入后必须出现的符号(注后自检;2026-09-19 新增)。空 = 只查 marker/括号。 */
         public List<String> requiredSymbols = List.of();
+        /**
+         * 已知良好清单(2026-09-19 新增,Lead 硬裁定②):<b>锚点验证过</b>的包名原样
+         * (如 {@code ComplementaryReimagined_r5.9.3.zip}),按 {@link PackFingerprint#packMatchKey}
+         * 比较。语义 = "这版哈希虽与 packHash 不符,但锚点已离线/实机验证可注入" ⇒ 走锚点通道
+         * 并标 known-good。<b>故意不存整文件哈希</b>(F6:原始文件不是运行时 oracle)。
+         */
+        public List<String> knownGoodPacks = List.of();
     }
 
     private static volatile String inlineCoreCache;
@@ -102,6 +109,16 @@ public final class TemplateLibrary {
                     if (se.isJsonPrimitive()) syms.add(se.getAsString());
                 }
                 t.requiredSymbols = List.copyOf(syms);
+            }
+            if (root.has("knownGoodPacks") && root.get("knownGoodPacks").isJsonArray()) {
+                List<String> known = new ArrayList<>();
+                for (var ke : root.getAsJsonArray("knownGoodPacks")) {
+                    if (ke.isJsonPrimitive()) {
+                        String k = ke.getAsString();
+                        if (k != null && !k.isBlank()) known.add(k);
+                    }
+                }
+                t.knownGoodPacks = List.copyOf(known);
             }
             t.files = new ArrayList<>();
             for (var fe : root.getAsJsonArray("files")) {

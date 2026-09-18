@@ -72,6 +72,16 @@ public class PackFingerprintContract {
                 "★ F4:拿归一化键(" + PackFingerprint.packMatchKey("MyPack_r1.0.zip") + ")去 resolve ⇒ 找不到(故绝不可用于路径)");
         check(PackFingerprint.matchesPackName("MyPack_r1.0.zip", "MyPack"),
                 "★ F4:同一对的匹配键命中模板(匹配与路径两条路各自正确)");
+        // 已知良好清单(硬裁定②):按匹配键比较,不用整文件哈希
+        java.util.List<String> known = java.util.List.of("ComplementaryReimagined_r5.9.3.zip");
+        check(PackFingerprint.isKnownGood("ComplementaryReimagined_r5.9.3.zip", known),
+                "已知良好清单:原样命中");
+        check(PackFingerprint.isKnownGood("complementaryreimagined_r5.9.3.ZIP", known),
+                "已知良好清单:大小写/后缀不敏感(走匹配键)");
+        check(!PackFingerprint.isKnownGood("ComplementaryReimagined_r5.9.2.zip", known)
+                        && !PackFingerprint.isKnownGood("ComplementaryReimagined", known)
+                        && !PackFingerprint.isKnownGood("ComplementaryReimagined_r5.9.3.zip", java.util.List.of()),
+                "已知良好清单:版本不符/目录名/空清单 = 不命中(清单只覆盖被验证的那一版)");
     }
 
     private static void propertiesParse() {

@@ -91,6 +91,21 @@ public final class PackFingerprint {
         return rest.matches(" ?[a-z]?\\d[\\w.\\- ]*");
     }
 
+    /**
+     * 已知良好清单判定(2026-09-19):{@code rawName} 的匹配键等于清单中任一条目的匹配键。
+     * 语义 = "这版哈希虽与模板 packHash 不符,但锚点已离线/实机验证可注入" ⇒ 走锚点通道并标
+     * known-good(闸门仍是 {@code PatchExecutor.applyDetailed},不是"进了清单就放行")。
+     */
+    public static boolean isKnownGood(String rawName, java.util.List<String> knownGoodPacks) {
+        if (knownGoodPacks == null || knownGoodPacks.isEmpty()) return false;
+        String key = packMatchKey(rawName);
+        if (key.isEmpty()) return false;
+        for (String k : knownGoodPacks) {
+            if (key.equals(packMatchKey(k))) return true;
+        }
+        return false;
+    }
+
     /** 包根定位:绝对路径优先(存在即用),否则 shaderpacks 目录下按名找。 */
     public static Optional<Path> resolvePackRoot(Path shaderpacksDir, String packName) {
         if (shaderpacksDir == null || packName == null || packName.isBlank()) return Optional.empty();

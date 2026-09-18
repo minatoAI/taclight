@@ -63,22 +63,25 @@ public final class RuntimePackInjector {
         final String matchKey;
         final String root;
         final TemplateLibrary.Template template; // null = 无候选模板
-        final boolean fastPath;                  // true = 名字+哈希快速通道;false = 哈希漂移走锚点闸门
+        final boolean fastPath;                  // true = 名字+哈希快速通道
+        final boolean knownGood;                 // true = 已知良好清单命中(锚点验证过;仍走锚点闸门)
         final String detail;                     // 哈希对照 / 失败原因
         volatile String fileOutcomes = "(尚未有程序源流过)";
 
         Resolution(String rawName, String matchKey, String root, TemplateLibrary.Template template,
-                   boolean fastPath, String detail) {
+                   boolean fastPath, boolean knownGood, String detail) {
             this.rawName = rawName;
             this.matchKey = matchKey;
             this.root = root;
             this.template = template;
             this.fastPath = fastPath;
+            this.knownGood = knownGood;
             this.detail = detail;
         }
 
         String channel() {
-            return fastPath ? "fast:name+hash" : "best-effort:hash-drift";
+            if (fastPath) return "fast:name+hash";
+            return knownGood ? "known-good:anchors" : "best-effort:hash-drift";
         }
     }
 
@@ -162,7 +165,7 @@ public final class RuntimePackInjector {
             Path root = PackFingerprint.resolvePackRoot(shaderpacks, rawName).orElse(null);
             String key = PackFingerprint.packMatchKey(rawName);
             if (root == null) {
-                return new Resolution(rawName, key, "(未找到)", null, false,
+                return new Resolution(rawName, key, "(未找到)", null, false, false,
                         "包根未找到:shaderpacks/" + rawName + " 不存在");
             }
             List<TemplateLibrary.Template> candidates = new ArrayList<>();
@@ -173,24 +176,27 @@ public final class RuntimePackInjector {
                 if (PackFingerprint.matchesPackName(rawName, t.packName)) candidates.add(t);
             }
             if (candidates.isEmpty()) {
-                return new Resolution(rawName, key, root.toString(), null, false,
+                return new Resolution(rawName, key, root.toString(), null, false, false,
                         "无候选模板(归一化键 \"" + key + "\" 不匹配任何已登记 packName;已登记: " + names + ")");
             }
             // 快速通道:名字匹配 + 模板声明的键全中(键 = 模板自己声明的,F5)
             for (TemplateLibrary.Template t : candidates) {
                 Map<String, String> fp = PackFingerprint.fingerprint(root, new ArrayList<>(t.packHash.keySet()));
                 if (PackFingerprint.matches(fp, t.packHash)) {
-                    return new Resolution(rawName, key, root.toString(), t, true,
+                    return new Resolution(rawName, key, root.toString(), t, true, false,
                             "hash 全中(" + t.packHash.size() + " 键)");
                 }
             }
-            // 哈希漂移:仍走锚点闸门(best-effort),由 patchSourceInner 的 applyDetailed 决定
+            // 哈希漂移:① 已知良好清单(锚点验证过,硬裁定②)⇒ 标 known-good;
+            // ② 否则 best-effort。两者都仍由锚点闸门(applyDetailed)决定是否注入。
             TemplateLibrary.Template t = candidates.get(0);
             Map<String, String> fp = PackFingerprint.fingerprint(root, new ArrayList<>(t.packHash.keySet()));
-            return new Resolution(rawName, key, root.toString(), t, false, describeDrift(fp, t.packHash));
+            boolean known = PackFingerprint.isKnownGood(rawName, t.knownGoodPacks);
+            return new Resolution(rawName, key, root.toString(), t, false, known,
+                    (known ? "已知良好清单命中(锚点验证过;不存整文件哈希) | " : "") + describeDrift(fp, t.packHash));
         } catch (Throwable th) {
             TacLightMod.LOGGER.warn("[TacLight] interop: 模板解析异常(零注入): {}", th.toString());
-            return new Resolution(rawName, PackFingerprint.packMatchKey(rawName), "(异常)", null, false,
+            return new Resolution(rawName, PackFingerprint.packMatchKey(rawName), "(异常)", null, false, false,
                     "模板解析异常: " + th);
         }
     }

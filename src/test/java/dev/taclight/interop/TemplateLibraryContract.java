@@ -143,6 +143,12 @@ public class TemplateLibraryContract {
                 "注后自检必需签名: " + t.requiredSymbols);
         check(fRule.ops.get(2).anchor.equals("void DoLighting("),
                 "片元内联锚 = void DoLighting( 定义行(运行时片元半体 2960 行实测)");
+        // 已知良好清单(硬裁定②):r5.9.3 = 锚点验证过但整文件哈希漂移的那一版;故意不存哈希
+        check(t.knownGoodPacks != null
+                        && PackFingerprint.isKnownGood("ComplementaryReimagined_r5.9.3.zip", t.knownGoodPacks),
+                "已知良好清单含用户实测版(锚点验证): " + t.knownGoodPacks);
+        check(t.knownGoodPacks.stream().noneMatch(k -> k.matches("[0-9a-f]{16}")),
+                "已知良好清单条目 = 包名而非哈希(硬裁定②:F6 原始文件不是运行时 oracle): " + t.knownGoodPacks);
         // 2026-09-03 晚:内联核心从"DoLighting 函数体内"搬到"顶点 main 体内
         // GetLightMapCoordinates 行后"(实机三连 missing ';' at '{':函数体内声明 +
         // 宿主 #ifdef/#endif 包裹下的 AST 声明解析失败;顶点 main 体是持续编译的
