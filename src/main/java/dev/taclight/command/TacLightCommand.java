@@ -24,6 +24,11 @@ import net.minecraftforge.registries.ForgeRegistries;
  *  cam here / save <name> / goto <name> —— 确定性机位(注册表 run/config/taclight-cams.json)。
  *  scene <preset> —— 场景区程序化布景(计划 = ScenePresets 纯数据,执行 = SceneExecutor)。
  * 全组 hasPermission(0):调试工具,SP 场景使用;结果同时入日志(自动化 grep 依赖)。
+ * snap —— 一键调试快照(2026-09-19 最小闭环,与 F9/!snap 同一入口;专用服回仅单人)。
+ * tune —— 八旋钮正式调参(2026-09-19 由文件命令中继晋升,发布包可用):
+ * /taclight tune &lt;bright/dist/atten/knee/beam/scat/beamcap/cone/voxel&gt; [&lt;值&gt;|status|off],
+ * 无参=九旋钮全状态。覆盖层即时生效 + 写回 config/taclight-client.toml 重启保留;
+ * 专用服无本地调参目标,直接回显"仅单人/客户端生效"不假成功。
  */
 @Mod.EventBusSubscriber(modid = TacLightMod.MODID)
 public class TacLightCommand {
@@ -68,7 +73,22 @@ public class TacLightCommand {
                                 .executes(ctx -> lightSet(ctx.getSource(), StringArgumentType.getString(ctx, "state"), null))
                                 .then(Commands.argument("player", net.minecraft.commands.arguments.EntityArgument.player())
                                         .executes(ctx -> lightSet(ctx.getSource(), StringArgumentType.getString(ctx, "state"),
-                                                net.minecraft.commands.arguments.EntityArgument.getPlayer(ctx, "player")))))));
+                                                net.minecraft.commands.arguments.EntityArgument.getPlayer(ctx, "player"))))))
+                .then(Commands.literal("snap")
+                        .requires(s -> s.hasPermission(0))
+                        .executes(ctx -> snapRun(ctx.getSource())))
+                // tune(2026-09-19):八旋钮正式入口。name/value 用 string() 而非 word()
+                // —— 数值 "0.35"/"-0.1" 含 '.',word() 拒收(同 cam name 含 '@' 的教训)。
+                .then(Commands.literal("tune")
+                        .requires(s -> s.hasPermission(0))
+                        .executes(ctx -> tuneAll(ctx.getSource()))
+                        .then(Commands.argument("name", StringArgumentType.string())
+                                .executes(ctx -> tuneRun(ctx.getSource(),
+                                        StringArgumentType.getString(ctx, "name"), null))
+                                .then(Commands.argument("value", StringArgumentType.string())
+                                        .executes(ctx -> tuneRun(ctx.getSource(),
+                                                StringArgumentType.getString(ctx, "name"),
+                                                StringArgumentType.getString(ctx, "value")))))));
         // 注:cam name 用 string() 而非 word() —— 内置机位名含 '@'(bloom@inside),
         // word() 只收 [A-Za-z0-9_+-],实机 2026-08-29 "Incorrect argument" 实锤。
     }
@@ -176,6 +196,106 @@ public class TacLightCommand {
         source.sendSuccess(() -> Component.literal("[TacLight] light " + next + " -> "
                 + player.getGameProfile().getName()), false);
         return 1;
+    }
+
+    // ---- snap:一键调试快照(2026-09-19 最小闭环,与 F9/!snap 同一 saveSnapshot 入口) ----
+
+    /**
+     * MP 守卫(snap):专用服无客户端可拍(截图/pose/覆盖层全在客户端;且 client 类在
+     * 专用服加载即炸,故守卫必须在任何 client 引用之前,同 tuneMpGuard 的类加载安全)。
+     * 集成服(SP/LAN 主机同 JVM,gameDir 与客户端同根):放行。
+     */
+    private static boolean snapMpGuard(CommandSourceStack source) {
+        var server = source.getServer();
+        if (server != null && !server.isDedicatedServer()) return false;
+        String msg = "[TacLight] snap 仅单人/客户端生效:专用服务器无截图与客户端状态目标,本次未执行。"
+                + "联机客机请在各自客户端按 F9 或写 !snap 文件命令。";
+        source.sendFailure(Component.literal(msg));
+        TacLightMod.LOGGER.info("[TacLight] SNAP mp-guard reject (dedicated or no-server)");
+        return true;
+    }
+
+    /** /taclight snap —— 调同一 saveSnapshot(命令线程;截图若上下文不在位由其 try/catch 接住记 outcome)。 */
+    private static int snapRun(CommandSourceStack source) throws CommandSyntaxException {
+        if (snapMpGuard(source)) return 0;
+        source.getPlayerOrException(); // 单人玩家存在性校验(与 light 分支同规)
+        java.nio.file.Path dir = dev.taclight.client.DebugSnapshotter.saveSnapshot("cmd");
+        if (dir == null) {
+            source.sendFailure(Component.literal("[TacLight] snap 失败(见日志)"));
+            TacLightMod.LOGGER.warn("[TacLight] SNAP cmd FAILED");
+            return 0;
+        }
+        String msg = "[TacLight] snap -> " + dir;
+        source.sendSuccess(() -> Component.literal(msg), false);
+        TacLightMod.LOGGER.info("[TacLight] SNAP cmd {}", dir);
+        return 1;
+    }
+
+    // ---- tune:八旋钮正式调参(2026-09-19,发布包可用;中继 !bright/... 保持内存对照) ----
+
+    /** 生产覆盖层入口(与 TuneService 契约的假入口恒等;voxel 不走这里,走客户端门)。 */
+    private static final dev.taclight.tune.TunePersist.KnobApplier TUNE_APPLIER = (knob, arg) -> switch (knob) {
+        case "bright" -> dev.taclight.channel.LightTuneOverride.configureBright(arg);
+        case "dist" -> dev.taclight.channel.LightTuneOverride.configureDist(arg);
+        case "atten" -> dev.taclight.channel.LightTuneOverride.configureAtten(arg);
+        case "knee" -> dev.taclight.channel.LightTuneOverride.configureKnee(arg);
+        case "beam" -> dev.taclight.channel.LightTuneOverride.configureBeam(arg);
+        case "scat" -> dev.taclight.channel.LightTuneOverride.configureScat(arg);
+        case "beamcap" -> dev.taclight.channel.LightTuneOverride.configureBeamcap(arg);
+        case "cone" -> dev.taclight.channel.LightTuneOverride.configureCone(arg);
+        default -> "bad arg " + arg + " (unknown knob " + knob + ")";
+    };
+
+    /**
+     * MP 守卫:专用服无本地调参目标(调参只改本机覆盖层 + 本机 toml),直接回显
+     * "仅单人/客户端生效"并返回 0,<b>不碰</b>覆盖层/config/体素(后者含 client 引用,
+     * 专用服加载即炸,故守卫必须在任何调参引用之前)。
+     * 集成服(SP/LAN 主机同 JVM):直接调覆盖层 + VoxelGrid 即时生效。
+     * 注意:LAN 远端客机的命令发到主机执行,生效的是主机本机——回显明确作用域,不静默假成功。
+     */
+    private static boolean tuneMpGuard(CommandSourceStack source) {
+        var server = source.getServer();
+        if (server != null && !server.isDedicatedServer()) return false;
+        String msg = "[TacLight] tune 仅单人/客户端生效:专用服务器无本地调参目标"
+                + "(调参只改本机覆盖层+本机 config/taclight-client.toml),本次未应用。"
+                + "联机客机请在各自单人/客户端执行;LAN 远端发到主机只改主机本机。";
+        source.sendFailure(Component.literal(msg));
+        TacLightMod.LOGGER.info("[TacLight] TUNE mp-guard reject (dedicated or no-server)");
+        return true;
+    }
+
+    /** /taclight tune —— 九旋钮全状态 + 用法(只读)。 */
+    private static int tuneAll(CommandSourceStack source) {
+        if (tuneMpGuard(source)) return 0;
+        // 专用服已提前返回,到这里必是集成服:客户端门类加载安全。
+        dev.taclight.tune.TuneService.Result r = dev.taclight.tune.TuneService.statusAll(
+                dev.taclight.client.TuneClientGate.GATE, TUNE_APPLIER);
+        String msg = r.message() + "\n(专用服/联机客机不生效:仅单人/主机本机)";
+        source.sendSuccess(() -> Component.literal(msg), false);
+        TacLightMod.LOGGER.info("[TacLight] TUNE status-all");
+        return 1;
+    }
+
+    /** /taclight tune &lt;name&gt; [&lt;value&gt;|status|off]。 */
+    private static int tuneRun(CommandSourceStack source, String name, String value) {
+        if (tuneMpGuard(source)) return 0;
+        dev.taclight.tune.TuneService.Result r = dev.taclight.tune.TuneService.tune(
+                name, value,
+                dev.taclight.tune.TunePersist.forgeSink(),
+                dev.taclight.client.TuneClientGate.GATE, TUNE_APPLIER);
+        if (r.ok()) {
+            source.sendSuccess(() -> Component.literal(r.message()), false);
+            TacLightMod.LOGGER.info("[TacLight] TUNE {}", singleLine(r.message()));
+            return 1;
+        }
+        source.sendFailure(Component.literal(r.message()));
+        TacLightMod.LOGGER.warn("[TacLight] TUNE reject {}", singleLine(r.message()));
+        return 0;
+    }
+
+    /** 多行状态压一行记日志(自动化 grep 单行友好)。 */
+    private static String singleLine(String s) {
+        return s.replace('\n', '|');
     }
 
     private static int giveKit(CommandSourceStack source) throws CommandSyntaxException {

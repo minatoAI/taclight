@@ -1,5 +1,19 @@
 > 本文所述 commit id 为 2026-09-17 历史重写前的旧 id；映射见 `docs/COMMIT-ID-REMAP-2026-09-17.md`
 
+## 09-19 · /taclight tune 八旋钮晋升正式命令 + toml 持久化(未 push,未构建验证)
+
+- `!bright/!dist/!atten/!knee/!beam/!scat/!beamcap/!cone` + `!voxel` 晋升
+  `/taclight tune <name> [<值>|status|off]>`(发布包可用,中继仍保留作内存对照,后写者胜)。
+  覆盖层即时生效 + 写回 `config/taclight-client.toml` 重启保留;`off` 写回默认值
+  (防静默假成功),`status`/无参零写盘。`cone` 一写二(outer+inner=outer×0.5)。
+  新增 config 键 `attenK/kneeGain/scatFloor/beamCapM/voxelEnabled`(默认值=各路 off 有效值),
+  `coneOuterDeg` 下限 5→2、`coneInnerDeg` 下限 2→1(只放宽,存量兼容)。
+  开机经客户端首 tick 回填新增键非默认值;既有键直读 config 不回填。
+  专用服命中 MP 守卫(仅单人/客户端生效,不碰调参);`beamonly/occl/tm` 故意不晋升(见文档)。
+  旧 "K=5.0" 文案修正为 20.0(2026-09-06 冻结,行为未动)。契约 `TuneContract`(三态/路由/接线)
+  已注册进 `AllContracts`。详见 `docs/tune-正式调参命令-2026-09-19.md`。
+  未验证:`SPEC.save()` 编译/落盘(仓内零先例)、真机回显与重启恢复、契约执行(禁构建)。
+
 ## 09-07 夜 · knob.ps1 BOM 复发修复(未 push)
 
 - 用户双击 `tools\knob.bat` 即炸:09-07 凌晨改帮助文案时 edit 落盘 strip 了 BOM,

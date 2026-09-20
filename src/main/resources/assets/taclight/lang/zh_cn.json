@@ -6,5 +6,6 @@
   "key.taclight.debug_toggle": "霓虹调试模式(K)",
   "key.taclight.diag_dump": "诊断转储入日志(N)",
   "key.taclight.bench": "3 秒帧率基准(B)",
+  "key.taclight.snapshot": "调试快照(F9)",
   "key.categories.taclight": "TacLight"
 }

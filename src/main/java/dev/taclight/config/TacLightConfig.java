@@ -13,6 +13,16 @@ public final class TacLightConfig {
     public static final ForgeConfigSpec.ConfigValue<Double> CONE_OUTER_DEG;
     public static final ForgeConfigSpec.ConfigValue<Double> CONE_INNER_DEG;
     public static final ForgeConfigSpec.ConfigValue<Double> BEAM_DENSITY;
+    // /taclight tune 持久化键(2026-09-19 八旋钮晋升正式命令):atten/knee/scat/beamcap
+    // 此前只有内存覆盖层(LightTuneOverride),无 config 键,重启即丢。新增键默认值 =
+    // 各路 off 时的当前有效值(atten 20.0 = GLSL TACLIGHT_ATTEN_K 扫参冻结值,见
+    // InlineCoreContract;scat 0.04 = SpotlightData.BEAM_SIDE_FLOOR;beamcap 1.0 =
+    // 槽位默认;voxel 默认开),范围与覆盖层同源。tune 写入 + 开机回填覆盖层。
+    public static final ForgeConfigSpec.ConfigValue<Double> ATTEN_K;
+    public static final ForgeConfigSpec.ConfigValue<Double> KNEE_GAIN;
+    public static final ForgeConfigSpec.ConfigValue<Double> SCAT_FLOOR;
+    public static final ForgeConfigSpec.ConfigValue<Double> BEAM_CAP_M;
+    public static final ForgeConfigSpec.ConfigValue<Boolean> VOXEL_ENABLED;
     public static final ForgeConfigSpec.ConfigValue<Double> GUN_MULTIPLIER;
     public static final ForgeConfigSpec.ConfigValue<Double> REMOTE_LIGHT_MAX_DIST;
     public static final ForgeConfigSpec.ConfigValue<Integer> REMOTE_LIGHT_MAX_COUNT;
@@ -29,9 +39,17 @@ public final class TacLightConfig {
         INTENSITY = builder.comment("light intensity").defineInRange("intensity", 6.0, 0.5, 30.0);
         // 锥角(2026-09-05 用户定案"接近平行光"):旧 32/18 在 30m 外光斑半径 ≈18.7m,
         // 远距离范围过大;8/4 在 30m 外 ≈4.2m、20m 外 ≈2.8m。运行时微调用中继 !cone。
-        CONE_OUTER_DEG = builder.comment("outer half-angle in degrees (8 = near-parallel beam)").defineInRange("coneOuterDeg", 8.0, 5.0, 60.0);
-        CONE_INNER_DEG = builder.comment("inner half-angle in degrees (= full-brightness core)").defineInRange("coneInnerDeg", 4.0, 2.0, 55.0);
+        // 2026-09-19 tune 持久化:/tune cone 域 2..45 直写 outer=cone/inner=cone×0.5,
+        // 故下限放宽到 outer 2.0/inner 1.0(旧 5.0/2.0 会把 cone 2..5 的合法调参拒之门外;
+        // 只放宽不收紧,存量 toml 全兼容)。
+        CONE_OUTER_DEG = builder.comment("outer half-angle in degrees (8 = near-parallel beam)").defineInRange("coneOuterDeg", 8.0, 2.0, 60.0);
+        CONE_INNER_DEG = builder.comment("inner half-angle in degrees (= full-brightness core)").defineInRange("coneInnerDeg", 4.0, 1.0, 55.0);
         BEAM_DENSITY = builder.comment("volumetric beam density (0 = off)").defineInRange("beamDensity", 0.25, 0.0, 1.0);
+        ATTEN_K = builder.comment("distance falloff K (tune atten; 20.0 = GLSL TACLIGHT_ATTEN_K frozen 2026-09-06)").defineInRange("attenK", 20.0, 0.2, 20.0);
+        KNEE_GAIN = builder.comment("near-field soft-knee G (tune knee; 2.0 = default-on)").defineInRange("kneeGain", 2.0, 0.2, 8.0);
+        SCAT_FLOOR = builder.comment("volumetric axial floor share f (tune scat; 0 = pure side-view)").defineInRange("scatFloor", 0.04, 0.0, 0.9);
+        BEAM_CAP_M = builder.comment("volumetric overlap soft-cap multiplier m (tune beamcap; cap=2.0*m)").defineInRange("beamCapM", 1.0, 0.25, 8.0);
+        VOXEL_ENABLED = builder.comment("voxel DDA occlusion grid (tune voxel; false = fallback SSO)").define("voxelEnabled", true);
         GUN_MULTIPLIER = builder.comment("gun-mounted light intensity multiplier").defineInRange("gunMultiplier", 1.1, 0.1, 3.0);
         // M5 多人:远程玩家灯的收集护栏(旁观视角与多人调试方案.md §4.3)
         REMOTE_LIGHT_MAX_DIST = builder.comment("max distance (blocks) to render other players' lights").defineInRange("remoteLightMaxDist", 48.0, 8.0, 128.0);

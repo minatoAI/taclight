@@ -32,6 +32,11 @@ import java.nio.file.StandardCopyOption;
  * 与 modtest-mcp 令牌+审计的设计取向冲突;将来若要开放,只许放行只读子集
  * ({@code !interop}/{@code !diag} 类 status 查询)并另设开关/变体。</p>
  *
+ * <p>2026-09-19 八旋钮晋升:{@code !bright/!dist/!atten/!knee/!beam/!scat/!beamcap/!cone} +
+ * {@code !voxel} 另有一条正式路径 <b>{@code /taclight tune}</b>(服务端命令树,发布包可用,
+ * 调参直写 {@code config/taclight-client.toml} 重启保留)。本中继保持<b>纯内存覆盖、重启清零</b>
+ * 不变,两条路径后写者胜(同一覆盖层);要持久化请走 tune,本中继仅作调试对照。</p>
+ *
  * <p>为什么存在:本机实测(dev 实例)客户端命令树为空(登录后 ClientboundCommandsPacket
  * 未生效,聊天框输入任何命令都被本地预览拒绝),且物理/PostMessage 键注入受焦点态
  * 影响时灵时不效。文件通道三者全免:AI 直接写文件,模组客户端 tick 消费。</p>
@@ -119,6 +124,16 @@ public final class DebugCommandRelay {
             } catch (Throwable t) {
                 TacLightMod.LOGGER.warn("[TacLight] RELAY shot failed: {}", t.toString());
             }
+            return;
+        }
+        if (line.equals("!snap") || line.startsWith("!snap ")) {
+            // 一键调试快照(2026-09-19 最小闭环):pose/灯参/tune 体素/renderdoc 状态落盘
+            // <gameDir>/debug-snapshots/<时间戳>/,与 F9 与 /taclight snap 同一入口。
+            // 精确匹配防吞其它 !s* 分支(!synth/!selflight/!scat/!shot/!sweep 互不前缀包含)。
+            String arg = line.length() > 5 ? line.substring(5).trim() : "";
+            java.nio.file.Path dir = DebugSnapshotter.saveSnapshot(arg.isEmpty() ? "relay" : ("relay:" + arg));
+            TacLightMod.LOGGER.info("[TacLight] RELAY snap -> {}",
+                    dir == null ? "FAILED" : dir.toString());
             return;
         }
         if (line.startsWith("!reload")) {
@@ -258,7 +273,7 @@ public final class DebugCommandRelay {
             return;
         }
         if (line.startsWith("!atten")) {
-            // 2026-09-04 用户体感三旋钮③:衰减系数 K(越小尾越长;5.0=主包标定,0.5r 处约 20%)。
+            // 2026-09-04 用户体感三旋钮③:衰减系数 K(越小尾越长;20.0=主包标定,2026-09-06 扫参冻结)。
             // 经 SSBO cone.z 逐灯透传(0=GLSL 回退编译期默认),零重启生效。范围 0.2..20。
             String arg = line.length() > 6 ? line.substring(6).trim() : "";
             TacLightMod.LOGGER.info("[TacLight] RELAY atten -> {}",

@@ -19,6 +19,8 @@ public class ClientEvents {
     private static boolean lastSentEffective = false;
     private static int e2eTick;
     private static boolean e2eLogged;
+    /** tune 持久化恢复(一次性,首个世界 tick;config 此时必已加载,比 MOD setup 更稳)。 */
+    private static boolean tuneRestored;
 
     /** 端到端探针回读(仅 TACLIGHT_PROBE=1 时启用;诊断用,默认静默)。 */
     private static void probeIfEnabled() {
@@ -313,6 +315,26 @@ public class ClientEvents {
             dev.taclight.channel.MotionCapture.shutdown("world-unload");
             dev.taclight.channel.LightBuffer.upload(java.util.List.of());
             return;
+        }
+
+        if (!tuneRestored) {
+            tuneRestored = true;
+            // /taclight tune 写回的 toml 在重启后回填覆盖层(新增键 atten/knee/scat/beamcap/
+            // voxel 的消费者只认覆盖层;既有键 bright/dist/beam/cone 直读 config,恢复层不碰)。
+            try {
+                String r = dev.taclight.tune.TunePersist.restore(
+                        dev.taclight.tune.TunePersist.forgeSink(), TuneClientGate.GATE,
+                        (knob, arg) -> switch (knob) {
+                            case "atten" -> dev.taclight.channel.LightTuneOverride.configureAtten(arg);
+                            case "knee" -> dev.taclight.channel.LightTuneOverride.configureKnee(arg);
+                            case "scat" -> dev.taclight.channel.LightTuneOverride.configureScat(arg);
+                            case "beamcap" -> dev.taclight.channel.LightTuneOverride.configureBeamcap(arg);
+                            default -> "bad arg " + arg + " (restore only handles persisted knobs)";
+                        });
+                TacLightMod.LOGGER.info("[TacLight] TUNE {}", r);
+            } catch (Throwable t) {
+                TacLightMod.LOGGER.warn("[TacLight] TUNE restore failed: {}", t.toString());
+            }
         }
 
         if (!diagAutoApplied && "1".equals(System.getenv("TACLIGHT_DIAG"))) {
