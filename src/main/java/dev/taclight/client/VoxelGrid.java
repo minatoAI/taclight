@@ -3,7 +3,9 @@ package dev.taclight.client;
 import dev.taclight.channel.BoundedIdentityCache;
 import dev.taclight.channel.SpotlightData;
 import dev.taclight.channel.VoxelClassifier;
+import dev.taclight.channel.VoxelDda;
 import dev.taclight.channel.VoxelField;
+import dev.taclight.channel.VoxelProbe;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -147,6 +149,92 @@ public final class VoxelGrid {
         return String.format(
                 "voxel=on box=(%.0f,%.0f,%.0f)+%dx%dx%d builds=%d lastBuildMs=%.2f",
                 snap.ox(), snap.oy(), snap.oz(), snap.dx(), snap.dy(), snap.dz(), builds, lastBuildMs);
+    }
+
+    /**
+     * {@code !voxprobe x y z}:同一格的"分类器此刻判定(live)"与"已上传网格实际值(grid)"并排。
+     *
+     * <p>2026-09-25 细雪层穿光轮补的调试缺口:此前只能靠截图 A/B 猜,没法在真实场景里直接问
+     * "这条光路的这一格到底被判成什么"。两者不一致 ⇒ 打包/上传/盒范围的问题;
+     * 两者一致但仍漏光 ⇒ 分类口径或着色器透射表的问题。</p>
+     */
+    public static String probe(Minecraft mc, int x, int y, int z) {
+        return VoxelProbe.cellReport(x, y, z, liveCode(mc, x, y, z), gridCode(x, y, z));
+    }
+
+    /**
+     * {@code !voxray ...}:沿 A→B 逐格列出 live/grid 码与穿透长度,并给两种口径的累积透射率。
+     * {@code liveT} = 真实世界判定下的透射、{@code gridT} = 已上传网格(着色器实际看到的)下的透射。
+     */
+    public static String ray(Minecraft mc, double ax, double ay, double az,
+                             double bx, double by, double bz, int maxCells) {
+        return VoxelProbe.rayReport(ax, ay, az, bx, by, bz, maxCells,
+                cell -> liveCode(mc, cell.x(), cell.y(), cell.z()),
+                cell -> gridCode(cell.x(), cell.y(), cell.z()));
+    }
+
+    /** 现场对真实世界求分类码(与逐格填充同一条 {@link #classify},不做 state 级缓存污染)。 */
+    private static int liveCode(Minecraft mc, int x, int y, int z) {
+        if (mc.level == null) return VoxelField.CODE_EMPTY;
+        return classify(mc.level, mc.level.getBlockState(CURSOR.set(x, y, z)), x, y, z);
+    }
+
+    /** 盒扫描上限(体积与打印行数),防止误输入把日志刷爆。 */
+    public static final int SCAN_MAX_VOLUME = 4096;
+    public static final int SCAN_MAX_ROWS = 60;
+
+    /**
+     * {@code !voxprobe x1 y1 z1 x2 y2 z2}:盒扫描——逐格列"非空气"格的
+     * (方块 / 现场判定 / 已上传网格),并统计<b>非空气却被判透光</b>的格数。
+     * 这一类漏光的签名就是后者 &gt; 0(方块对光完全不存在)。
+     */
+    public static String scan(Minecraft mc, int x1, int y1, int z1, int x2, int y2, int z2) {
+        if (mc.level == null) return "VOXSCAN level=null";
+        int ax = Math.min(x1, x2), bx = Math.max(x1, x2);
+        int ay = Math.min(y1, y2), by = Math.max(y1, y2);
+        int az = Math.min(z1, z2), bz = Math.max(z1, z2);
+        long volume = (long) (bx - ax + 1) * (by - ay + 1) * (bz - az + 1);
+        if (volume > SCAN_MAX_VOLUME) {
+            return "VOXSCAN 体积 " + volume + " 超过上限 " + SCAN_MAX_VOLUME + "(请缩小范围)";
+        }
+        java.util.List<VoxelProbe.Row> leaky = new java.util.ArrayList<>();
+        java.util.List<VoxelProbe.Row> rest = new java.util.ArrayList<>();
+        int nonAir = 0, emptyNonAir = 0, veg = 0, leaf = 0, solid = 0;
+        for (int y = ay; y <= by; y++) {
+            for (int z = az; z <= bz; z++) {
+                for (int x = ax; x <= bx; x++) {
+                    BlockState state = mc.level.getBlockState(CURSOR.set(x, y, z));
+                    if (state.isAir()) continue;
+                    nonAir++;
+                    int live = classify(mc.level, state, x, y, z);
+                    int grid = gridCode(x, y, z);
+                    boolean isLeaky = live == VoxelField.CODE_EMPTY;
+                    if (isLeaky) emptyNonAir++;
+                    else if (live == VoxelField.CODE_VEG) veg++;
+                    else if (live == VoxelField.CODE_LEAF) leaf++;
+                    else solid++;
+                    // 漏光签名行优先(见 VoxelProbe.scanReport 注释:首轮实测被地下石头挤掉了)
+                    java.util.List<VoxelProbe.Row> bucket = isLeaky ? leaky : rest;
+                    if (bucket.size() < SCAN_MAX_ROWS) {
+                        String id = BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString();
+                        String props = state.getValues().toString();
+                        bucket.add(new VoxelProbe.Row(x, y, z,
+                                props.equals("{}") ? id : id + props, live, grid));
+                    }
+                }
+            }
+        }
+        return VoxelProbe.scanReport(leaky, rest, nonAir, emptyNonAir, veg, leaf, solid);
+    }
+
+    /** 已上传网格里的码;无快照或盒外 ⇒ -1(OUT,着色器按"占用未知"处理)。 */
+    public static int gridCode(int x, int y, int z) {
+        VoxelField.Snapshot s = snap;
+        if (s == null) return -1;
+        int ox = (int) s.ox(), oy = (int) s.oy(), oz = (int) s.oz();
+        int lx = x - ox, ly = y - oy, lz = z - oz;
+        if (lx < 0 || ly < 0 || lz < 0 || lx >= s.dx() || ly >= s.dy() || lz >= s.dz()) return -1;
+        return VoxelField.unpack(new VoxelField.Box(ox, oy, oz, s.dx(), s.dy(), s.dz()), lx, ly, lz, s.data());
     }
 
     /**

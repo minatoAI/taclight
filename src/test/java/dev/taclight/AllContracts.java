@@ -18,6 +18,7 @@ import dev.taclight.channel.BoundedIdentityCacheContract;
 import dev.taclight.channel.VoxelClassifyContract;
 import dev.taclight.channel.VoxelDdaContract;
 import dev.taclight.channel.VoxelFieldContract;
+import dev.taclight.channel.VoxelProbeContract;
 import dev.taclight.client.BobViewControlContract;
 import dev.taclight.client.DebugSnapshotContract;
 import dev.taclight.client.VoxelGridWiringContract;
@@ -57,6 +58,10 @@ public class AllContracts {
         VoxelDdaContract.main(args);
         System.out.println("== VoxelClassifyContract ==");
         VoxelClassifyContract.main(args);
+        // 体素单元诊断探针(2026-09-25 细雪层穿光轮):live(现场判定)/grid(已上传)并排,
+        // 复用生产同一条 DDA;接线 = !voxprobe / !voxray。
+        System.out.println("== VoxelProbeContract ==");
+        VoxelProbeContract.main(args);
         System.out.println("== BoundedIdentityCacheContract ==");
         BoundedIdentityCacheContract.main(args);
         System.out.println("== VoxelGridWiringContract ==");

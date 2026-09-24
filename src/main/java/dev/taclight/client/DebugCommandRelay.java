@@ -460,6 +460,62 @@ public final class DebugCommandRelay {
             TacLightMod.LOGGER.info("[TacLight] RELAY bob -> {}", result);
             return;
         }
+        if (line.startsWith("!voxprobe")) {
+            // 体素单元探针(2026-09-25 细雪层穿光轮):同一格"分类器判定"vs"已上传网格值"。
+            String arg = line.length() > 9 ? line.substring(9).trim() : "";
+            String[] p = arg.isEmpty() ? new String[0] : arg.split("\\s+");
+            String out;
+            if (p.length == 3) {
+                try {
+                    out = VoxelGrid.probe(mc, Integer.parseInt(p[0]), Integer.parseInt(p[1]), Integer.parseInt(p[2]));
+                } catch (NumberFormatException e) {
+                    out = "usage: !voxprobe <x> <y> <z>";
+                }
+            } else if (p.length == 6) {
+                // 盒扫描:让工具自己把"非空气却判透光"的格子找出来,不必先猜坐标
+                try {
+                    out = VoxelGrid.scan(mc,
+                            Integer.parseInt(p[0]), Integer.parseInt(p[1]), Integer.parseInt(p[2]),
+                            Integer.parseInt(p[3]), Integer.parseInt(p[4]), Integer.parseInt(p[5]));
+                } catch (NumberFormatException e) {
+                    out = "usage: !voxprobe <x1> <y1> <z1> <x2> <y2> <z2>";
+                }
+            } else {
+                out = "usage: !voxprobe <x> <y> <z> | <x1> <y1> <z1> <x2> <y2> <z2>";
+            }
+            for (String l : out.split("\n")) {
+                TacLightMod.LOGGER.info("[TacLight] RELAY voxprobe | {}", l);
+            }
+            return;
+        }
+        if (line.startsWith("!voxray")) {
+            // 体素射线探针:无参 = 眼位沿视线 24 格;逐格 live/grid 码 + 两种口径总透射率。
+            String arg = line.length() > 7 ? line.substring(7).trim() : "";
+            String[] p = arg.isEmpty() ? new String[0] : arg.split("\\s+");
+            String out;
+            if (p.length == 0 && mc.player != null) {
+                net.minecraft.world.phys.Vec3 eye = mc.player.getEyePosition();
+                net.minecraft.world.phys.Vec3 look = mc.player.getViewVector(1.0F);
+                out = VoxelGrid.ray(mc, eye.x, eye.y, eye.z,
+                        eye.x + look.x * 24.0, eye.y + look.y * 24.0, eye.z + look.z * 24.0,
+                        dev.taclight.channel.VoxelProbe.DEFAULT_MAX_CELLS);
+            } else if (p.length == 6) {
+                try {
+                    out = VoxelGrid.ray(mc,
+                            Double.parseDouble(p[0]), Double.parseDouble(p[1]), Double.parseDouble(p[2]),
+                            Double.parseDouble(p[3]), Double.parseDouble(p[4]), Double.parseDouble(p[5]),
+                            dev.taclight.channel.VoxelProbe.DEFAULT_MAX_CELLS);
+                } catch (NumberFormatException e) {
+                    out = "usage: !voxray [x1 y1 z1 x2 y2 z2]";
+                }
+            } else {
+                out = "usage: !voxray [x1 y1 z1 x2 y2 z2] (无参 = 眼位沿视线 24 格)";
+            }
+            for (String l : out.split("\n")) {
+                TacLightMod.LOGGER.info("[TacLight] RELAY voxray | {}", l);
+            }
+            return;
+        }
         if (line.startsWith("!voxel")) {
             // 体素 DDA 遮挡总开关(09-01 深夜④,墙后漏光立项):off = SSBO 无效位,GLSL 回退 SSO
             String arg = line.length() > 6 ? line.substring(6).trim() : "";

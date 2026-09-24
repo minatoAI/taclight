@@ -66,7 +66,12 @@ public final class VoxelDda {
         return transmission;
     }
 
-    private static List<Visited> traceVisited(
+    /**
+     * 真正穿入的体素 + 每格穿透长度。2026-09-25 起改为包内可见(package-private),
+     * 供同包的 {@link VoxelProbe} 做"逐格 live/grid 码"诊断复用同一遍历
+     * (诊断必须走与生产同一条 DDA,否则探针报的就不是渲染看到的东西)。
+     */
+    static List<Visited> traceVisited(
             double ax, double ay, double az,
             double bx, double by, double bz) {
         double dx = bx - ax;
