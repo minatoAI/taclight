@@ -1,6 +1,40 @@
 > 本文所述 commit id 为 2026-09-17 历史重写前的旧 id；映射见 `docs/COMMIT-ID-REMAP-2026-09-17.md`
 
-## 09-25 夜 · 真机 E2E 验收：Complementary 注入可见性达成 + 自检"说谎"闭环(未 push)
+## 09-25 深夜 · 手持灯持物门修复(用户报:拿枪时两盏灯同时亮) + 功能扫掠(未 push)
+
+- **用户报的 bug**：自带手持灯"总是会打开，没有检测状态" ⇒ 手里拿枪时**枪灯与手持灯同时亮**；
+  把手电筒/手上物品换掉，手持灯也不灭。用户口述的设计：①先看手里是不是拿着 `taclight:flashlight`；
+  ②再看开关；③从手里移除后自动关上。
+- **根因**：`ClientSpotlightUploader` 的手持灯分支只查 `ClientLightState.isOn()`，**不查手里拿的是什么**；
+  而枪灯早就有"偏好 × 持枪探针"的乘法门（`gunLightEffective()`）⇒ 同一份真机快照里
+  `light={"handheld":true,"gun":true,"gunEffective":true}`，两盏灯同时有效。
+- **修复**：`ClientLightState` 加持物探针 + 纯函数 `effective(switch,holding,neon)` /
+  `autoClear(switch,wasHolding,nowHolding,neon)` + `handheldEffective()`；
+  上传器 / L 键 / 中继 `!light` / Iris 物品光源**四处统一口径**；tick 每帧覆写探针并在**离手时自动关**+同步服务端；
+  `DebugSnapshotter` 新增 `handheldEffective`（与 `gunEffective` 对称，追加在 `light` 段尾部）。
+  **霓虹调试（K / `!neon`）故意豁免持物门**：它的用途是证明 SSBO 通道，与手里拿什么无关；调试期间也不自动关。
+- **契约** `HandheldGateContract`（**26 checks**，含 `[旧码必红]` 锚点）注册进 `AllContracts`。
+  **旧码必红实测**：把 `effective` 合成旧实现（只 `return switchOn;`）⇒ 红
+  （`FAIL effective(switch=true, holding=false, neon=false)=false`，正是该 bug）⇒
+  **逐字节还原**（sha `966E7A2BAB07C81495EC347A0AB0284D520564110CC6EE67CE239A44CB187D46`）⇒ 复绿。
+- **真机验证（负路径）**：手持 TaCZ 枪（未持手电筒）、Complementary r5.9.3 生效时：
+  `!light` → **`[TacLight] RELAY light -> ignored (not holding flashlight)`**；开关保持 `flash=false`（**不假成功**）；
+  `ssbo count=1`（只有枪灯；修复前会变 2）；快照 `handheldEffective:false`。
+- **功能扫掠（同批真机轮，17 张同 pose 截图 + 数值）**：`cone` 与开/关灯**显著可测**
+  （`cone-30` 全图 ≥128 像素 27,207 → 162,731）；`beam` / `neon` / `voxel` 三项在**本场景**
+  （开阔雪地、第一人称、无遮挡物、平视）**差异落在噪声级、判不出** —— 这是**场景不适配**，
+  不是"没实现"，需专用场景重测（侧视 / 有遮挡物 / 压暗背景）。
+- **同批验证到的两件事**：① **tune 持久化读路径真机可用** —— 往 `config/taclight-client.toml` 播种
+  `attenK=8.0 / kneeGain=4.0 / intensity=20.0` 后，启动日志出现
+  `[TacLight] TUNE restored: atten=8.0 knee=4.0 voxel=on`（此前该项目仅离线绿）；
+  ② **性能基线** —— `!bench` ⇒ `BENCH start (3s)` → **`frames=102 avgFPS=34.1 onePctLow=19.4 minFPS=19.3`**
+  （RTX 5070 Ti + Complementary r5.9.3 + 体积光），可作"体积光占屏→帧时间"用例的对照基线。
+- **未验证（不许写成已验证）**：① 正路径（真拿着手电筒时开灯、拿出后自动灭）——中继没有背包通道，
+  需人工按键或把 modtest-mcp 桥装进实例；② 副手持灯；③ **`builds=934`**（体素网格 ~40 s 内重建 934 次，
+  ≈23 次/秒）与 `lastBuildMs=31.38`，**仅记录观察、不下结论**，需专项复查。
+- 证据（工作区）：`docs/evidence/2026-09-25-handheld-gate/`、`docs/evidence/2026-09-25-feature-sweep/`。
+
+
 
 - **结论**：用户报的"Complementary 没注入 / 照明没生效"**真机复现不出**。在用户的 HMCL 实例上实测：
   注入 **30 行成功**；聊天栏打 **`✔ 已注入到 'ComplementaryReimagined_r5.9.3.zip' (运行时 interop 注入)`**；
