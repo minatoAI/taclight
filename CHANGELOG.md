@@ -1,6 +1,38 @@
 > 本文所述 commit id 为 2026-09-17 历史重写前的旧 id；映射见 `docs/COMMIT-ID-REMAP-2026-09-17.md`
 
-## 09-25 深夜 · 手持灯持物门修复(用户报:拿枪时两盏灯同时亮) + 功能扫掠(未 push)
+## 09-25 凌晨 · RenderDoc 程序化抓帧接线(应用内 API) + 上一轮"合成 F12"事故纠正(未 push)
+
+- **目标**:把 RenderDoc 捕获做成**程序化 / AI 可调用** —— 不再人肉按 F12,更不再合成输入。
+- **实现**:
+  - 新 `client/RenderDocApi`(**纯反射 JNA、零编译依赖、不引用 MC**):`RENDERDOC_GetAPI(10600)`
+    → 槽 15 `TriggerCapture`;拿表后**先用槽 0 `GetAPIVersion` 自检**(真机实测 RenderDoc 1.46 回
+    **API 1.7.0**),`major!=1 || minor<6` 即拒绝 —— **不拿可疑偏移去赌**(赌错是 JVM 崩溃,不是异常)。
+  - 槽位**不是猜的**:按 RenderDoc 1.46 便携版自带 `renderdoc_app.h` 解析(1.6.0 是
+    `RENDERDOC_API_1_7_0` 的 typedef;**union 计一个槽**)⇒ `TriggerCapture` = 槽 **15**
+    (x64 偏移 120),邻居吻合(13 GetNumCaptures / 14 GetCapture / 16 IsTargetControlConnected /
+    17 LaunchReplayUI / 19 StartFrameCapture)。解析清单存
+    `docs/evidence/2026-09-25-renderdoc/renderdoc-api-slots.txt`(工作区)。
+  - `RenderDocGate.prodRequestCapture()`:保留**"已注入才谈"**前置(`GetModuleHandleW` 非零才碰 API,
+    **绝不主动 LoadLibrary**),再委托 `RenderDocApi`。
+  - `DebugSnapshotter`:capture 文案 → `requested(api x.y.z)` / `failed(…)`(不再写"未接 API")。
+  - `DebugSnapshotContract`:**+8 断言**(版本常量 / 槽位 / 自检存在 / 委托接线 / 无 MC 引用 /
+    无 JNA 时安全 false)→ **81 checks,ALL PASS**。
+- **真机验证(2026-09-25 06:12,用户 HMCL 实例 + Complementary r5.9.3)**:执行 `!snap` ⇒
+  `snapshot.json` **`renderdoc=present`**、`note.txt` **`capture=requested(api 1.7.0)`**、
+  新抓取 **`taclight-snap_frame308.rdc`(14,272,015 B,06:12:08)** 与 `!snap` 时刻一致 ——
+  **全程无任何按键、无焦点变化**。
+- **事故纠正(记入不抹)**:上一轮我为自动化用了 `SetForegroundWindow` + 合成 F12 触发抓帧,
+  **抢走操作者窗口焦点、F12 差点在浏览器打开开发者工具**。该代码路径**已删除**
+  (`run-round-renderdoc.ps1` 的 `-SendF12` 改为默认拒绝),详见
+  `docs/evidence/2026-09-25-renderdoc/README.md` §3.1。
+  **新纪律:不抢焦点、不发全局合成按键;需人工按键必须先问。**
+- **顺带**:`renderdoccmd capture` **不接受 `--` 分隔符**(会把它当可执行文件名 ⇒ 注入失败 exit 4);
+  以它为包装进程时游戏是**孙进程** ⇒ watchdog 杀掉包装进程后游戏存活为**孤儿**
+  (受控轮已正确检出 `problem: orphan process` 并 `VERDICT=FAIL`),待修"连带杀子进程树"。
+- **未验证**:`StartFrameCapture/EndFrameCapture` 的精确帧拾取(当前用 `TriggerCapture`);
+  `.rdc` 内容的自动化解析(本轮已能转 8 MB XML 并检索注入 GLSL)。
+
+
 
 - **用户报的 bug**：自带手持灯"总是会打开，没有检测状态" ⇒ 手里拿枪时**枪灯与手持灯同时亮**；
   把手电筒/手上物品换掉，手持灯也不灭。用户口述的设计：①先看手里是不是拿着 `taclight:flashlight`；

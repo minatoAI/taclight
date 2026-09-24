@@ -161,6 +161,19 @@ public class DebugSnapshotContract {
                 "RenderDocGate 含二选一注释(JNA/Kernel32 选定 + LWJGL 弃选理由)");
         check(gate.contains("isAvailable") && gate.contains("triggerCapture") && gate.contains("getStatus"),
                 "RenderDocGate 含三方法 isAvailable/triggerCapture/getStatus");
+        // RenderDoc 应用内 API 绑定(2026-09-25):程序化抓帧,不抢焦点/不发合成按键。
+        String api = read("src/main/java/dev/taclight/client/RenderDocApi.java");
+        check(api.contains("VERSION_1_6_0 = 10600"), "RenderDocApi 申请 RENDERDOC_API_1_6_0(10600)");
+        check(api.contains("SLOT_TRIGGER_CAPTURE = 15"),
+                "TriggerCapture = 槽 15(据 renderdoc_app.h v1.46 按'union 计一槽'解析)");
+        check(api.contains("SLOT_GET_API_VERSION") && api.contains("minorV < 6"),
+                "先用槽0 GetAPIVersion 自检,版本不符即拒绝(不拿可疑偏移去赌)");
+        check(api.contains("RENDERDOC_GetAPI"), "经 RENDERDOC_GetAPI 取 API 表");
+        check(gate.contains("RenderDocApi.triggerCapture()"), "生产抓取路径委托 RenderDocApi");
+        check(!api.contains("net.minecraft") && !api.contains("irisshaders"),
+                "RenderDocApi 不引用 MC/Iris(离线契约可加载)");
+        check(!RenderDocApi.triggerCapture(), "离线无注入: triggerCapture=false 且绝不抛");
+        check(RenderDocApi.lastVersion() == null, "离线无注入: 不记录 API 版本");
 
         System.out.println("DebugSnapshotContract: ALL PASS (" + checks + " checks)");
     }

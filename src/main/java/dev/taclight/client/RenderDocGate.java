@@ -129,16 +129,17 @@ public final class RenderDocGate {
     }
 
     /**
-     * 生产抓取:已注入才值得谈;但本模组尚无 RenderDoc API 绑定
-     * (RENDERDOC_GetAPI 1.6.0 → TriggerCapture 是下一步的事),如实回 false,
-     * 不伪造"已抓取"。将来接线仍保持"未注入即 false"的前置。
+     * 生产抓取(<b>2026-09-25 接线</b>):前置<b>仍是"已注入才谈"</b>——{@code GetModuleHandleW} 非零
+     * 才去碰 API,<b>绝不主动 LoadLibrary</b>。真正的调用在 {@link RenderDocApi}
+     * ({@code RENDERDOC_GetAPI(1.6.0)} → 槽15 {@code TriggerCapture};槽0 版本自检)。
+     * 任何失败 ⇒ {@code false},绝不抛。
      */
     private static boolean prodRequestCapture() {
         try {
             if (prodModuleHandle(MODULE) == 0) {
                 return false;
             }
-            return false;
+            return RenderDocApi.triggerCapture();
         } catch (Throwable t) {
             return false;
         }

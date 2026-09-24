@@ -210,13 +210,17 @@ public final class DebugSnapshotter {
         }
     }
 
-    /** RenderDoc 抓取(有注入才尝试;结果只记 note,不影响快照落盘)。 */
+    /** RenderDoc 抓取(有注入才尝试;结果只记 note,不影响快照落盘)。2026-09-25 起真正接线。 */
     private static String triggerRenderDocCapture() {
         try {
             if (!RenderDocGate.isAvailable()) {
                 return "skipped(renderdoc absent)";
             }
-            return RenderDocGate.triggerCapture() ? "requested" : "not-bound(最小闭环:仅门控,未接 RENDERDOC_GetAPI)";
+            if (!RenderDocGate.triggerCapture()) {
+                return "failed(RENDERDOC_GetAPI 未就绪或版本不符;见 RenderDocApi)";
+            }
+            String v = RenderDocApi.lastVersion();
+            return v == null ? "requested" : "requested(api " + v + ")";
         } catch (Throwable t) {
             return "failed:" + t.getClass().getSimpleName();
         }
