@@ -390,7 +390,8 @@ float taclight_vox_transmit(vec3 worldA, vec3 worldB) {
         if (any(lessThan(cell, ivec3(0))) || any(greaterThanEqual(cell, ivec3(dim)))) return T;
         if (all(equal(cell, last))) return T;
         int idx = cell.x + cell.y * int(dim.x) + cell.z * int(dim.x) * int(dim.y);
-        uint code = (voxData[idx >> 4] >> uint((idx & 15) * 2)) & 3u;
+        // 2026-09-25 高度感知遮挡:4bit/体素(8 格/uint),码 0..15。
+        uint code = (voxData[idx >> 3] >> uint((idx & 7) * 4)) & 15u;
         if (code == 3u) {
             // 穿透长度软化:tMax 以归一化方向计,单位=沿射线方块数(终点在 t=len);
             // 出格时间-入格时间(钳到 len)即该格内穿透长度;≥带宽仍 T=0。
@@ -399,6 +400,22 @@ float taclight_vox_transmit(vec3 worldA, vec3 worldB) {
             float f = clamp(penLen / TACLIGHT_VOX_FUZZ, 0.0, 1.0);
             if (f >= 1.0) return 0.0;
             T *= 1.0 - f;
+        }
+        else if (code >= 4u) {
+            // 薄板(高度感知,4..15):只有射线在该格内的 y 区间与板区间相交才挡——从板顶上方
+            // 掠过必须放行(细雪层/地毯/半砖正是这一类)。薄板不透明 ⇒ 命中即 T=0;
+            // 不套 FUZZ 软化:板厚(1/8..7/8)本就小于带宽,套用会把雪层又放行掉。
+            // 底薄板 4..11:lo=0, hi=(code−3)/8;顶薄板 12..15:lo=(code−8)/8, hi=1。
+            float tExit = min(tMax.x, min(tMax.y, tMax.z));
+            float lo = code >= 12u ? (float(code) - 8.0) / 8.0 : 0.0;
+            float hi = code >= 12u ? 1.0 : (float(code) - 3.0) / 8.0;
+            float yA = a.y + dir.y * tNext - float(cell.y);
+            float yB = a.y + dir.y * tExit - float(cell.y);
+            float yLo = min(yA, yB);
+            float yHi = max(yA, yB);
+            bool hit = (yHi - yLo <= 1e-6) ? (yLo >= lo && yLo < hi)
+                                           : (min(yHi, hi) - max(yLo, lo) > 1e-6);
+            if (hit) return 0.0;
         }
         else if (code == 2u) T *= 0.40;      // 树叶:0.6 遮挡/格 → 透射 0.4/格
         else if (code == 1u) T *= 0.75; // 软植被:0.25 遮挡/格
@@ -448,13 +465,27 @@ float taclight_vox_hit_dist(vec3 worldA, vec3 dir, float maxDist) {
         tMax += tDelta * vec3(tied);
         if (any(lessThan(cell, ivec3(0))) || any(greaterThanEqual(cell, ivec3(dim)))) return maxDist;
         int idx = cell.x + cell.y * int(dim.x) + cell.z * int(dim.x) * int(dim.y);
-        uint code = (voxData[idx >> 4] >> uint((idx & 15) * 2)) & 3u;
+        // 2026-09-25 高度感知:4bit/体素,与 taclight_vox_transmit 逐位同源。
+        uint code = (voxData[idx >> 3] >> uint((idx & 7) * 4)) & 15u;
         if (code == 3u) {
             float tExit = min(tMax.x, min(tMax.y, tMax.z));
             float penLen = max(0.0, min(tExit, maxDist) - tNext);
             float f = clamp(penLen / TACLIGHT_VOX_FUZZ, 0.0, 1.0);
             if (f >= 1.0) return tNext;
             T *= 1.0 - f;
+        }
+        else if (code >= 4u) {
+            // 薄板:命中即视为该方向上的首次遮挡(表是纯方向函数,无终点格豁免)
+            float tExit = min(tMax.x, min(tMax.y, tMax.z));
+            float lo = code >= 12u ? (float(code) - 8.0) / 8.0 : 0.0;
+            float hi = code >= 12u ? 1.0 : (float(code) - 3.0) / 8.0;
+            float yA = a.y + dir.y * tNext - float(cell.y);
+            float yB = a.y + dir.y * tExit - float(cell.y);
+            float yLo = min(yA, yB);
+            float yHi = max(yA, yB);
+            bool hit = (yHi - yLo <= 1e-6) ? (yLo >= lo && yLo < hi)
+                                           : (min(yHi, hi) - max(yLo, lo) > 1e-6);
+            if (hit) return tNext;
         }
         else if (code == 2u) T *= 0.40;
         else if (code == 1u) T *= 0.75;

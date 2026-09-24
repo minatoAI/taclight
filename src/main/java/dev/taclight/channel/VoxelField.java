@@ -24,15 +24,48 @@ import java.util.List;
  * dev.taclight.client.VoxelGrid。本类自研,零第三方照搬(红线 1)。</p>
  */
 public final class VoxelField {
-    /** 栅格单轴最大格数(SSBO 容量与 DDA 步数上限同源;128³×2bit = 512KB)。 */
+    /** 栅格单轴最大格数(SSBO 容量与 DDA 步数上限同源;128³×4bit = 1MB)。 */
     public static final int MAX_DIM = 128;
-    /** 每轴 128 格、2bit/体素时的 uint 总数(= SpotlightBufferLayout.VOX_MAX_UINTS)。 */
-    public static final int VOX_MAX_UINTS = MAX_DIM * MAX_DIM * MAX_DIM / 16;
+    /** 每体素位数(2026-09-25 高度感知遮挡:2bit → 4bit,16 码)。 */
+    public static final int BITS_PER_VOXEL = 4;
+    /** 每个 uint 装几个体素。 */
+    public static final int VOXELS_PER_UINT = 32 / BITS_PER_VOXEL;
+    /** 每轴 128 格、4bit/体素时的 uint 总数(= SpotlightBufferLayout.VOX_MAX_UINTS)。 */
+    public static final int VOX_MAX_UINTS = MAX_DIM * MAX_DIM * MAX_DIM / VOXELS_PER_UINT;
 
     public static final int CODE_EMPTY = 0;
     public static final int CODE_VEG = 1;
     public static final int CODE_LEAF = 2;
     public static final int CODE_SOLID = 3;
+    /** 底薄板码基:4..11 = 占满 XZ 足印、从 y=0 起、顶高 = (code−3)/8。 */
+    public static final int CODE_SLAB_BOTTOM_BASE = 4;
+    /** 顶薄板码基:12..15 = 占满 XZ 足印、到 y=1 止、底高 = (code−8)/8。 */
+    public static final int CODE_SLAB_TOP_BASE = 12;
+
+    /** 底薄板码:{@code eighths} ∈ 1..7(顶高 = eighths/8)。 */
+    public static int slabBottomCode(int eighths) {
+        return CODE_SLAB_BOTTOM_BASE + (eighths - 1);
+    }
+
+    /** 顶薄板码:{@code eighths} ∈ 4..7(底高 = eighths/8)。 */
+    public static int slabTopCode(int eighths) {
+        return CODE_SLAB_TOP_BASE + (eighths - 4);
+    }
+
+    /** 是否薄板码(4..15;0..3 为 空/植被/树叶/实心 四个基础码)。 */
+    public static boolean isSlab(int code) {
+        return code >= CODE_SLAB_BOTTOM_BASE;
+    }
+
+    /** 薄板占据的格内 y 区间下端(0..1)。 */
+    public static double slabLow(int code) {
+        return code >= CODE_SLAB_TOP_BASE ? (code - CODE_SLAB_TOP_BASE + 4) / 8.0 : 0.0;
+    }
+
+    /** 薄板占据的格内 y 区间上端(0..1)。 */
+    public static double slabHigh(int code) {
+        return code >= CODE_SLAB_TOP_BASE ? 1.0 : (code - CODE_SLAB_BOTTOM_BASE + 1) / 8.0;
+    }
 
     /** 栅格盒:origin = 方块角点世界坐标(整数格),dims = 各轴格数(≤MAX_DIM)。 */
     public static final class Box {
@@ -58,7 +91,7 @@ public final class VoxelField {
     /** 上传快照(data 为复用缓冲的只读视图,仅渲染线程消费)。 */
     public record Snapshot(float ox, float oy, float oz, int dx, int dy, int dz, int[] data, long version) {
         /** 实际占用 uint 数(上传只传有数据区)。 */
-        public int usedUints() { return (dx * dy * dz + 15) / 16; }
+        public int usedUints() { return (dx * dy * dz + VOXELS_PER_UINT - 1) / VOXELS_PER_UINT; }
     }
 
     private VoxelField() {}
@@ -90,17 +123,17 @@ public final class VoxelField {
         return x + y * b.dx + z * b.dx * b.dy;
     }
 
-    /** 2bit 打包:第 idx 个体素占 uint[idx&gt;&gt;4] 的 (idx&amp;15)×2 位,写覆盖旧码。 */
+    /** 4bit 打包:第 idx 个体素占 uint[idx&gt;&gt;3] 的 (idx&amp;7)×4 位,写覆盖旧码。 */
     public static void pack(Box b, int x, int y, int z, int code, int[] data) {
         int idx = voxelIndex(b, x, y, z);
-        int sh = (idx & 15) * 2;
-        int i = idx >> 4;
-        data[i] = (data[i] & ~(3 << sh)) | ((code & 3) << sh);
+        int sh = (idx & (VOXELS_PER_UINT - 1)) * BITS_PER_VOXEL;
+        int i = idx / VOXELS_PER_UINT;
+        data[i] = (data[i] & ~(15 << sh)) | ((code & 15) << sh);
     }
 
     public static int unpack(Box b, int x, int y, int z, int[] data) {
         int idx = voxelIndex(b, x, y, z);
-        return (data[idx >> 4] >> ((idx & 15) * 2)) & 3;
+        return (data[idx / VOXELS_PER_UINT] >> ((idx & (VOXELS_PER_UINT - 1)) * BITS_PER_VOXEL)) & 15;
     }
 
     /** 出实心步进(沿 −dir 回退的单步距离)。 */

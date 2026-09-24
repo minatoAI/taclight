@@ -12,7 +12,8 @@ public class SpotlightBufferLayoutContract {
         check(SpotlightBufferLayout.OFF_VOX_ORIGIN % 16 == 0, "voxOrigin 16B 对齐(std430 vec4)");
         check(SpotlightBufferLayout.OFF_VOX_META == SpotlightBufferLayout.OFF_VOX_ORIGIN + 16, "voxMeta 偏移");
         check(SpotlightBufferLayout.OFF_VOX_DATA == SpotlightBufferLayout.OFF_VOX_META + 16, "voxData 偏移");
-        check(SpotlightBufferLayout.VOX_MAX_UINTS == 128 * 128 * 128 / 16, "VOX_MAX_UINTS=2bit 打包 128^3");
+        check(SpotlightBufferLayout.VOX_MAX_UINTS == 128 * 128 * 128 / 8,
+                "VOX_MAX_UINTS=4bit 打包 128^3(2026-09-25 高度感知遮挡)");
         check(SpotlightBufferLayout.bufferSize()
                 == SpotlightBufferLayout.OFF_VOX_DATA + SpotlightBufferLayout.VOX_MAX_UINTS * 4, "缓冲=定长布局");
 

@@ -27,11 +27,11 @@ public class VoxelFieldContract {
         check(box2.dx == VoxelField.MAX_DIM, "远灯 x 轴钳到 128");
         check(box2.dy <= VoxelField.MAX_DIM && box2.dz <= VoxelField.MAX_DIM, "其余轴仍≤128");
 
-        // ---- 3. 2bit 打包位序 = GLSL 镜像:idx=x+y*dx+z*dx*dy;word=idx>>4;bit=(idx&15)*2 ----
+        // ---- 3. 4bit 打包位序 = GLSL 镜像:idx=x+y*dx+z*dx*dy;word=idx>>3;bit=(idx&7)*4 ----
         int[] data = new int[VoxelField.VOX_MAX_UINTS];
         VoxelField.pack(box2, 3, 2, 5, VoxelField.CODE_SOLID, data);
         int idx = 3 + 2 * box2.dx + 5 * box2.dx * box2.dy;
-        check(((data[idx >> 4] >> ((idx & 15) * 2)) & 3) == VoxelField.CODE_SOLID, "GLSL 位序读回=CODE_SOLID");
+        check(((data[idx >> 3] >> ((idx & 7) * 4)) & 15) == VoxelField.CODE_SOLID, "GLSL 位序读回=CODE_SOLID");
         check(VoxelField.unpack(box2, 3, 2, 5, data) == VoxelField.CODE_SOLID, "unpack=CODE_SOLID");
         check(VoxelField.unpack(box2, 4, 2, 5, data) == VoxelField.CODE_EMPTY, "相邻体素不受污染");
         VoxelField.pack(box2, 4, 2, 5, VoxelField.CODE_LEAF, data);
@@ -39,12 +39,24 @@ public class VoxelFieldContract {
                 && VoxelField.unpack(box2, 4, 2, 5, data) == VoxelField.CODE_LEAF, "同字双体素独立");
         VoxelField.pack(box2, 4, 2, 5, VoxelField.CODE_VEG, data);
         check(VoxelField.unpack(box2, 4, 2, 5, data) == VoxelField.CODE_VEG, "重写覆盖旧码");
+        // 2026-09-25 高度感知:薄板码(4..15)必须能原样存取 —— 这正是 2bit→4bit 的目的
+        int slab = VoxelField.slabBottomCode(1);
+        VoxelField.pack(box2, 5, 2, 5, slab, data);
+        check(VoxelField.unpack(box2, 5, 2, 5, data) == slab, "薄板码(雪 1 层=4)原样存取");
+        check(VoxelField.unpack(box2, 3, 2, 5, data) == VoxelField.CODE_SOLID,
+                "同字内 4bit 槽独立:5 号写入不污染 3 号");
+        check(VoxelField.isSlab(slab) && VoxelField.slabLow(slab) == 0.0 && VoxelField.slabHigh(slab) == 0.125,
+                "薄板码 4 ⇒ 区间 [0, 0.125]");
+        int topSlab = VoxelField.slabTopCode(4);
+        check(VoxelField.slabLow(topSlab) == 0.5 && VoxelField.slabHigh(topSlab) == 1.0,
+                "顶薄板码 12 ⇒ 区间 [0.5, 1]");
 
         // ---- 4. Snapshot 语义 ----
         VoxelField.Snapshot snap = new VoxelField.Snapshot(box.ox, box.oy, box.oz,
                 box.dx, box.dy, box.dz, data, 42L);
         check(snap.ox() == box.ox && snap.dx() == box.dx && snap.version() == 42L, "snapshot 字段直传");
-        check(snap.usedUints() == (box.dx * box.dy * box.dz + 15) / 16, "usedUints=ceil(voxels/16)");
+        check(snap.usedUints() == (box.dx * box.dy * box.dz + VoxelField.VOXELS_PER_UINT - 1) / VoxelField.VOXELS_PER_UINT,
+                "usedUints=ceil(voxels/8,4bit 打包)");
 
         // ---- 5. 小半径灯不产生退化盒 ----
         SpotlightData L0 = SpotlightData.spot(5f, 5f, 5f, 0.5f,

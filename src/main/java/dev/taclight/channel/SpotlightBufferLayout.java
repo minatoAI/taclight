@@ -38,12 +38,12 @@ public final class SpotlightBufferLayout {
     public static final int OFF_VOX_ORIGIN = HEADER_BYTES + MAX_LIGHTS * LIGHT_STRIDE_BYTES; // 784
     /** voxMeta:xyz=各轴格数,w 保留。 */
     public static final int OFF_VOX_META = OFF_VOX_ORIGIN + 16;   // 800
-    /** 2bit 打包数据起点。 */
+    /** 4bit 打包数据起点。 */
     public static final int OFF_VOX_DATA = OFF_VOX_META + 16;     // 816
     /** 单轴最大格数(与 VoxelField.MAX_DIM 同值;不引用以防包间循环无谓耦合,契约钉等值)。 */
     public static final int VOX_MAX_DIM = 128;
-    /** 128³ × 2bit / 32bit。 */
-    public static final int VOX_MAX_UINTS = VOX_MAX_DIM * VOX_MAX_DIM * VOX_MAX_DIM / 16; // 131072
+    /** 128³ × 4bit / 32bit(2026-09-25 高度感知遮挡:2bit→4bit,512KB→1MB)。 */
+    public static final int VOX_MAX_UINTS = VOX_MAX_DIM * VOX_MAX_DIM * VOX_MAX_DIM / 8; // 262144
     /** SSBO 总长(定长)。 */
     private static final int FIXED_BYTES = OFF_VOX_DATA + VOX_MAX_UINTS * 4;
 

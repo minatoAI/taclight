@@ -32,6 +32,10 @@ public class VoxelProbeContract {
         check(VoxelProbe.codeName(VoxelField.CODE_LEAF).equals("LEAF"), "码 2 = LEAF");
         check(VoxelProbe.codeName(VoxelField.CODE_SOLID).equals("SOLID"), "码 3 = SOLID");
         check(VoxelProbe.codeName(VoxelProbe.OUT).equals("OUT"), "码 -1 = OUT(盒外)");
+        check(VoxelProbe.codeName(VoxelField.slabBottomCode(1)).equals("SLAB[0.000..0.125]"),
+                "薄板码可读名(雪 1 层)=" + VoxelProbe.codeName(VoxelField.slabBottomCode(1)));
+        check(VoxelProbe.codeName(VoxelField.slabTopCode(4)).equals("SLAB[0.500..1.000]"),
+                "顶薄板码可读名=" + VoxelProbe.codeName(VoxelField.slabTopCode(4)));
 
         // ---- 单格:一致不标注 / 分叉显式标注(这正是区分"判定错"与"上传错"的那一面) ----
         String same = VoxelProbe.cellReport(10, 64, -3, VoxelField.CODE_EMPTY, VoxelField.CODE_EMPTY);
@@ -57,21 +61,27 @@ public class VoxelProbeContract {
         check(z.contains("cells=0") && z.contains("无中间格"), "零长射线:cells=0 且显式说明");
 
         // ---- 盒扫描:签名是"非空气却被判透光"的计数 + 按方块归类,且漏光格必须优先打印 ----
+        // 2026-09-25 高度感知后雪层已是薄板码(不再漏光),真正的 EMPTY 例改用蛛网(coll 空/occ 满格)。
         java.util.List<VoxelProbe.Row> leaky = java.util.List.of(
-                new VoxelProbe.Row(1, 2, 3, "minecraft:snow{layers=1}", VoxelField.CODE_EMPTY, VoxelField.CODE_EMPTY),
-                new VoxelProbe.Row(1, 2, 4, "minecraft:snow{layers=1}", VoxelField.CODE_EMPTY, VoxelField.CODE_EMPTY));
+                new VoxelProbe.Row(1, 2, 3, "minecraft:cobweb", VoxelField.CODE_EMPTY, VoxelField.CODE_EMPTY),
+                new VoxelProbe.Row(1, 2, 4, "minecraft:cobweb", VoxelField.CODE_EMPTY, VoxelField.CODE_EMPTY));
         java.util.List<VoxelProbe.Row> rest = java.util.List.of(
-                new VoxelProbe.Row(1, 3, 3, "minecraft:stone", VoxelField.CODE_SOLID, VoxelField.CODE_SOLID));
-        String s = VoxelProbe.scanReport(leaky, rest, 5, 2, 0, 0, 1);
+                new VoxelProbe.Row(1, 3, 3, "minecraft:snow{layers=1}",
+                        VoxelField.slabBottomCode(1), VoxelField.slabBottomCode(1)),
+                new VoxelProbe.Row(1, 3, 4, "minecraft:stone", VoxelField.CODE_SOLID, VoxelField.CODE_SOLID));
+        String s = VoxelProbe.scanReport(leaky, rest, 5, 2, 0, 0, 1, 1);
         check(s.contains("nonAir=5") && s.contains("非空气却被判透光(EMPTY,完全不遮挡)=2"),
                 "盒扫描摘要给出'非空气却判透光'计数,实际=" + firstLine(s));
-        check(s.contains("漏光格按方块归类: minecraft:snow{layers=1}×2"),
+        check(s.contains("SLAB=1") && s.contains("SOLID=1"),
+                "盒扫描把薄板码单列(SLAB),不混进 SOLID(2026-09-25 真机首轮实测的计数缺陷)");
+        check(s.contains("漏光格按方块归类: minecraft:cobweb×2"),
                 "盒扫描把漏光格按方块归类(一眼看出是哪种方块)");
-        check(s.indexOf("minecraft:snow{layers=1}") < s.indexOf("minecraft:stone"),
+        check(s.indexOf("minecraft:cobweb") < s.indexOf("minecraft:snow{layers=1}"),
                 "漏光格优先打印(2026-09-25 真机教训:按坐标序会被地下石头挤掉)");
-        check(s.contains("block=minecraft:snow{layers=1}") && s.contains("live=EMPTY grid=EMPTY"),
+        check(s.contains("block=minecraft:cobweb") && s.contains("live=EMPTY grid=EMPTY"),
                 "盒扫描逐格给出方块标识(含属性)+判码+已上传值");
-        check(s.contains("TRUNCATED(2"), "未列出格数显式标注(5-3=2)");
+        check(s.contains("live=SLAB[0.000..0.125]"), "盒扫描对薄板码给出高度区间(雪 1 层可读)");
+        check(s.contains("TRUNCATED(1"), "未列出格数显式标注(5-4=1)");
 
         // ---- 探针必须复用生产 DDA(不得自写遍历,否则探针≠渲染看到的) ----
         String probe = read("src/main/java/dev/taclight/channel/VoxelProbe.java");

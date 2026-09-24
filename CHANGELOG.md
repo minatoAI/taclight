@@ -1,6 +1,34 @@
 > 本文所述 commit id 为 2026-09-17 历史重写前的旧 id；映射见 `docs/COMMIT-ID-REMAP-2026-09-17.md`
 
-## 09-25 清晨 · 体素单元诊断探针(!voxprobe/!voxray) + 细雪层穿光根因定案(未 push)
+## 09-25 上午 · 高度感知遮挡(方案 C):细雪层穿光修复 + 真机验证通过(未 push)
+
+- **根因(两处,第二处只有真机才暴露)**:
+  ① 旧口径 `occ 占比 ≤0.25 ⇒ EMPTY`("薄片透光")把雪 1–2 层判成**完全不遮挡**;
+  ② **`snow{layers=1}` 的 `coll` 是空的**(原版玩法:能走上雪层)⇒ **守卫 1(coll 空 ⇒ EMPTY)本身**
+     就把它判成透光 —— 只加"薄板码"修不了用户场景。雪 3–7 层旧口径落 VEG,每格只衰减 25%,仍偏透。
+- **实现**:
+  - **编码 2bit → 4bit(16 码)**:0..3 语义不变(空/植被 0.75/树叶 0.40/实心 FUZZ);
+    **4..11 底薄板**(占满 XZ 足印、从 y=0 起、顶高 (code−3)/8)、**12..15 顶薄板**(底高 (code−8)/8)。
+    打包 8 格/uint(`idx>>3`/`(idx&7)*4`/`& 15u`),容量 512KB→**1MB**;前向 DDA 仍避位运算(`/16u`+`%16u`)。
+  - **分类新口径**:守卫 1 加"**贴地薄板例外**"(占满足印单一盒 + 顶高 ≤ 1/8 ⇒ 薄板码;
+    绊线 occ 顶 0.5、蛛网 occ 满格 ⇒ 仍 EMPTY);其余守卫不变;占满足印单一盒 ⇒ 按高度出薄板码。
+    真 registry:雪 1..7 ⇒ 码 4..10,雪 8 ⇒ SOLID,地毯 ⇒ 4,活板门 ⇒ 5/15,半砖 ⇒ 7/12,楼梯/睡莲 ⇒ VEG。
+  - **透射**:DDA 取**射线在该格内的 y 区间**(CPU `Visited` 增字段;GLSL 用 `a.y+dir.y*tNext/tExit − cell.y`)
+    与板区间求交 ⇒ **相交全挡(T=0)、掠过板顶完全放行**;不套 FUZZ(板厚本就小于带宽 0.35)。
+  - 改动面:`VoxelField`/`VoxelClassifier`/`VoxelDda`/`VoxelGrid`/`SpotlightBufferLayout`/
+    `TemplateLibrary`(**手写前向 DDA**)/`pack/shaders/lib/taclight_core.glsl`(transmit + hit_dist 两处)。
+- **契约**:`VoxelDdaContract` **36** / `VoxelClassifyContract` **39** / `VoxelRealRegistryContract` **34** /
+  `InlineCoreContract` **44** / `VoxelFieldContract` **21** / `SpotlightBufferLayoutContract` **23** /
+  `VoxelProbeContract` **32**;`AllContracts` **ALL PASS**。
+- **真机验证(同世界同眼位,与归档漏光轮逐位相同)**:
+  - 代码级:`!voxray` 雪层格 = `SLAB[0.000..0.125]`(live==grid)、`liveT=gridT=0.000`(光路被挡);
+    `!voxprobe` 盒扫描 **非空气却判透光 116 → 0**;
+  - 视觉级:漏光斑区域(bbox 580,350–730,405)`ge128` **1486 → 12**(归档"无漏光对照 `!cone 3`"= 12)。
+- **工具缺陷(本轮发现并修)**:盒扫描摘要把薄板码混进 `SOLID` 计数 ⇒ 已单列 `SLAB=n` + 契约断言。
+- **残留(如实)**:高度量化 1/8(地毯略过挡 2×);铁轨因例外档从 EMPTY 变薄板 4;睡莲变 VEG;
+  `pack/shaders/block.properties` 未同步(包侧 SSO 回退路径);SSBO 上传量翻倍但**未做专门性能对照**。
+
+
 
 - **根因(真机 + 真 registry 双向确认)**:`minecraft:snow{layers=1/2}` 的遮挡形体积占比
   0.125/0.25 落在 C 口径的"薄片透光"档(≤0.25 ⇒ 码 0 = EMPTY)⇒ **细雪层对光完全不存在**;

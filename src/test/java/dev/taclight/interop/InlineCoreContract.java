@@ -139,12 +139,13 @@ public class InlineCoreContract {
         }
         String fwdFetch = extractFn(fwd, "float taclight_vox_fetch(").replaceAll("\\s+", "");
         check(fwdFetch.contains("voxData[word]"),
-                "前向标量取数 taclight_vox_fetch 经 voxData[word] 读 2bit 分类(无 >>/& 位运算)");
+                "前向标量取数 taclight_vox_fetch 经 voxData[word] 读 4bit 分类(无 >>/& 位运算)");
         // 2026-09-04 方形假阴影修复(坑102):整字 float(voxData[word]) 在字值>2^24 时舍入
         // (node 实测 50331651→50331652,首体素码 3→0:空读成实心=无中生有方块影)。
-        // 修法=uint 逐槽剥除(/4u×slot 次)+末余 %4u,0..3 小数值转 float 才精确;禁用 float 整字路径。
-        check(fwdFetch.contains("/4u") && fwdFetch.contains("%4u"),
-                "前向取数经 uint 剥除(/4u)+末余(%4u,小数值转 float 精确,坑102)");
+        // 修法=uint 逐槽剥除(/16u×slot 次)+末余 %16u,0..15 小数值转 float 才精确;禁用 float 整字路径。
+        // 2026-09-25 高度感知:2bit→4bit,剥除基数 4u→16u(槽数 16→8),坑102 的机理与修法不变。
+        check(fwdFetch.contains("/16u") && fwdFetch.contains("%16u"),
+                "前向取数经 uint 剥除(/16u)+末余(%16u,小数值转 float 精确,坑102)");
         check(!fwdFetch.contains("float(voxData[word])") && !fwdFetch.contains("div*=4.0")
                         && !fwdFetch.contains("mod(floor(w/div)"),
                 "前向取数禁用 float 整字除法路径(大字舍入=假阴影,坑102)");
@@ -152,6 +153,10 @@ public class InlineCoreContract {
         check(fwdVox.contains("voxOrigin.w<=0.0") && fwdVox.contains("taclight_vox_fetch(")
                         && fwdVox.contains("return0.0") && fwdVox.contains("T*=0.40") && fwdVox.contains("T*=0.75"),
                 "前向 vox_transmit = 标量 DDA(栅格无效 -1/实心 0/树叶 0.4/植被 0.75,2026-09-04 穿墙修复)");
+        // 2026-09-25 高度感知:前向也必须带薄板高度判定(否则 gbuffers 前向路径仍把细雪层当空气)
+        check(fwdVox.contains("code>=4.0") && fwdVox.contains("/8.0") && fwdVox.contains("yLo")
+                        && fwdVox.contains("return0.0"),
+                "前向 vox_transmit 含薄板高度判定(4..15 ⇒ 与射线格内 y 区间相交才挡)");
         // 2026-09-04 阴影破碎修复:掠边穿透软化带(与主线 TACLIGHT_VOX_FUZZ 0.35 同源,
         // 穿透<0.35 按比例放行,≥0.35 仍 return 0.0,墙后遮挡基线不变)+tie eps 与主线同 1e-6。
         check(fwdVox.contains("penLen") && fwdVox.contains("/0.35") && fwdVox.contains("T*=1.0-f")

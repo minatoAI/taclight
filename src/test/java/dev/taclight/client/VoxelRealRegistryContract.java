@@ -57,26 +57,30 @@ public class VoxelRealRegistryContract {
         BlockPos p = new BlockPos(0, 64, 0);
 
         // ---- 雪层(阵列主因):真实 SnowLayerBlock ----
+        // 2026-09-25 高度感知口径:雪 1..7 层 ⇒ 底薄板码 4..10(顶高 = layers/8);
+        // 8 层 occ=1.0 ⇒ SOLID。旧口径把 1–2 层判 EMPTY(完全不遮挡)= 用户报的"细雪层穿光"根因。
         for (int layers = 1; layers <= 8; layers++) {
-            int expect = layers <= 2 ? VoxelField.CODE_EMPTY
-                    : (layers == 8 ? VoxelField.CODE_SOLID : VoxelField.CODE_VEG);
+            int expect = layers >= 8 ? VoxelField.CODE_SOLID : VoxelField.slabBottomCode(layers);
             checkCode("雪 layers=" + layers, snow(layers), expect, p);
         }
         checkCode("雪块 minecraft:snow_block", Blocks.SNOW_BLOCK.defaultBlockState(), VoxelField.CODE_SOLID, p);
 
-        // ---- 薄片档 ----
-        checkCode("地毯 white_carpet", Blocks.WHITE_CARPET.defaultBlockState(), VoxelField.CODE_EMPTY, p);
+        // ---- 薄片档(2026-09-25:占满 XZ 足印的薄板 ⇒ 薄板码,按真实高度遮挡) ----
+        checkCode("地毯 white_carpet(1/16 ⇒ 量化到 1/8 薄板)", Blocks.WHITE_CARPET.defaultBlockState(),
+                VoxelField.slabBottomCode(1), p);
         checkCode("绊线 tripwire(无碰撞)", Blocks.TRIPWIRE.defaultBlockState(), VoxelField.CODE_EMPTY, p);
-        checkCode("铁轨 rail(无碰撞)", Blocks.RAIL.defaultBlockState(), VoxelField.CODE_EMPTY, p);
-        checkCode("睡莲 lily_pad", Blocks.LILY_PAD.defaultBlockState(), VoxelField.CODE_EMPTY, p);
+        checkCode("铁轨 rail(无碰撞 / occ 顶 1/8 ⇒ 贴地薄板例外)", Blocks.RAIL.defaultBlockState(),
+                VoxelField.slabBottomCode(1), p);
+        checkCode("睡莲 lily_pad(不占满足印 ⇒ VEG)", Blocks.LILY_PAD.defaultBlockState(), VoxelField.CODE_VEG, p);
         checkCode("蛛网 cobweb(无碰撞)", Blocks.COBWEB.defaultBlockState(), VoxelField.CODE_EMPTY, p);
-        checkCode("活板门 half=bottom open=false", Blocks.OAK_TRAPDOOR.defaultBlockState()
+        checkCode("活板门 half=bottom open=false(0.1875 ⇒ 量化 0.25 薄板)",
+                Blocks.OAK_TRAPDOOR.defaultBlockState()
                 .setValue(TrapDoorBlock.HALF, Half.BOTTOM).setValue(TrapDoorBlock.OPEN, false),
-                VoxelField.CODE_EMPTY, p);
+                VoxelField.slabBottomCode(2), p);
 
         // ---- 中低档 ----
-        checkCode("半砖 type=bottom", Blocks.SMOOTH_STONE_SLAB.defaultBlockState()
-                .setValue(SlabBlock.TYPE, SlabType.BOTTOM), VoxelField.CODE_VEG, p);
+        checkCode("半砖 type=bottom(0.5 ⇒ 底薄板 7)", Blocks.SMOOTH_STONE_SLAB.defaultBlockState()
+                .setValue(SlabBlock.TYPE, SlabType.BOTTOM), VoxelField.slabBottomCode(4), p);
         checkCode("楼梯 half=bottom", Blocks.OAK_STAIRS.defaultBlockState()
                 .setValue(StairBlock.HALF, Half.BOTTOM), VoxelField.CODE_VEG, p);
 
@@ -85,15 +89,16 @@ public class VoxelRealRegistryContract {
         checkCode("原木 oak_log", Blocks.OAK_LOG.defaultBlockState(), VoxelField.CODE_SOLID, p);
         checkCode("耕地 farmland(15/16)", Blocks.FARMLAND.defaultBlockState(), VoxelField.CODE_SOLID, p);
         checkCode("土径 dirt_path(15/16)", Blocks.DIRT_PATH.defaultBlockState(), VoxelField.CODE_SOLID, p);
-        checkCode("半砖 type=top", Blocks.SMOOTH_STONE_SLAB.defaultBlockState()
-                .setValue(SlabBlock.TYPE, SlabType.TOP), VoxelField.CODE_VEG, p);
+        checkCode("半砖 type=top(0.5 ⇒ 顶薄板 12)", Blocks.SMOOTH_STONE_SLAB.defaultBlockState()
+                .setValue(SlabBlock.TYPE, SlabType.TOP), VoxelField.slabTopCode(4), p);
         checkCode("半砖 type=double", Blocks.SMOOTH_STONE_SLAB.defaultBlockState()
                 .setValue(SlabBlock.TYPE, SlabType.DOUBLE), VoxelField.CODE_SOLID, p);
         checkCode("楼梯 half=top(共面回归例)", Blocks.OAK_STAIRS.defaultBlockState()
                 .setValue(StairBlock.HALF, Half.TOP), VoxelField.CODE_VEG, p);
-        checkCode("活板门 half=top open=false", Blocks.OAK_TRAPDOOR.defaultBlockState()
+        checkCode("活板门 half=top open=false(0.8125 ⇒ 顶薄板 15)",
+                Blocks.OAK_TRAPDOOR.defaultBlockState()
                 .setValue(TrapDoorBlock.HALF, Half.TOP).setValue(TrapDoorBlock.OPEN, false),
-                VoxelField.CODE_EMPTY, p);
+                VoxelField.slabTopCode(7), p);
         checkCode("栅栏 oak_fence(碰撞柱 1.5)", Blocks.OAK_FENCE.defaultBlockState(), VoxelField.CODE_SOLID, p);
         checkCode("墙 cobblestone_wall(碰撞柱 1.5)", Blocks.COBBLESTONE_WALL.defaultBlockState(), VoxelField.CODE_SOLID, p);
 
@@ -107,7 +112,8 @@ public class VoxelRealRegistryContract {
         // ---- 坐标透传(生产方法内部 CURSOR.set) ----
         int a = VoxelGrid.classify(EmptyBlockGetter.INSTANCE, snow(1), 0, 64, 0);
         int b = VoxelGrid.classify(EmptyBlockGetter.INSTANCE, snow(1), 37, 71, -12);
-        check(a == VoxelField.CODE_EMPTY && b == a, "同状态在 (0,64,0) 与 (37,71,-12) 均 ⇒ EMPTY(坐标透传无异常)");
+        check(a == VoxelField.slabBottomCode(1) && b == a,
+                "同状态在 (0,64,0) 与 (37,71,-12) 均 ⇒ 薄板码 4(坐标透传无异常)");
 
         if (!MISMATCH.isEmpty()) {
             throw new AssertionError("FAIL 真 registry 分档不符 " + MISMATCH.size() + " 例: " + MISMATCH);

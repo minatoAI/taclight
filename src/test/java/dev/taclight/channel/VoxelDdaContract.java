@@ -77,6 +77,35 @@ public class VoxelDdaContract {
                         cell -> cell.x() == 2 ? VoxelField.CODE_SOLID : VoxelField.CODE_EMPTY), 0.0),
                 "任一深穿透实心中间格透射为零");
 
+        // ---- 薄板高度感知(2026-09-25 细雪层穿光根因) ----
+        // 雪 1 层 = 底薄板 [0, 0.125]:穿过板体 ⇒ 全挡;从板上方掠过 ⇒ 完全放行。
+        int snow1 = VoxelField.slabBottomCode(1);
+        check(VoxelDda.transmit(0.5, 0.05, 0.5, 2.5, 0.05, 0.5,
+                        cell -> cell.x() == 1 ? snow1 : VoxelField.CODE_EMPTY) == 0.0,
+                "水平射线穿 1 层雪板(格内 y=0.05 < 0.125)⇒ T=0(细雪层必须挡)");
+        check(VoxelDda.transmit(0.5, 0.5, 0.5, 2.5, 0.5, 0.5,
+                        cell -> cell.x() == 1 ? snow1 : VoxelField.CODE_EMPTY) == 1.0,
+                "水平射线从板上方掠过(格内 y=0.5 > 0.125)⇒ T=1(不得假遮挡)");
+        check(VoxelDda.transmit(1.5, 1.9, 0.5, 1.5, -0.1, 0.5,
+                        cell -> cell.y() == 0 ? snow1 : VoxelField.CODE_EMPTY) == 0.0,
+                "竖直射线穿过 1 层雪板 ⇒ T=0");
+        // 顶薄板 [0.5, 1]:从下半格穿过 ⇒ 放行;穿板体 ⇒ 挡。
+        int topSlab = VoxelField.slabTopCode(4);
+        check(VoxelDda.transmit(0.5, 0.25, 0.5, 2.5, 0.25, 0.5,
+                        cell -> cell.x() == 1 ? topSlab : VoxelField.CODE_EMPTY) == 1.0,
+                "水平射线从顶薄板下方穿过(格内 y=0.25 < 0.5)⇒ T=1");
+        check(VoxelDda.transmit(0.5, 0.75, 0.5, 2.5, 0.75, 0.5,
+                        cell -> cell.x() == 1 ? topSlab : VoxelField.CODE_EMPTY) == 0.0,
+                "水平射线穿顶薄板(格内 y=0.75 ∈ [0.5,1])⇒ T=0");
+        // 高薄板(雪 7 层 = [0, 0.875]):掠过板顶(y=0.95)⇒ 放行 —— 高度感知相对"整格近似"的关键差别
+        int snow7 = VoxelField.slabBottomCode(7);
+        check(VoxelDda.transmit(0.5, 0.95, 0.5, 2.5, 0.95, 0.5,
+                        cell -> cell.x() == 1 ? snow7 : VoxelField.CODE_EMPTY) == 1.0,
+                "水平射线掠过 7 层雪板顶部(格内 y=0.95 > 0.875)⇒ T=1");
+        check(VoxelDda.transmit(0.5, 0.5, 0.5, 2.5, 0.5, 0.5,
+                        cell -> cell.x() == 1 ? snow7 : VoxelField.CODE_EMPTY) == 0.0,
+                "同一 7 层雪板:格内 y=0.5 在板内 ⇒ T=0(高度决定挡不挡,而非整格一刀切)");
+
         List<VoxelDda.Cell> boundary = VoxelDda.traceIntermediate(
                 0.5, 0.5, 0.5, 127.5, 127.5, 127.5);
         check(boundary.size() == 126

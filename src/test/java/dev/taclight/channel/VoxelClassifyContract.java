@@ -57,12 +57,14 @@ public class VoxelClassifyContract {
         // ================= 3. 守卫顺序(两条守卫各自防一个方向) =================
         check(shapeCode(new double[0], 0, box(0, 0, 0, 1, 0.5, 1), 1) == VoxelField.CODE_EMPTY,
                 "守卫 1:coll 空 + occ 0.5 ⇒ EMPTY(占比 0.5 也不管)");
-        check(shapeCode(box(0, 0, 0, 1, 0.5, 1), box(0, 0, 0, 1, 0.5, 1)) == VoxelField.CODE_VEG,
-                "守卫 1 不越界:coll 非空(0.5)+ occ 0.5 ⇒ VEG(不得因 occ 低就当 EMPTY)");
+        check(shapeCode(box(0, 0, 0, 1, 0.5, 1), box(0, 0, 0, 1, 0.5, 1)) == VoxelField.slabBottomCode(4),
+                "守卫 1 不越界:coll 非空(0.5)+ occ 0.5 ⇒ 底薄板码 7(不得因 occ 低就当 EMPTY)");
         check(shapeCode(new double[0], 0, box(0, 0, 0, 1, 0.5, 1), 1) == VoxelField.CODE_EMPTY,
-                "守卫 1:绊线(coll 空 / occ 0.5)⇒ EMPTY(先于占比,否则会被判 VEG)");
+                "守卫 1:绊线(coll 空 / occ 顶 0.5 > 1/8)⇒ EMPTY(例外档只收贴地最薄一档)");
         check(shapeCode(new double[0], 0, box(0, 0, 0, 1, 1, 1), 1) == VoxelField.CODE_EMPTY,
                 "守卫 1:蛛网(coll 空 / occ 满格)⇒ EMPTY(先于占比,否则会被判 SOLID)");
+        check(shapeCode(new double[0], 0, box(0, 0, 0, 1, 0.125, 1), 1) == VoxelField.slabBottomCode(1),
+                "守卫 1 例外:雪 1 层(coll 空 / occ 顶 1/8)⇒ 薄板码 4(2026-09-25 细雪层穿光根因)");
         check(shapeCode(box(0.375, 0, 0.375, 0.625, 1.5, 0.625),
                 box(0.375, 0, 0.375, 0.625, 1, 0.625)) == VoxelField.CODE_SOLID,
                 "守卫 2:栅栏(coll maxY 1.5 / occ 占比 0.0625)⇒ SOLID(先于占比,否则会漏光)");
@@ -70,34 +72,32 @@ public class VoxelClassifyContract {
                 box(0.25, 0, 0.25, 0.75, 1, 0.75)) == VoxelField.CODE_SOLID,
                 "守卫 2:墙(coll maxY 1.5 / occ 占比 0.25)⇒ SOLID(先于占比)");
 
-        // ================= 4. 雪层(阵列主因;实测 coll 比 occ 矮一层) =================
-        check(shapeCode(new double[0], 0, box(0, 0, 0, 1, 0.125, 1), 1) == VoxelField.CODE_EMPTY,
-                "雪 layers=1(coll 空 / occ 0.125)⇒ EMPTY");
-        check(shapeCode(box(0, 0, 0, 1, 0.125, 1), box(0, 0, 0, 1, 0.25, 1)) == VoxelField.CODE_EMPTY,
-                "雪 layers=2(coll 0.125 / occ 0.25)⇒ EMPTY");
-        check(shapeCode(box(0, 0, 0, 1, 0.25, 1), box(0, 0, 0, 1, 0.375, 1)) == VoxelField.CODE_VEG,
-                "雪 layers=3(coll 0.25 / occ 0.375)⇒ VEG(旧口径用 coll 会误判 EMPTY)");
+        // ================= 4. 雪层(2026-09-25 高度感知:按真实高度出薄板码) =================
+        check(shapeCode(box(0, 0, 0, 1, 0.125, 1), box(0, 0, 0, 1, 0.25, 1)) == VoxelField.slabBottomCode(2),
+                "雪 layers=2(coll 0.125 / occ 0.25)⇒ 薄板码 5(旧口径 EMPTY=完全不遮挡)");
+        check(shapeCode(box(0, 0, 0, 1, 0.25, 1), box(0, 0, 0, 1, 0.375, 1)) == VoxelField.slabBottomCode(3),
+                "雪 layers=3(coll 0.25 / occ 0.375)⇒ 薄板码 6(旧口径 VEG=整格仅 25% 衰减)");
         check(shapeCode(box(0, 0, 0, 1, 0.875, 1), box(0, 0, 0, 1, 1, 1)) == VoxelField.CODE_SOLID,
-                "雪 layers=8(coll 0.875 / occ 1.0)⇒ SOLID(旧口径用 coll 会误判 VEG)");
+                "雪 layers=8(coll 0.875 / occ 1.0)⇒ SOLID");
         check(shapeCode(box(0, 0, 0, 1, 1, 1), box(0, 0, 0, 1, 1, 1)) == VoxelField.CODE_SOLID,
                 "雪块 snow_block ⇒ SOLID");
 
-        // ================= 5. 薄片档 =================
-        check(shapeCode(box(0, 0, 0, 1, 0.0625, 1), box(0, 0, 0, 1, 0.0625, 1)) == VoxelField.CODE_EMPTY,
-                "地毯 white_carpet(0.0625)⇒ EMPTY");
+        // ================= 5. 薄片档(占满 XZ 足印的薄板 ⇒ 薄板码,按真实高度遮挡) =================
+        check(shapeCode(box(0, 0, 0, 1, 0.0625, 1), box(0, 0, 0, 1, 0.0625, 1)) == VoxelField.slabBottomCode(1),
+                "地毯 white_carpet(0.0625 ⇒ 量化到 1/8 档)⇒ 薄板码 4");
         check(shapeCode(box(0.0625, 0, 0.0625, 0.9375, 0.09375, 0.9375),
-                box(0.0625, 0, 0.0625, 0.9375, 0.09375, 0.9375)) == VoxelField.CODE_EMPTY,
-                "睡莲 lily_pad(0.0718)⇒ EMPTY");
-        check(shapeCode(box(0, 0, 0, 1, 0.1875, 1), box(0, 0, 0, 1, 0.1875, 1)) == VoxelField.CODE_EMPTY,
-                "活板门 half=bottom open=false(0.1875)⇒ EMPTY");
-        check(shapeCode(box(0, 0.8125, 0, 1, 1, 1), box(0, 0.8125, 0, 1, 1, 1)) == VoxelField.CODE_EMPTY,
-                "活板门 half=top open=false(0.1875)⇒ EMPTY(旧中心列口径会误判 SOLID)");
+                box(0.0625, 0, 0.0625, 0.9375, 0.09375, 0.9375)) == VoxelField.CODE_VEG,
+                "睡莲 lily_pad(不占满足印 ⇒ VEG;旧口径 EMPTY=完全不挡)");
+        check(shapeCode(box(0, 0, 0, 1, 0.1875, 1), box(0, 0, 0, 1, 0.1875, 1)) == VoxelField.slabBottomCode(2),
+                "活板门 half=bottom open=false(0.1875 ⇒ 量化 1/4)⇒ 薄板码 5");
+        check(shapeCode(box(0, 0.8125, 0, 1, 1, 1), box(0, 0.8125, 0, 1, 1, 1)) == VoxelField.slabTopCode(7),
+                "活板门 half=top open=false(0.8125)⇒ 顶薄板码 15(旧中心列口径会误判 SOLID)");
 
         // ================= 6. 中低档:半砖 / 楼梯(含共面回归) =================
-        check(shapeCode(box(0, 0, 0, 1, 0.5, 1), box(0, 0, 0, 1, 0.5, 1)) == VoxelField.CODE_VEG,
-                "半砖 type=bottom(0.5)⇒ VEG");
-        check(shapeCode(box(0, 0.5, 0, 1, 1, 1), box(0, 0.5, 0, 1, 1, 1)) == VoxelField.CODE_VEG,
-                "半砖 type=top(0.5)⇒ VEG(旧中心列口径会误判 SOLID)");
+        check(shapeCode(box(0, 0, 0, 1, 0.5, 1), box(0, 0, 0, 1, 0.5, 1)) == VoxelField.slabBottomCode(4),
+                "半砖 type=bottom(0.5)⇒ 底薄板码 7");
+        check(shapeCode(box(0, 0.5, 0, 1, 1, 1), box(0, 0.5, 0, 1, 1, 1)) == VoxelField.slabTopCode(4),
+                "半砖 type=top(0.5)⇒ 顶薄板码 12(旧中心列口径会误判 SOLID)");
         check(shapeCode(box(0, 0, 0, 1, 1, 1), box(0, 0, 0, 1, 1, 1)) == VoxelField.CODE_SOLID,
                 "半砖 type=double(1.0)⇒ SOLID");
         check(shapeCode(boxes(box(0, 0, 0, 1, 0.5, 1), box(0, 0.5, 0, 1, 1, 0.5)),
@@ -124,7 +124,8 @@ public class VoxelClassifyContract {
         };
         int atSnow = VoxelClassifier.classifyByShape(probe, "L", "minecraft:snow", 1, 70, 1);
         int atFull = VoxelClassifier.classifyByShape(probe, "L", "minecraft:snow", 2, 70, 1);
-        check(atSnow == VoxelField.CODE_EMPTY, "同一 state 坐标 (1,70,1) 形状=雪 1 层 ⇒ EMPTY");
+        check(atSnow == VoxelField.slabBottomCode(1),
+                "同一 state 坐标 (1,70,1) 形状=雪 1 层(coll 空/occ 1/8)⇒ 薄板码 4");
         check(atFull == VoxelField.CODE_SOLID, "同一 state 坐标 (2,70,1) 形状=满方块 ⇒ SOLID");
         check(atSnow != atFull,
                 "根因②:同一 BlockState 在不同坐标判定不同 ⇒ 不得返回同一码(旧代码 CURSOR 恒为原点 ⇒ 恒同码)");

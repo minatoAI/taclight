@@ -15,41 +15,49 @@ package dev.taclight.channel;
  * 输出 = 2bit 分类码。方块形状采样在 {@code dev.taclight.client.VoxelGrid}，经
  * {@link ShapeProbe} 注入，从而让"同一 state 在不同坐标判定不同"可在无 MC 运行时下断言。</p>
  *
- * <p><b>分档口径(C 口径，Lead 2026-09-18 裁定；不扩 3bit，格式/pack/GLSL 解码一律不动)</b>：</p>
+ * <p><b>分档口径(2026-09-25 高度感知口径;取代 2026-09-18 的 C 口径）</b>:</p>
  * <ol>
- *   <li><b>守卫 1</b>：{@code coll} 为空(无碰撞形：绊线/铁轨/蛛网/空气/流体) ⇒
- *       {@code CODE_EMPTY}。这些方块 {@code occ} 非空(蛛网 occ 甚至是满格)，若先按占比分档
- *       会把蛛网判成实心 ⇒ 守卫必须在占比之前。</li>
- *   <li><b>守卫 2</b>：{@code coll} 最大 {@code maxY > 1.0}(栅栏/墙碰撞柱 1.5) ⇒
- *       {@code CODE_SOLID}(保守，任务表第 4 行)。它们 {@code occ} 只有 1.0 格高(占比
- *       0.0625/0.25) ⇒ 不设此守卫会把栅栏/墙判成透光(漏光)。</li>
- *   <li>其余按 <b>{@code occ}(遮挡形)实心体积占比</b>分档：占比 ≤ 0.25 ⇒ {@code CODE_EMPTY}；
- *       0.25 &lt; 占比 &lt; 0.9 ⇒ {@code CODE_VEG}；占比 ≥ 0.9 ⇒ {@code CODE_SOLID}。</li>
+ *   <li><b>守卫 1</b>：{@code coll} 为空(无碰撞形：绊线/铁轨/蛛网/空气/流体) ⇒ {@code CODE_EMPTY}。</li>
+ *   <li><b>守卫 2</b>：{@code coll} 最大 {@code maxY > 1.0}(栅栏/墙碰撞柱 1.5) ⇒ {@code CODE_SOLID}。</li>
+ *   <li>{@code occ} 实心体积占比 ≥ 0.9 ⇒ {@code CODE_SOLID}。</li>
+ *   <li><b>薄板</b>(占满 XZ 足印的单一盒)⇒ <b>薄板码</b>：底薄板 {@code 4..11}(顶高 k/8)、
+ *       顶薄板 {@code 12..15}(底高 k/8)。雪层 1..7 层分别落 4..10。</li>
+ *   <li>其余 ⇒ {@code CODE_VEG}。</li>
  * </ol>
  *
- * <p><b>为什么占比用 occ 而不是 coll(判据更正 ②)</b>：我们算的是"光被挡多少"，
- * 遮挡形才是这件事的真源。原版雪层的 <b>{@code coll} 故意比 {@code occ}/{@code vis}
- * 矮一层</b>(玩法决定：让玩家能走上雪层)⇒ 拿 coll 当遮挡必然"影子偏小"：
- * 实测 coll 雪 3 层=0.25(⇒EMPTY)、8 层=0.875(⇒VEG，偏透)；而 occ 雪 1/2 层=0.125/0.25
- * (⇒EMPTY)、3..7 层=0.375..0.875(⇒VEG)、8 层=1.0(⇒SOLID)——正好是任务表。</p>
+ * <p><b>为什么必须改成高度感知(C 口径的根因)</b>：C 口径按<b>体积占比</b>分档，
+ * {@code ≤0.25 ⇒ EMPTY} 这条"薄片透光"规则把 <b>雪层 1–2 层(占比 0.125/0.25)判成完全不遮挡</b>
+ * ——2026-09-25 真机探针实测：一个 9³ 盒子里 <b>116 格非空气却判透光</b>，其中
+ * {@code snow{layers=1}} 占 60 格(`docs/evidence/2026-09-25-voxel-probe/`)。
+ * 体积占比<b>丢掉了"板在格内的哪个高度"</b>这一必要信息：1/8 格高的雪层与"格内均匀 12.5% 填充"
+ * 在占比上无法区分，而两者对光的意义完全不同。薄板码把高度带进着色器，由 DDA 用射线在该格的
+ * y 区间与板区间求交决定挡不挡。</p>
  *
  * <p><b>为什么不再用"中心列顶高"(判据更正 ①)</b>：中心列严格包含判据在两盒<b>共面</b>处
- * 会同时排除两个盒：实测 {@code OAK_STAIRS[half=top]} = {@code [0,0,0→1,1,0.5] ∪
- * [0,0.5,0.5→1,1,1]}，两盒的面都恰好落在 z=0.5 ⇒ h=0 ⇒ <b>EMPTY = 漏光</b>(危险方向)。
- * <b>占比口径下没有共面问题</b>：体积是两盒体积之和(0.75 ⇒ VEG)，与面落在哪里无关、
- * 也与朝向无关。后来者若要重写"中心柱/中心列"这类点采样判据，请先复现这一例。</p>
+ * 会同时排除两个盒：实测 {@code OAK_STAIRS[half=top]} 两盒面都落在 z=0.5 ⇒ h=0 ⇒ <b>EMPTY = 漏光</b>。
+ * 占比口径无此问题(体积是两盒之和)；薄板判据要求"单一盒 + 占满 XZ 足印"，楼梯(两盒)自然落 VEG。</p>
  *
- * <p><b>已知残留(如实)</b>：① {@code CODE_VEG} 对部分高度方块是"整格同系数 0.25 遮挡/格"
- * 的近似(半砖 0.5 格高与楼梯 0.75 占比同码)；② 半砖 {@code type=top} 与楼梯
- * {@code half=top} 现按占比落 {@code CODE_VEG}(表第 2 行)，若真机 after 截图显示
- * "顶部半砖仍透"再考虑第二阶段(扩 3bit 或按位置细分)。</p>
+ * <p><b>已知残留(如实)</b>：① 高度按 1/8 格量化(雪 1 层 0.125 与地毯 0.0625 都落"顶高 1/8")；
+ * ② {@code CODE_VEG} 仍是"整格同系数 0.25 遮挡/格"的近似(楼梯/半砖按整格算)；
+ * ③ 非薄板的薄小方块(睡莲等)落 VEG 而非 EMPTY —— 从"完全不挡"变成"每格衰减 25%"，方向更保守。</p>
  *
  * <p>纯 JVM 断言：{@code VoxelClassifyContract}(合成夹具) + {@code VoxelRealRegistryContract}
  * (真 registry 的 {@code Blocks.*}，直接驱动生产 {@code VoxelGrid.classify})。</p>
  */
 public final class VoxelClassifier {
-    /** 占比薄片阈值：≤ 此值 ⇒ 透光(雪 1-2 层 0.125/0.25、地毯 0.0625、活板门 0.1875)。 */
+    /**
+     * 历史口径(C 口径)的"薄片透光"阈值。<b>2026-09-25 高度感知口径已不再使用</b>
+     * (薄片改由薄板码按真实高度遮挡);保留常量只为对照旧判据与历史契约。
+     */
     public static final double THIN_MAX_FRACTION = 0.25;
+    /** 足印/贴面判定容差(盒是否占满 XZ 足印、是否贴 y=0 或 y=1)。 */
+    public static final double FOOTPRINT_EPS = 1e-6;
+    /**
+     * "无碰撞形却仍是贴地薄板"的顶高上限(守卫 1 的例外档)。
+     * 雪 1 层(coll 空 / occ 顶 0.125)是用户实测的漏光主角;绊线(occ 顶 0.5)、蛛网(occ 满格)
+     * 不在此列 ⇒ 仍按无碰撞形判透光。
+     */
+    public static final double NOCOLL_SLAB_MAX_TOP = 0.125;
     /** 占比满档阈值：≥ 此值 ⇒ 实心(耕地/土径 0.9375、满方块 1.0、雪 8 层 1.0)。 */
     public static final double FULL_MIN_FRACTION = 0.9;
     /** 守卫 2 阈值：{@code coll} 最高盒顶 > 此值 ⇒ 实心(栅栏/墙碰撞柱 1.5)。 */
@@ -66,9 +74,55 @@ public final class VoxelClassifier {
      * </ol>
      */
     public static int codeForShapes(double[] coll, int collCount, double[] occ, int occCount) {
-        if (collCount <= 0) return VoxelField.CODE_EMPTY;
+        if (collCount <= 0) {
+            // 守卫 1:无碰撞形默认透光(绊线/铁轨/蛛网/空气/流体)…
+            // …但"贴地薄板"必须例外:雪 1 层**无碰撞形**(原版玩法:让玩家能走上雪层),
+            // 却有真实遮挡形 occ=[0,0.125] —— 若一并判 EMPTY,就是用户报的"细雪层穿光"根因
+            // (真 registry 实测:coll=[] / occ 0.125)。判据用形状而非方块 ID:
+            // 占满 XZ 足印的单一盒 + 顶高 ≤ 1/8。绊线 occ 顶 0.5、蛛网 occ 满格 ⇒ 仍 EMPTY。
+            int thin = slabCodeFor(occ, occCount);
+            if (VoxelField.isSlab(thin) && VoxelField.slabHigh(thin) <= NOCOLL_SLAB_MAX_TOP) return thin;
+            return VoxelField.CODE_EMPTY;
+        }
         if (maxTopY(coll, collCount) > TALL_TOP_Y) return VoxelField.CODE_SOLID;
-        return codeForSolidFraction(solidFraction(occ, occCount));
+        double fraction = solidFraction(occ, occCount);
+        if (fraction >= FULL_MIN_FRACTION) return VoxelField.CODE_SOLID;
+        int slab = slabCodeFor(occ, occCount);
+        if (slab >= 0) return slab;
+        if (!(fraction > 0.0)) return VoxelField.CODE_EMPTY;
+        return VoxelField.CODE_VEG;
+    }
+
+    /**
+     * 占满 XZ 足印的<b>单一</b>盒 ⇒ 薄板码(含高度档);不是薄板 ⇒ -1。
+     *
+     * <p>底薄板 = 从 {@code y=0} 起、顶高 {@code maxY} ⇒ 码 4..11(顶高 = (code−3)/8);
+     * 顶薄板 = 到 {@code y=1} 止、底高 {@code minY} ⇒ 码 12..15(底高 = (code−8)/8)。
+     * 高度按 1/8 格量化(与 {@link VoxelField#slabHigh} 同源)。</p>
+     *
+     * <p>要求"单一盒"是刻意的:楼梯/多盒形状落 VEG(整格近似),避免把复杂形状误判成薄板;
+     * 要求"占满 XZ 足印"是因为薄板判据只带高度、不带水平形状——不占满足印的盒若按薄板处理
+     * 会在水平方向假遮挡。</p>
+     */
+    public static int slabCodeFor(double[] boxes, int boxCount) {
+        if (boxCount != 1) return -1;
+        double minX = boxes[0], minY = boxes[1], minZ = boxes[2];
+        double maxX = boxes[3], maxY = boxes[4], maxZ = boxes[5];
+        if (minX > FOOTPRINT_EPS || minZ > FOOTPRINT_EPS) return -1;
+        if (maxX < 1.0 - FOOTPRINT_EPS || maxZ < 1.0 - FOOTPRINT_EPS) return -1;
+        if (minY <= FOOTPRINT_EPS) {
+            int eighths = (int) Math.round(maxY * 8.0);
+            if (eighths < 1) eighths = 1;
+            if (eighths >= 8) return VoxelField.CODE_SOLID;
+            return VoxelField.slabBottomCode(eighths);
+        }
+        if (maxY >= 1.0 - FOOTPRINT_EPS) {
+            int eighths = (int) Math.round(minY * 8.0);
+            if (eighths < 4) eighths = 4;
+            if (eighths > 7) eighths = 7;
+            return VoxelField.slabTopCode(eighths);
+        }
+        return -1;
     }
 
     /** 占比分档：≤0.25 ⇒ EMPTY；≥0.9 ⇒ SOLID；其间 ⇒ VEG。{@code NaN} ⇒ EMPTY(宁可漏挡不可假遮挡)。 */

@@ -6,6 +6,10 @@ import java.util.List;
 /**
  * 体素 DDA 的纯 JVM 几何 oracle。运行时由 GLSL 执行同一遍历，本类用于把边/角 crossing、
  * 端点豁免和材质透射语义钉成可重复契约，防止 shader 改动重新引入擦边侧邻格或硬边翻转。
+ *
+ * <p><b>2026-09-25 高度感知遮挡</b>：新增薄板码(4..15)的判定——{@link Visited} 现在携带
+ * 射线在该格内的 y 区间，薄板格只在"y 区间与板区间相交"时遮挡；从板顶上方掠过 ⇒ 放行。
+ * 这与 GLSL {@code taclight_vox_transmit} 必须逐位同源(契约对拍)。</p>
  */
 public final class VoxelDda {
     /**
@@ -18,10 +22,20 @@ public final class VoxelDda {
      */
     public static final double FUZZ_BLOCKS = 0.35;
 
+    /**
+     * 薄板相交的数值容差(方块)。薄板是<b>不透明</b>的(雪/地毯/活板门),只要射线真正穿过板体就全挡;
+     * 此容差只用于剔除"擦着板面"的退化相交,不承担半影软化职责
+     * (半影软化是实心格的 FUZZ 语义,薄板厚度本来就小于 FUZZ,套用会把雪层又放行掉)。
+     */
+    public static final double SLAB_TOUCH_EPS = 1.0e-6;
+
     public record Cell(int x, int y, int z) { }
 
-    /** 一次真实穿入的体素访问:cell 与射线在该格内的穿透长度(方块单位)。 */
-    record Visited(Cell cell, double penetration) { }
+    /**
+     * 一次真实穿入的体素访问:cell、射线在该格内的穿透长度(方块单位)、
+     * 以及射线在该格内的 <b>y 区间(格内 0..1)</b>——薄板高度判定的输入。
+     */
+    record Visited(Cell cell, double penetration, double localYLo, double localYHi) { }
 
     @FunctionalInterface
     public interface Classifier {
@@ -44,7 +58,9 @@ public final class VoxelDda {
     /**
      * 与 GLSL 相同的材质透射：实心格按穿透长度软化(≥{@link #FUZZ_BLOCKS} 仍一票否决，
      * 掠边按比例放行——硬 0/1 边界在 bob 亚像素移动下会翻转成条纹，实机 09-02 根因轮)；
-     * 树叶 ×0.40、软植被 ×0.75 按整格计(植被体积填充,与穿透深度无关)。
+     * 树叶 ×0.40、软植被 ×0.75 按整格计(植被体积填充,与穿透深度无关)；
+     * <b>薄板(4..15)</b>按高度区间判定——射线 y 区间与板区间相交 ⇒ 全挡(不透明),
+     * 从板顶上方掠过 ⇒ 完全放行。
      */
     public static double transmit(
             double ax, double ay, double az,
@@ -61,13 +77,30 @@ public final class VoxelDda {
                 transmission *= 0.40;
             } else if (code == VoxelField.CODE_VEG) {
                 transmission *= 0.75;
+            } else if (VoxelField.isSlab(code)) {
+                if (slabHit(code, visited.localYLo(), visited.localYHi())) {
+                    return 0.0;
+                }
             }
         }
         return transmission;
     }
 
     /**
-     * 真正穿入的体素 + 每格穿透长度。2026-09-25 起改为包内可见(package-private),
+     * 射线在该格内的 y 区间是否与薄板区间相交(与 GLSL 同源)。
+     * 水平射线(区间退化为一点)在板内也算命中。
+     */
+    static boolean slabHit(int code, double localYLo, double localYHi) {
+        double lo = VoxelField.slabLow(code);
+        double hi = VoxelField.slabHigh(code);
+        if (localYHi - localYLo <= SLAB_TOUCH_EPS) {
+            return localYLo >= lo && localYLo < hi;
+        }
+        return Math.min(localYHi, hi) - Math.max(localYLo, lo) > SLAB_TOUCH_EPS;
+    }
+
+    /**
+     * 真正穿入的体素 + 每格穿透长度 + 每格 y 区间。2026-09-25 起改为包内可见(package-private),
      * 供同包的 {@link VoxelProbe} 做"逐格 live/grid 码"诊断复用同一遍历
      * (诊断必须走与生产同一条 DDA,否则探针报的就不是渲染看到的东西)。
      */
@@ -113,7 +146,10 @@ public final class VoxelDda {
             if (cx == lastX && cy == lastY && cz == lastZ) break;
             double exit = Math.min(maxX, Math.min(maxY, maxZ));
             double penetration = Math.max(0.0, Math.min(exit, len) - entry);
-            visited.add(new Visited(new Cell(cx, cy, cz), penetration));
+            double yEntry = ay + dirY * entry - cy;
+            double yExit = ay + dirY * exit - cy;
+            visited.add(new Visited(new Cell(cx, cy, cz), penetration,
+                    Math.min(yEntry, yExit), Math.max(yEntry, yExit)));
         }
         return List.copyOf(visited);
     }

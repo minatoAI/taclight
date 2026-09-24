@@ -26,14 +26,18 @@ public final class VoxelProbe {
 
     private VoxelProbe() {}
 
-    /** 码 → 可读名(与 {@link VoxelField} 常量、shader 透射表同源)。 */
+    /** 码 → 可读名(与 {@link VoxelField} 常量、shader 透射表同源;薄板码带高度区间)。 */
     public static String codeName(int code) {
         return switch (code) {
             case VoxelField.CODE_EMPTY -> "EMPTY";
             case VoxelField.CODE_VEG -> "VEG";
             case VoxelField.CODE_LEAF -> "LEAF";
             case VoxelField.CODE_SOLID -> "SOLID";
-            default -> code < 0 ? "OUT" : ("CODE" + code);
+            default -> code < 0 ? "OUT"
+                    : (VoxelField.isSlab(code)
+                            ? String.format(Locale.ROOT, "SLAB[%.3f..%.3f]",
+                                    VoxelField.slabLow(code), VoxelField.slabHigh(code))
+                            : ("CODE" + code));
         };
     }
 
@@ -57,11 +61,11 @@ public final class VoxelProbe {
      */
     public static String scanReport(List<Row> leaky, List<Row> rest,
                                     int nonAir, int emptyNonAir,
-                                    int veg, int leaf, int solid) {
+                                    int veg, int leaf, int slab, int solid) {
         StringBuilder sb = new StringBuilder();
         sb.append(String.format(Locale.ROOT,
-                "VOXSCAN nonAir=%d EMPTY=%d VEG=%d LEAF=%d SOLID=%d | 非空气却被判透光(EMPTY,完全不遮挡)=%d",
-                nonAir, emptyNonAir, veg, leaf, solid, emptyNonAir));
+                "VOXSCAN nonAir=%d EMPTY=%d VEG=%d LEAF=%d SLAB=%d SOLID=%d | 非空气却被判透光(EMPTY,完全不遮挡)=%d",
+                nonAir, emptyNonAir, veg, leaf, slab, solid, emptyNonAir));
         if (!leaky.isEmpty()) {
             java.util.LinkedHashMap<String, Integer> byBlock = new java.util.LinkedHashMap<>();
             for (Row r : leaky) {

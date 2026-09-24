@@ -199,7 +199,7 @@ public final class VoxelGrid {
         }
         java.util.List<VoxelProbe.Row> leaky = new java.util.ArrayList<>();
         java.util.List<VoxelProbe.Row> rest = new java.util.ArrayList<>();
-        int nonAir = 0, emptyNonAir = 0, veg = 0, leaf = 0, solid = 0;
+        int nonAir = 0, emptyNonAir = 0, veg = 0, leaf = 0, slab = 0, solid = 0;
         for (int y = ay; y <= by; y++) {
             for (int z = az; z <= bz; z++) {
                 for (int x = ax; x <= bx; x++) {
@@ -212,6 +212,7 @@ public final class VoxelGrid {
                     if (isLeaky) emptyNonAir++;
                     else if (live == VoxelField.CODE_VEG) veg++;
                     else if (live == VoxelField.CODE_LEAF) leaf++;
+                    else if (VoxelField.isSlab(live)) slab++;
                     else solid++;
                     // 漏光签名行优先(见 VoxelProbe.scanReport 注释:首轮实测被地下石头挤掉了)
                     java.util.List<VoxelProbe.Row> bucket = isLeaky ? leaky : rest;
@@ -224,7 +225,7 @@ public final class VoxelGrid {
                 }
             }
         }
-        return VoxelProbe.scanReport(leaky, rest, nonAir, emptyNonAir, veg, leaf, solid);
+        return VoxelProbe.scanReport(leaky, rest, nonAir, emptyNonAir, veg, leaf, slab, solid);
     }
 
     /** 已上传网格里的码;无快照或盒外 ⇒ -1(OUT,着色器按"占用未知"处理)。 */
