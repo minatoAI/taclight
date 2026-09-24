@@ -36,7 +36,7 @@ public final class DebugSnapshotter {
     /** pose 段键(读不到写 null,note 注明原因)。 */
     static final List<String> POSE_KEYS = List.of("x", "y", "z", "yaw", "pitch", "note");
     /** light 段键(ClientLightState 现值)。 */
-    static final List<String> LIGHT_KEYS = List.of("handheld", "gun", "gunEffective", "neon", "self", "note");
+    static final List<String> LIGHT_KEYS = List.of("handheld", "gun", "gunEffective", "handheldEffective", "neon", "self", "note");
     /** tune 段键(各旋钮 status 现值;voxel 另有顶层体素状态行,不在此列)。 */
     static final List<String> TUNE_KEYS = List.of(
             "bright", "dist", "atten", "knee", "beam", "scat", "beamcap", "cone",
@@ -152,6 +152,8 @@ public final class DebugSnapshotter {
             m.put("handheld", ClientLightState.isOn());
             m.put("gun", ClientLightState.gunLightOn());
             m.put("gunEffective", ClientLightState.gunLightEffective());
+            // 手持灯有效值(2026-09-25):与 gunEffective 对称;handheld 是开关偏好,这个是过门后的实际值。
+            m.put("handheldEffective", ClientLightState.handheldEffective());
             m.put("neon", ClientLightState.debugMode());
             m.put("self", ClientLightState.selfLightEnabled());
             m.put("note", null);

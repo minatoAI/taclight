@@ -69,16 +69,28 @@ public class ClientEvents {
     @SubscribeEvent
     public static void onKeyInput(InputEvent.Key event) {
         while (KeyBindings.FLASHLIGHT_TOGGLE.consumeClick()) {
+            // 持物门(2026-09-25 用户设计):①先看手里是不是拿着手电筒 ②再看开关。
+            // 未持有且不在霓虹调试时**不改状态**,只给可操作提示(避免"关了但看着还亮"的假成功)。
+            if (!holdingFlashlight(Minecraft.getInstance().player) && !ClientLightState.debugMode()) {
+                Minecraft mcL = Minecraft.getInstance();
+                if (mcL.player != null) {
+                    mcL.player.displayClientMessage(Component.literal(
+                            "[TacLight] 未手持手电筒(taclight:flashlight):先拿在手上再按 L"), false);
+                }
+                TacLightMod.LOGGER.info("[TacLight] handheld toggle ignored (not holding flashlight)");
+                continue;
+            }
             ClientLightState.toggle();
             // M5:开关上报纸服务端(SynchedEntityData 真源),其他玩家客户端可见
-            dev.taclight.network.TacLightNetwork.sendSetLight(ClientLightState.isOn(), ClientLightState.gunLightEffective());
+            dev.taclight.network.TacLightNetwork.sendSetLight(
+                    ClientLightState.handheldEffective(), ClientLightState.gunLightEffective());
             TacLightMod.LOGGER.info("[TacLight] handheld flashlight {}", ClientLightState.isOn() ? "ON" : "OFF");
         }
         while (KeyBindings.GUNLIGHT_TOGGLE.consumeClick()) {
             boolean next = dev.taclight.client.GunControl.toggleGunManual();
             // M5:上报有效灯(偏好×持枪门),空手按 M 只存偏好不亮灯,切回枪即复
             boolean eff = ClientLightState.gunLightEffective();
-            dev.taclight.network.TacLightNetwork.sendSetLight(ClientLightState.isOn(), eff);
+            dev.taclight.network.TacLightNetwork.sendSetLight(ClientLightState.handheldEffective(), eff);
             TacLightMod.LOGGER.info("[TacLight] gun light {} (key, manual, effective={})", next ? "ON" : "OFF", eff ? "ON" : "OFF");
         }
         while (KeyBindings.DEBUG_TOGGLE.consumeClick()) {
@@ -101,6 +113,20 @@ public class ClientEvents {
         }
         while (KeyBindings.BENCH.consumeClick()) {
             startBench();
+        }
+    }
+
+    /**
+     * 持物门判据:主手或副手是否持 {@code taclight:flashlight}。
+     * 按键、中继({@code !light})、tick 探针**共用同一判据**,不允许三处各写一套。
+     */
+    public static boolean holdingFlashlight(net.minecraft.world.entity.player.Player p) {
+        if (p == null) return false;
+        try {
+            net.minecraft.world.item.Item item = dev.taclight.registry.ModItems.FLASHLIGHT.get();
+            return p.getMainHandItem().is(item) || p.getOffhandItem().is(item);
+        } catch (Throwable t) {
+            return false; // 注册表未就绪等异常一律视为"未持有":宁可不亮,不误亮
         }
     }
 
@@ -329,6 +355,17 @@ public class ClientEvents {
             ClientLightState.setDebug(true);
             TacLightMod.LOGGER.info("[TacLight] DIAG auto: debug neon ON at login");
         }
+        // 手持灯持物门(2026-09-25 用户报的 bug):每 tick 覆写探针;离手即**自动关**并同步服务端
+        // (第三条:从手里移除后自动关闭)。霓虹调试期间不清,否则一放手电筒霓虹就灭。
+        boolean holdingNow = holdingFlashlight(mc.player);
+        boolean wasHolding = ClientLightState.handheldProbeOn();
+        ClientLightState.setHandheldProbe(holdingNow);
+        if (ClientLightState.autoClear(ClientLightState.isOn(), wasHolding, holdingNow, ClientLightState.debugMode())) {
+            ClientLightState.setHandheld(false);
+            dev.taclight.network.TacLightNetwork.sendSetLight(false, ClientLightState.gunLightEffective());
+            TacLightMod.LOGGER.info("[TacLight] handheld flashlight OFF (left hand: no longer holding flashlight)");
+        }
+
         GunLaserReader.Status status = GunLaserReader.Status.NONE;
         String detail = "no-tacz";
         if (TaczCompat.present()) {
@@ -367,7 +404,7 @@ public class ClientEvents {
         boolean effNow = ClientLightState.gunLightEffective();
         if (effNow != lastSentEffective) {
             lastSentEffective = effNow;
-            dev.taclight.network.TacLightNetwork.sendSetLight(ClientLightState.isOn(), effNow);
+            dev.taclight.network.TacLightNetwork.sendSetLight(ClientLightState.handheldEffective(), effNow);
         }
     }
 }

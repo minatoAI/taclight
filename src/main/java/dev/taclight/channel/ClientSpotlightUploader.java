@@ -90,7 +90,9 @@ public final class ClientSpotlightUploader {
         // 自身灯总闸(2026-09-03 用户需求:枪灯测试单变量观察):SELF_LIGHT_ENABLED=false
         // 时本客户端不上传自身两盏灯(手持+枪),远程灯照常收集上传。
         boolean selfOn = ClientLightState.selfLightEnabled();
-        if (selfOn && ClientLightState.isOn()) {
+        // 手持灯过持物门(2026-09-25 用户报的 bug:手里拿枪时手持灯也亮,两盏灯同时开)。
+        // 与枪灯同构:开关偏好 × 持物门;未持 taclight:flashlight 一律不上传(霓虹调试豁免见 ClientLightState)。
+        if (selfOn && ClientLightState.handheldEffective()) {
             // 世界空间锚定:手持灯锚取玩家眼位，视线仍取实际观察相机(所见即所照)；
             // 这保证第一/第三人称与 Freecam 的灯源归属语义一致。vanilla view-bob 位于
             // projection，不写 Java Camera.position；不能把本锚点规则解释成 bob 根治。

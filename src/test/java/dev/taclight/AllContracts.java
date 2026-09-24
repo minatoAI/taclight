@@ -115,6 +115,9 @@ public class AllContracts {
         // 光影包自检(2026-09-25):interop 运行时注入成功却被报"无注入"的误报修复。
         System.out.println("== ShaderPackDiagContract ==");
         dev.taclight.client.ShaderPackDiagContract.main(args);
+        // 手持灯持物门(2026-09-25 用户报的 bug):手里拿枪时两盏灯同时亮、离手不灭。
+        System.out.println("== HandheldGateContract ==");
+        dev.taclight.client.HandheldGateContract.main(args);
         System.out.println("== ScenePlanContract ==");
         ScenePlanContract.main(args);
         System.out.println("== MultiLightCollectorContract ==");

@@ -235,10 +235,15 @@ public final class DebugCommandRelay {
             return;
         }
         if (line.startsWith("!light")) {
+            // 持物门对齐 L 键(2026-09-25):未持手电筒且非霓虹调试时不改状态,回显原因(不假成功)。
+            if (!ClientEvents.holdingFlashlight(mc.player) && !ClientLightState.debugMode()) {
+                TacLightMod.LOGGER.info("[TacLight] RELAY light -> ignored (not holding flashlight)");
+                return;
+            }
             ClientLightState.toggle();
             // 08-31 实测坑:L 键路径(InjectionEvent) toggle 后会 sendSetLight 上报服务端,
             // relay 必须对齐,否则服务端实体数据不变 → 其他玩家看不到开关(ssbo count 假 1)。
-            dev.taclight.network.TacLightNetwork.sendSetLight(ClientLightState.isOn(), ClientLightState.gunLightEffective());
+            dev.taclight.network.TacLightNetwork.sendSetLight(ClientLightState.handheldEffective(), ClientLightState.gunLightEffective());
             TacLightMod.LOGGER.info("[TacLight] RELAY light -> {}", ClientLightState.isOn());
             return;
         }
@@ -385,7 +390,7 @@ public final class DebugCommandRelay {
                     // —— 这正是"Dev 视角切开关无变化 + B 看不见 Dev 灯"的另一半根因。
                     // 上报有效灯:空手 !gun on 只存偏好不亮灯,切回枪即复。
                     boolean eff = ClientLightState.gunLightEffective();
-                    dev.taclight.network.TacLightNetwork.sendSetLight(ClientLightState.isOn(), eff);
+                    dev.taclight.network.TacLightNetwork.sendSetLight(ClientLightState.handheldEffective(), eff);
                     TacLightMod.LOGGER.info("[TacLight] RELAY gunLight -> {} (manual, effective={})", next, eff ? "ON" : "OFF");
                     break;
                 }

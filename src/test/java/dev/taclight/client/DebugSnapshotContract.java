@@ -98,6 +98,7 @@ public class DebugSnapshotContract {
         light.put("handheld", true);
         light.put("gun", false);
         light.put("gunEffective", false);
+        light.put("handheldEffective", true);
         light.put("neon", false);
         light.put("self", null);
         light.put("note", null);
