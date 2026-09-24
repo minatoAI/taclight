@@ -158,6 +158,24 @@ public final class DebugCommandRelay {
                     dev.taclight.channel.MotionCapture.configure(arg));
             return;
         }
+        if (line.equals("!gl")) {
+            // GL 身份记录(2026-09-25):本机是 NVIDIA RTX 5070 Ti + AMD 核显的混合显卡,
+            // 必须知道游戏**实际**跑在哪块 GPU 上("测量的路径≠生产的路径"),
+            // 也决定 RenderDoc/Nsight 的可用性与 GL 扩展面。
+            String vendor = "?";
+            String renderer = "?";
+            String version = "?";
+            try {
+                vendor = org.lwjgl.opengl.GL11.glGetString(org.lwjgl.opengl.GL11.GL_VENDOR);
+                renderer = org.lwjgl.opengl.GL11.glGetString(org.lwjgl.opengl.GL11.GL_RENDERER);
+                version = org.lwjgl.opengl.GL11.glGetString(org.lwjgl.opengl.GL11.GL_VERSION);
+            } catch (Throwable t) {
+                vendor = "err:" + t.getClass().getSimpleName();
+            }
+            TacLightMod.LOGGER.info("[TacLight] RELAY gl -> vendor={} renderer={} version={}",
+                    vendor, renderer, version);
+            return;
+        }
         if (line.startsWith("!diag")) {
             ClientEvents.dumpDiag();
             return;
