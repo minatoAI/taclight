@@ -67,6 +67,16 @@ public final class RuntimePackInjector {
                           boolean injected, String channel, String detail) {}
     private static volatile Outcome lastOutcome;
 
+    /**
+     * <b>粘性成功</b>记录(2026-09-25 真机轮修复)。
+     *
+     * <p>{@link #lastOutcome} 会被<b>后续任何一个</b>失败 publish 覆盖:同一包对某些程序源
+     * 注入成功(+8419 chars ×30),而个别文件"命中模板但该文件注入失败"会把最后一次写成失败 ⇒
+     * 客户端自检在注入明明成功的会话里报 {@code INTEROP_FAILED}(2026-09-25 05:13 真机实测,
+     * 聊天栏打 ✘ 而日志有 30 行 injected)。所以自检必须读本字段,而不是 {@code lastOutcome}。</p>
+     */
+    private static volatile Outcome stickyInjected;
+
     private RuntimePackInjector() {}
 
     /** 一次解析的结论(除 fileOutcomes 外不可变)。 */
@@ -279,9 +289,17 @@ public final class RuntimePackInjector {
         return status;
     }
 
-    /** 最近一次解析的<b>结构化</b>结果;从未解析过 ⇒ {@code null}。客户端自检用。 */
+    /** 最近一次解析的<b>结构化</b>结果;从未解析过 ⇒ {@code null}。诊断用。 */
     public static Outcome lastOutcome() {
         return lastOutcome;
+    }
+
+    /**
+     * 该包<b>成功注入过</b>的结果(粘性:同包后续单文件失败不回退);从未成功 ⇒ {@code null}。
+     * <b>客户端自检用这个</b>,不要用 {@link #lastOutcome()}。
+     */
+    public static Outcome stickyInjectedOutcome() {
+        return stickyInjected;
     }
 
     private static void publish(Resolution r, boolean injected) {
@@ -290,6 +308,8 @@ public final class RuntimePackInjector {
         // 结构化快照先行:客户端自检(ShaderPackDiag)读它,不看人读字符串。
         lastOutcome = new Outcome(r.rawName, r.matchKey, r.template != null, injected,
                 r.template == null ? null : r.channel(), r.detail);
+        // 粘性成功:同包后续单文件失败不得把整包翻回失败(2026-09-25 真机实测缺陷)。
+        if (injected) stickyInjected = lastOutcome;
         status = formatStatus(r.rawName, r.matchKey, r.root, templateLine,
                 r.template == null ? null : r.channel(), r.detail, r.fileOutcomes, injected);
     }

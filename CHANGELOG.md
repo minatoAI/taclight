@@ -1,6 +1,32 @@
 > 本文所述 commit id 为 2026-09-17 历史重写前的旧 id；映射见 `docs/COMMIT-ID-REMAP-2026-09-17.md`
 
-## 09-25 · 光影包自检结构性误报修复(interop 注入成功却报"无注入")+ 0.10.1-devtest 测试候选(未 push)
+## 09-25 夜 · 真机 E2E 验收：Complementary 注入可见性达成 + 自检"说谎"闭环(未 push)
+
+- **结论**：用户报的"Complementary 没注入 / 照明没生效"**真机复现不出**。在用户的 HMCL 实例上实测：
+  注入 **30 行成功**；聊天栏打 **`✔ 已注入到 'ComplementaryReimagined_r5.9.3.zip' (运行时 interop 注入)`**；
+  **开灯图有圆形光斑打在雪面、关灯图光斑消失**（两图 sha256 不同；亮度 ≥128 的像素 **34,248 → 24,013**）。
+  原始件（2 张 PNG + 日志 + 快照 JSON + sha 清单）在工作区 `docs/evidence/2026-09-25-realrun-visibility/`。
+- **新增修复（本提交）**：`RuntimePackInjector` 增加**粘性成功** `stickyInjected` / `stickyInjectedOutcome()`；
+  `ShaderPackDiag` 改读粘性成功 —— 同包内**个别文件**失败不得把整包翻回失败。
+  真机证据：同一会话注入成功 30 次时，上一版自检报 `INTEROP_FAILED`（聊天栏打 ✘），
+  本版报 `INTEROP_INJECTED`（聊天栏打 ✔）。契约 `ShaderPackDiagContract` 加 2 条断言（现 **37 checks**，
+  `AllContracts: ALL PASS`）。
+- **本轮抓到的其它问题**（完整记录见证据目录 README）：
+  - **B1** `-PdevHarness=true` 变体**真机启动即 FATAL**（`taclight.dev.mixins.json:debug.UsingGateTrapMixin`
+    → `@Inject … 'stopUsingItem' not found`）：开发 mixin 打 mojmap 名字，独立客户端跑在 SRG 下
+    ⇒ **dev 变体只能在 `gradlew runClient` 用**；发布包不受影响；
+  - **B3** HMCL 版本 JSON 带 `--demo` ⇒ 离线账号进入**试玩模态框**、画面暂停，三张截图 sha 相同
+    （启动参数生成器已剔除 `--demo/--width/--height/--quickPlay*`）；
+  - **B4** `taclightContracts` 检查的是 **`build/libs` 里上一轮的残留 jar** ⇒ 曾误判"发布包含 DebugCommandRelay"
+    ⇒ **必须先 release `build` 再跑契约**（"测量的路径≠生产的路径"又一例）；
+  - **B5** 驱动脚本收尾 toggle 逻辑写反（已修）。
+- **未验证（不许写成已验证）**：① 发布变体（无 relay）的 `diag:` 文案真机复验；
+  ② `/taclight snap` **命令入口**（本轮跑的是 relay 入口 `!snap`，两者共用 `DebugSnapshotter`）；
+  ③ RenderDoc `.rdc`（本轮 `renderdoc:"absent"`）。
+- **测试变体（全部非发布件）**：relayonly **445,011 B / `F1AD4DFA…A6BD`**（本轮真机用：发布 mixin 集 + relay）；
+  release **326,151 B / `C6F462C0…B8749`**；devharness **450,093 B / `D35C5A89…45CF1`**。
+
+
 
 - **用户实测 bug**(9/19 20:19 会话;实例 `E:\temp\mc-test\.minecraft\versions\1.20.1-Forge`):
   实装 `taclight-0.10.0.jar` **289,006 B**(`E9A1476F…D896950`) +

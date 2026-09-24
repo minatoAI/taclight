@@ -127,6 +127,12 @@ public class ShaderPackDiagContract {
                 "接线⑤:ClientEvents 代码里不再写死旧文案(注释除外;文案已收口到纯类)");
         check(injSrc.contains("record Outcome") && injSrc.contains("lastOutcome ="),
                 "接线⑥:RuntimePackInjector 发布结构化 Outcome");
+        // 2026-09-25 真机轮实测缺陷:同包内个别文件失败会覆盖 lastOutcome ⇒ 注入成功却报失败。
+        // 自检必须读"粘性成功";下面两条锁死这个修法(退回 lastOutcome ⇒ 必红)。
+        check(injSrc.contains("if (injected) stickyInjected = lastOutcome"),
+                "接线⑧:成功结果写入粘性字段(不被后续单文件失败覆盖)");
+        check(diagSrc.contains("stickyInjectedOutcome()"),
+                "接线⑨:ShaderPackDiag 读粘性成功,而不是最近一次结果");
         check(!logicSrc.contains("net.minecraft") && !logicSrc.contains("irisshaders"),
                 "接线⑦:纯类不引用 MC/Iris(离线契约才加载得起来)");
     }

@@ -53,13 +53,20 @@ public final class ShaderPackDiag {
             boolean inUse = net.irisshaders.iris.api.v0.IrisApi.getInstance().isShaderPackInUse();
             String name = activePackName();
             Boolean diskMarker = inUse ? diskMarker(name) : null;
-            RuntimePackInjector.Outcome o = RuntimePackInjector.lastOutcome();
+            // 注入判定必须用"粘性成功":同包内个别文件失败不得把整包翻回失败(详见 RuntimePackInjector)。
+            RuntimePackInjector.Outcome injectedOutcome = RuntimePackInjector.stickyInjectedOutcome();
+            RuntimePackInjector.Outcome lastOutcome = RuntimePackInjector.lastOutcome();
             boolean injected = false;
             boolean matched = false;
             // 只在"同一包"时采信运行时结果,避免切包后串用上一个包的成功结果(假绿)。
-            if (inUse && name != null && o != null && samePack(name, o.rawName())) {
-                injected = o.injected();
-                matched = o.templateMatched();
+            if (inUse && name != null) {
+                if (injectedOutcome != null && samePack(name, injectedOutcome.rawName())) {
+                    injected = true;
+                    matched = injectedOutcome.templateMatched();
+                }
+                if (lastOutcome != null && samePack(name, lastOutcome.rawName())) {
+                    matched = matched || lastOutcome.templateMatched();
+                }
             }
             return ShaderPackDiagLogic.decide(inUse, name, diskMarker, injected, matched);
         } catch (Throwable t) {
