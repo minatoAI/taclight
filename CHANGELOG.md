@@ -1,6 +1,39 @@
 > 本文所述 commit id 为 2026-09-17 历史重写前的旧 id；映射见 `docs/COMMIT-ID-REMAP-2026-09-17.md`
 
-## 09-19 · /taclight tune 八旋钮晋升正式命令 + toml 持久化(未 push,未构建验证)
+## 09-25 · 光影包自检结构性误报修复(interop 注入成功却报"无注入")+ 0.10.1-devtest 测试候选(未 push)
+
+- **用户实测 bug**(9/19 20:19 会话;实例 `E:\temp\mc-test\.minecraft\versions\1.20.1-Forge`):
+  实装 `taclight-0.10.0.jar` **289,006 B**(`E9A1476F…D896950`) +
+  官方 `ComplementaryReimagined_r5.9.3.zip`(sha1 `838139b54cddb56b2e83cd260d8efd960ac536d6`,
+  与 Modrinth r5.9.3 一致)。日志里 **58 行 `interop injected ... known-good:anchors` 全部成功**,
+  但聊天栏收到 `✘ 当前包 'ComplementaryReimagined_r5.9.3.zip' 无 TacLight 注入。请…选择
+  'iterationT 3.2.0 (taclight)'` ⇒ 用户结论"没注入、照明没生效"。**注入逻辑本身没问题,是自检在说谎。**
+- **根因(结构性,非配置)**:`ShaderPackDiag` 只在**磁盘包内容**里找物理标记
+  (`shaders/shaders.properties` 的 `TACLIGHT_PATCH_BEGIN`),而 interop 是
+  **运行时在内存里改着色器源码** ⇒ 第三方包注入再成功,磁盘上也永远没有标记 ⇒ 永远落到
+  `ORIGINAL_PACK`。旧三态(NO_PACK/ORIGINAL_PACK/TACLIGHT_PACK)**没有**"已注入到第三方包"这一态。
+- **修复**:
+  ① `RuntimePackInjector` 新增结构化 `Outcome(rawName, matchKey, templateMatched, injected,
+     channel, detail)` + `lastOutcome()`(给人读的 `status` 字符串拿来判状态就是本 bug 的温床);
+  ② 新增纯类 `client/ShaderPackDiagLogic`:六态 `decide` + `message` + `shouldAdvisePackSwitch`,
+     **不引用 MC/Iris** ⇒ 离线契约可加载;判定序=磁盘标记优先,其次"**同包** + 运行时注入成功
+     ⇒ `INTEROP_INJECTED`",命中模板但失败 ⇒ `INTEROP_FAILED`;
+  ③ `ShaderPackDiag.activeStatus()` 只负责取输入(含"同包才采信运行时结果"防切包假绿);
+  ④ `ClientEvents.checkShaderPackDiag` 文案收口到纯类,并补 `player != null` 守卫。
+- **契约** `ShaderPackDiagContract`(**35 checks**:内容层六态+文案,接线层源码级)已注册进 `AllContracts`
+  (现 44 项)。**旧码必红**实测:删掉纯类里 interop 两条分支(=旧码行为)⇒ 断言变红
+  (`FAIL [旧码必红] 磁盘无标记 + 运行时注入成功 ⇒ INTEROP_INJECTED(不是 ORIGINAL_PACK)`)
+  ⇒ **逐字节还原**(sha256 `33B4176D74BD42528AAEBC527236EA62A998AEB9D5721B46DFADF6E4701E9D66` 前后一致)
+  ⇒ 复绿。判据自纠一次:文本级断言最初把**注释里**的旧文案也算违规 ⇒ 改"去注释再判"。
+- **测试候选**(`-Pmod_version=0.10.1-devtest`,**非发布件**):
+  `taclight-0.10.1-devtest.jar` **326,045 B / `838B437959AD3E36F2E417A1B535FF8742F988301D02C877AB4D6AD8B482EBF3`**;
+  `taclight-shaders-0.10.1-devtest.zip` **99,139 B / `92C03748FAD8471CC610D226353CBFF5145C1AB350CCC29F418A220540E3FA73`**
+  (光影包内容未变,修复只在模组侧)。证据目录 `docs/evidence/2026-09-25-shaderpack-diag-fix/`。
+- **未验证(必须真机补)**:① 注入成功时聊天栏是否真打 ✔;② **interop 注入后聚光灯是否真的可见**
+  (用户报的"照明没生效"里,"注入成功"与"手电开过"都已由日志证实,**可见性仍缺一张同 pose 截图**);
+  ③ `/taclight snap`、`tune` 的真机端到端。
+
+
 
 - `!bright/!dist/!atten/!knee/!beam/!scat/!beamcap/!cone` + `!voxel` 晋升
   `/taclight tune <name> [<值>|status|off]>`(发布包可用,中继仍保留作内存对照,后写者胜)。

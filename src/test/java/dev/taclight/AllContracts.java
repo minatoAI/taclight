@@ -112,6 +112,9 @@ public class AllContracts {
         GunControlContract.main(args);
         System.out.println("== SelfLightGateContract ==");
         SelfLightGateContract.main(args);
+        // 光影包自检(2026-09-25):interop 运行时注入成功却被报"无注入"的误报修复。
+        System.out.println("== ShaderPackDiagContract ==");
+        dev.taclight.client.ShaderPackDiagContract.main(args);
         System.out.println("== ScenePlanContract ==");
         ScenePlanContract.main(args);
         System.out.println("== MultiLightCollectorContract ==");

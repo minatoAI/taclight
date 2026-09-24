@@ -55,6 +55,18 @@ public final class RuntimePackInjector {
     /** {@code !interop} 命令读的状态快照(不可变字符串,渲染线程/命令线程皆可读)。 */
     private static volatile String status = "(尚未解析:没有 shader 程序源流经 patchSource)";
 
+    /**
+     * 最近一次解析的<b>结构化</b>结果(2026-09-25)。
+     *
+     * <p>{@link #status} 是给人读的字符串,<b>不能</b>拿来判状态。客户端自检
+     * ({@code ShaderPackDiag})必须知道"这个包到底注入了没有",否则只能用"磁盘包里有没有标记"
+     * 去猜 —— 而 interop 是运行时内存注入,磁盘上永远没有标记 ⇒ 用户被误报"无注入"
+     * (2026-09-19 20:19 用户实测:58 行 injected 日志 + 聊天栏 ✘ 无注入,同一会话)。</p>
+     */
+    public record Outcome(String rawName, String matchKey, boolean templateMatched,
+                          boolean injected, String channel, String detail) {}
+    private static volatile Outcome lastOutcome;
+
     private RuntimePackInjector() {}
 
     /** 一次解析的结论(除 fileOutcomes 外不可变)。 */
@@ -267,9 +279,17 @@ public final class RuntimePackInjector {
         return status;
     }
 
+    /** 最近一次解析的<b>结构化</b>结果;从未解析过 ⇒ {@code null}。客户端自检用。 */
+    public static Outcome lastOutcome() {
+        return lastOutcome;
+    }
+
     private static void publish(Resolution r, boolean injected) {
         String templateLine = r.template == null ? null
                 : "family=" + r.template.familyId + " packName=" + r.template.packName;
+        // 结构化快照先行:客户端自检(ShaderPackDiag)读它,不看人读字符串。
+        lastOutcome = new Outcome(r.rawName, r.matchKey, r.template != null, injected,
+                r.template == null ? null : r.channel(), r.detail);
         status = formatStatus(r.rawName, r.matchKey, r.root, templateLine,
                 r.template == null ? null : r.channel(), r.detail, r.fileOutcomes, injected);
     }

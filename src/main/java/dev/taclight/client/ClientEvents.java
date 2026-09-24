@@ -49,7 +49,7 @@ public class ClientEvents {
     private static int probeTick;
     private static boolean probeConfirmed;
     private static int diagTick;
-    private static ShaderPackDiag.Status lastDiagStatus;
+    private static ShaderPackDiagLogic.Status lastDiagStatus;
     private static boolean diagAutoApplied;
     private static int boardTick;
     private static final String DERIVED_PACK = "iterationT 3.2.0 (taclight)";
@@ -224,28 +224,15 @@ public class ClientEvents {
     /** 每 5 秒检查活动光影包;状态变化时聊天+日志提示(选错包是 90% 的问题)。 */
     private static void checkShaderPackDiag(Minecraft mc) {
         if (++diagTick % 100 != 0) return;
-        ShaderPackDiag.Status st = ShaderPackDiag.activeStatus();
+        ShaderPackDiagLogic.Status st = ShaderPackDiag.activeStatus();
         if (st == lastDiagStatus) return;
         lastDiagStatus = st;
         String pack = ShaderPackDiag.activePackName();
-        String msg;
-        switch (st) {
-            case TACLIGHT_PACK:
-                msg = "[TacLight] \u2714 配套包已激活: L=手电筒开关, K=霓虹调试";
-                break;
-            case ORIGINAL_PACK:
-                msg = "[TacLight] \u2718 当前包 '" + pack + "' 无 TacLight 注入。请到选项>视频设置>光影(shaders)选择 '"
-                        + DERIVED_PACK + "', 然后按 K";
-                break;
-            case NO_PACK:
-                msg = "[TacLight] \u2718 未激活光影包: 锥光仅为视觉模式, K 霓虹无效(需要光影包)";
-                break;
-            default:
-                msg = "[TacLight] ? 无法判定当前光影包。若按 K 无反应, 请在光影选择界面选 '" + DERIVED_PACK + "'";
-                break;
-        }
+        // 判定与文案同源(纯类):2026-09-25 之前 INTEROP_INJECTED 这类状态不存在,
+        // 注入成功也被判成 ORIGINAL_PACK ⇒ 聊天栏 ✘ "无 TacLight 注入"(用户实测 bug)。
+        String msg = ShaderPackDiagLogic.message(st, pack, DERIVED_PACK);
         TacLightMod.LOGGER.info("[TacLight] diag: {}", msg);
-        mc.player.displayClientMessage(Component.literal(msg), false);
+        if (mc.player != null) mc.player.displayClientMessage(Component.literal(msg), false);
     }
 
     /** Number of screenshot encodes still pending; scheduling pressure is recorded as D rows. */
