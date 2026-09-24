@@ -1,5 +1,26 @@
 > 本文所述 commit id 为 2026-09-17 历史重写前的旧 id；映射见 `docs/COMMIT-ID-REMAP-2026-09-17.md`
 
+## 09-25 上午 · 全 registry 穷举 golden(分类可判定化) + `patched_shaders` 验证 + `!gl`(未 push)
+
+- **全 registry 穷举 + golden(P0,离线)**：`VoxelRealRegistryContract` 新增 `fullRegistryGolden()`——
+  枚举 `BuiltInRegistries.BLOCK` 的**每个状态**(实测 **24,135** 个),用**生产方法** `VoxelGrid.classify` 求码,
+  产出可 diff 的 golden(`src/test/resources/voxel-registry-golden.txt`):
+  - **计数**：solid=10212 / empty=4683 / veg=7591 / leaf=280 / **slab=1369** / leaky=4425;
+  - **全量 sha256**：`b2bdace5…`(任何状态分类漂移 = 红);
+  - **逐行钉"机制类"**(6,074 行:薄板/树叶/非空气却判透光)——刻意只钉机制类,否则 diff 会被四千行楼梯淹没;
+  - **`leakyAllowlist`(182 个方块)**：显式列出"非空气却判透光"的方块,新增这类方块立刻失败(不再有静默漏光);
+  - golden 缺失 ⇒ **生成并失败**(要求审阅后提交);`-Dtaclight.voxelGolden.update=true` 重生成;
+    `-Dtaclight.voxelGolden.dumpAll=<path>` 导出全量映射供深挖。
+  - **验证修复对象已离开漏光名单**:`snow`/`carpet`/`trapdoor`/`lily_pad` 均不在名单;
+    雪 1..7 层 = 薄板码 4..10(`layers=1` 的 `collTop=-Infinity` ⇒ 守卫 1 例外生效);
+    仍在名单的是蛛网/绊线(本就该透光)与铁轨斜坡状态(斜形非平薄板)。
+- **`patched_shaders` 真机验证**:`config/oculus.properties` 的 `enableDebugOptions=true` ⇒ **228 个文件**;
+  `#include` 残留 0(= 最终源码);**30 个程序含注入核心**,且本次修复在场(`/ 16u`、`% 16u`、`code >= 4.0f` 薄板分支)。
+  ⇒ 此前"从 8 MB RenderDoc XML 挖注入后 GLSL"的做法可退役。**注意**:注入标记注释被 Iris 剥掉 ⇒ 断言打在代码内容上。
+- **`!gl` 命令**:记录实际 GPU 身份。实测 `NVIDIA GeForce RTX 5070 Ti/PCIe/SSE2`、`OpenGL 4.6.0 NVIDIA 616.92`
+  ⇒ 混合显卡机器上游戏跑在 N 卡(未落 AMD 核显),Nsight 这条线可用。
+- 详见 `docs/evidence/2026-09-25-registry-golden/` 与 `docs/evidence/2026-09-25-patched-shaders/`。
+
 ## 09-25 上午 · 高度感知遮挡(方案 C):细雪层穿光修复 + 真机验证通过(未 push)
 
 - **根因(两处,第二处只有真机才暴露)**:
