@@ -1,11 +1,14 @@
 package dev.taclight.client;
 
 import dev.taclight.TacLightMod;
+import dev.taclight.channel.KeyInject;
+import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+import org.lwjgl.glfw.GLFW;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -73,6 +76,12 @@ import java.nio.file.StandardCopyOption;
  *       内锥=外×0.5,Java 侧直改 cosOuter/cosInner;off=回 config 默认 8/4。</li>
  *   <li>{@code !looktrace} / {@code !mcap} —— 消融探针 / 运动门控采集开关(09-01,
  *       布防后被观察角色朝向/位置变化自动连拍+逐帧信号,静止自停)。</li>
+ *   <li>{@code !key} —— <b>合成按键注入</b>(2026-09-26 待办 A5,关闭 CAPABILITY-GAPS §1 缺口):
+ *       {@code !key <name> <down|up|ms>} / {@code !key list} / {@code !key clear}。
+ *       名字表(原版 5 键 + hotbar.1..9 + TacLight 的 L/M/K/N/B/F9)与两类消费路径见
+ *       {@link dev.taclight.channel.KeyInject};窗口**不聚焦**也可用 —— 进程内直接走
+ *       {@code KeyboardHandler.keyPress}(= 真实按键回调调用的同一个方法,首行只校验 window 句柄),
+ *       因此 {@code consumeClick()} 型的 TacLight 开关(clickCount)与 tick 路径的原版键同时覆盖。</li>
  *  </ul></p>
  *
  * <p>消费后立即原子清空文件(读→写空);写入方请整文件重写,勿追加并发写。</p>
@@ -86,6 +95,9 @@ public final class DebugCommandRelay {
     @SubscribeEvent
     public static void onClientTick(TickEvent.ClientTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;
+        // !key 合成按键的"到点抬起"必须先于任何门控:它每 tick 检查一次(20Hz ⇒ 抬起精度 50ms),
+        // 且在没有世界/没连接时也要跑(否则退出世界会留下卡键)。
+        KeyInjectRuntime.tick(Minecraft.getInstance());
         if (++cooldown % 10 != 0) return; // 2Hz 轮询足够
         if (!Files.isRegularFile(CMD_FILE)) return;
         // 只在世界内消费:命令包需要活动连接;否则文件保留,进世界后自动执行
@@ -597,6 +609,15 @@ public final class DebugCommandRelay {
             TacLightMod.LOGGER.info("[TacLight] RELAY bob -> {}", result);
             return;
         }
+        if (line.startsWith("!key")) {
+            // 合成按键注入(2026-09-26 A5):!key <name> <down|up|ms> | !key list | !key clear
+            // 详情(两类消费路径/焦点无关/无卡键保证)见 KeyInjectRuntime 的类注释。
+            String arg = line.length() > 4 ? line.substring(4).trim() : "";
+            for (String l : KeyInjectRuntime.handle(mc, arg).split("\n")) {
+                TacLightMod.LOGGER.info("[TacLight] RELAY key | {}", l);
+            }
+            return;
+        }
         if (line.startsWith("!voxprobe")) {
             // 体素单元探针(2026-09-25 细雪层穿光轮):同一格"分类器判定"vs"已上传网格值"。
             String arg = line.length() > 9 ? line.substring(9).trim() : "";
@@ -704,4 +725,266 @@ public final class DebugCommandRelay {
     }
 
     private DebugCommandRelay() {}
+
+    // ==================================================================
+    // !key:合成按键注入(2026-09-26 待办 A5;只存在于 dev 中继 —— 本类在发布包里被
+    // build.gradle 的 exclude 'dev/taclight/client/DebugCommandRelay*.class' 整类剔除,
+    // 所以这个**嵌套类**的 class 名 DebugCommandRelay$KeyInjectRuntime 同样被剔除)。
+    //
+    // ★ 路径选择(一手依据;这正是"按键注入历史上不可靠"的根因所在):
+    //   · 键盘类映射 ⇒ 直接调 mc.keyboardHandler.keyPress(window, key, 0, GLFW_PRESS/RELEASE, 0):
+    //     这就是**真实按键回调调用的同一个方法**(其首行只校验 window == mc.getWindow().getWindow(),
+    //     与窗口焦点无关)⇒ 内部会走到 KeyMapping.set(key,true) + KeyMapping.click(key)
+    //     (KeyboardHandler 偏移 910/918)并 fire InputEvent.Key ⇒ vanilla(tick 路径:
+    //     use/attack/hotbar/移动)与 TacLight(InputEvent.Key 路径:consumeClick 读 clickCount)
+    //     **同时**覆盖 ⇒ L/M/K/N/B/F9 不会"静默无效"。
+    //   · 鼠标类映射(vanilla keyUse/keyAttack 默认绑鼠标键):MouseHandler 无公开入口
+    //     (javap 实测只有 grab/release/isMouseGrabbed 等)⇒ 退化为
+    //     KeyMapping.set(key, down) + KeyMapping.click(key):覆盖所有"读映射"的消费者
+    //     (vanilla use/attack 都在 tick 路径读映射);**不合成鼠标事件**(有意:合成
+    //     InputEvent.MouseButton 会连带触发别的模组的鼠标处理,风险大于收益)。
+    //   · 两类都 try/catch 兜底:异常路径强制 setDown(false),绝不留卡键。
+    //
+    // ★ 焦点无关:上面两条都在进程内执行,不依赖 GLFW 回调 ⇒ 窗口不聚焦
+    //   (run-round.ps1 的 pauseOnLostFocus=false 暂态)照样生效。
+    //
+    // ★ 无卡键:每次注入都进 Tracker;每 client tick(20Hz)检查"到点/超 60s 兜底"⇒ 自动抬起;
+    //   mc.level == null(退出世界)时全部抬起;`!key clear` = 全抬 + KeyMapping.releaseAll()
+    //   (clickCount 一并归零,连"注入后没人消费的 click"也不会留到下一次真实按键)。
+    // ==================================================================
+    static final class KeyInjectRuntime {
+        private static final KeyInject.Tracker TRACKER = new KeyInject.Tracker();
+        /** 诊断计数(自己注入了几次,与"消费者是否动作"无关;按名字累计)。 */
+        private static final java.util.Map<String, Integer> PRESSES = new java.util.LinkedHashMap<>();
+        private static final java.util.Map<String, Integer> RELEASES = new java.util.LinkedHashMap<>();
+        /** 只读诊断:KeyMapping.clickCount 是 private(vanilla 无 getter),反射读不到就显示 n/a。 */
+        private static java.lang.reflect.Field clickCountField;
+        private static boolean clickCountFailed;
+
+        static String handle(Minecraft mc, String arg) {
+            String a = arg == null ? "" : arg.trim();
+            if (a.isEmpty() || a.equals("status")) return status();
+            if (a.equals("list")) return list(mc);
+            if (a.equals("clear")) return clear(mc);
+            String[] p = a.split("\\s+");
+            if (p.length != 2) return KeyInject.usage();
+            String name = p[0];
+            if (!KeyInject.isInjectable(name)) return KeyInject.unknownName(name);
+            int act = KeyInject.actionFor(p[1]);
+            if (act == KeyInject.ACTION_NONE) {
+                return "bad arg '" + p[1] + "' for " + name + "; " + KeyInject.usage();
+            }
+            return apply(mc, name, act, p[1]);
+        }
+
+        private static String apply(Minecraft mc, String name, int act, String rawArg) {
+            KeyMapping m = mappingFor(mc, name);
+            if (m == null) return "key '" + name + "' 是合法名字但本实例拿不到映射(未注册?): " + name;
+            String before = stateProbe(name);
+            try {
+                if (act == KeyInject.ACTION_UP) {
+                    fire(mc, m, false);
+                    TRACKER.forget(name);
+                    return describe(mc, name, "up", before, null);
+                }
+                int ms = act == KeyInject.ACTION_TAP ? KeyInject.tapMs(rawArg) : (int) KeyInject.SAFETY_HOLD_MS;
+                fire(mc, m, true);
+                TRACKER.hold(name, ms, nowMs());
+                String what = act == KeyInject.ACTION_TAP
+                        ? "tap " + ms + "ms(到点自动抬起)"
+                        : "down(保持;60s 兜底自动抬起,或 !key " + name + " up / !key clear)";
+                return describe(mc, name, what, before, null);
+            } catch (Throwable t) {
+                // 异常路径也必须抬起:先忘记录,再强制 setDown(false)(fire 里可能已 set(true))
+                TRACKER.forget(name);
+                try {
+                    m.setDown(false);
+                } catch (Throwable ignored) {
+                }
+                return "key '" + name + "' 注入异常,已强制抬起: " + t;
+            }
+        }
+
+        /** 每 client tick 调用(先于所有门控):到点/兜底抬起 + 退出世界全抬。 */
+        static void tick(Minecraft mc) {
+            if (TRACKER.size() == 0) return;
+            if (mc == null) return;
+            long now = nowMs();
+            for (String name : TRACKER.dueAt(now)) {
+                KeyMapping m = mappingFor(mc, name);
+                if (m != null) {
+                    try {
+                        fire(mc, m, false);
+                    } catch (Throwable t) {
+                        try {
+                            m.setDown(false);
+                        } catch (Throwable ignored) {
+                        }
+                    }
+                }
+                TRACKER.forget(name);
+                TacLightMod.LOGGER.info("[TacLight] RELAY key | auto-up {} (到点/兜底)", name);
+            }
+            if (mc.level == null && TRACKER.size() > 0) {
+                // 退出世界:立刻全抬(不留卡键),但不做 releaseAll(避免动别的状态)
+                for (String name : TRACKER.tracked()) {
+                    KeyMapping m = mappingFor(mc, name);
+                    if (m != null) {
+                        try {
+                            m.setDown(false);
+                        } catch (Throwable ignored) {
+                        }
+                    }
+                }
+                TRACKER.clear();
+                TacLightMod.LOGGER.info("[TacLight] RELAY key | 无世界 ⇒ 全部抬起");
+            }
+        }
+
+        /** 注入一次"物理按下/抬起"。键盘类走真实 keyPress;鼠标类退化为 set+click。 */
+        private static void fire(Minecraft mc, KeyMapping m, boolean down) {
+            com.mojang.blaze3d.platform.InputConstants.Key key = m.getKey();
+            if (key.getType() == com.mojang.blaze3d.platform.InputConstants.Type.KEYSYM) {
+                // 真实路径:keyPress 内部 = KeyMapping.set + KeyMapping.click + InputEvent.Key
+                mc.keyboardHandler.keyPress(mc.getWindow().getWindow(), key.getValue(), 0,
+                        down ? GLFW.GLFW_PRESS : GLFW.GLFW_RELEASE, 0);
+            } else {
+                // 鼠标类:无公开入口 ⇒ 直接驱动映射(覆盖 tick 路径的消费者;见类注释)
+                KeyMapping.set(key, down);
+                if (down) KeyMapping.click(key);
+            }
+            if (down) PRESSES.merge(m.getName(), 1, Integer::sum);
+            else RELEASES.merge(m.getName(), 1, Integer::sum);
+        }
+
+        /** 名字 → KeyMapping(未知名/越界 ⇒ null;{@code !key list} 与注入共用)。 */
+        private static KeyMapping mappingFor(Minecraft mc, String name) {
+            if (mc == null || mc.options == null) return null;
+            switch (name) {
+                case "use": return mc.options.keyUse;
+                case "attack": return mc.options.keyAttack;
+                case "jump": return mc.options.keyJump;
+                case "sneak": return mc.options.keyShift;
+                case "sprint": return mc.options.keySprint;
+                case "flashlight": return KeyBindings.FLASHLIGHT_TOGGLE;
+                case "gunlight": return KeyBindings.GUNLIGHT_TOGGLE;
+                case "debug": return KeyBindings.DEBUG_TOGGLE;
+                case "diag": return KeyBindings.DIAG_DUMP;
+                case "bench": return KeyBindings.BENCH;
+                case "snapshot": return TacSnapshotKeys.SNAPSHOT;
+                default:
+                    int i = KeyInject.hotbarIndex(name);
+                    return i >= 0 && i < mc.options.keyHotbarSlots.length ? mc.options.keyHotbarSlots[i] : null;
+            }
+        }
+
+        /** 业务状态的"前后对照"(只对 TacLight 开关类有意义);拿不到 ⇒ null。 */
+        private static String stateProbe(String name) {
+            try {
+                switch (name) {
+                    case "flashlight": return "flash=" + ClientLightState.isOn();
+                    case "gunlight": return "gun=" + ClientLightState.gunLightEffective();
+                    case "debug": return "neon=" + ClientLightState.debugMode();
+                    default: return null;
+                }
+            } catch (Throwable t) {
+                return null;
+            }
+        }
+
+        private static String describe(Minecraft mc, String name, String what, String before, String extra) {
+            StringBuilder sb = new StringBuilder("key ").append(name).append(' ').append(what)
+                    .append(" | path=").append(KeyInject.consumptionPath(name))
+                    .append(" down=").append(down(mc, name))
+                    .append(" clickCount=").append(clickCount(mc, name))
+                    .append(" | 注入 press=").append(PRESSES.getOrDefault(name, 0))
+                    .append(" release=").append(RELEASES.getOrDefault(name, 0));
+            String after = stateProbe(name);
+            if (before != null && after != null) {
+                sb.append(" | ").append(before).append(" -> ").append(after);
+                if (before.equals(after)) {
+                    sb.append("(状态未变:事件可能没到,或被业务门拒绝 —— 见下一条 'TacLight 键诊断')");
+                }
+            }
+            if (extra != null) sb.append(" | ").append(extra);
+            return sb.toString();
+        }
+
+        private static String status() {
+            return "key: tracked=" + TRACKER.tracked() + " " + KeyInject.usage();
+        }
+
+        private static String list(Minecraft mc) {
+            StringBuilder sb = new StringBuilder(KeyInject.injectableLine());
+            for (String name : KeyInject.INJECTABLE) {
+                sb.append("\n  ").append(name)
+                        .append(" path=").append(KeyInject.consumptionPath(name))
+                        .append(" down=").append(down(mc, name))
+                        .append(" clickCount=").append(clickCount(mc, name))
+                        .append(" 注入 press=").append(PRESSES.getOrDefault(name, 0))
+                        .append(" release=").append(RELEASES.getOrDefault(name, 0));
+            }
+            sb.append("\n").append(KeyInject.taclightLine());
+            sb.append("\nholds(到点自动抬起): ").append(TRACKER.tracked());
+            sb.append("\nTacLight 键诊断:按没反应时看 latest.log —— `flashlight ON/OFF`/`gun light ...`/`SNAP key/F9 -> ...`")
+                    .append(" = 事件已到;`handheld toggle ignored (not holding flashlight)` = 事件已到但被**持物门**拒;")
+                    .append("两者都没有 = 事件路径没到(先 !back 关界面、确认本构建是 devharness、看注入行是否报异常)");
+            sb.append("\n注:clickCount 由真实按下路径同步消费 ⇒ 注入后立刻读常常是 0(正常);判别用 '注入 press=' 与上面的日志行");
+            return sb.toString();
+        }
+
+        private static String clear(Minecraft mc) {
+            java.util.List<String> names = TRACKER.tracked();
+            for (String name : names) {
+                KeyMapping m = mappingFor(mc, name);
+                if (m != null) {
+                    try {
+                        m.setDown(false);
+                    } catch (Throwable ignored) {
+                    }
+                }
+            }
+            TRACKER.clear();
+            try {
+                // 最强兜底:releaseAll 把每个映射的 isDown=false 且 clickCount=0
+                KeyMapping.releaseAll();
+            } catch (Throwable t) {
+                return "key clear: 已抬 " + names + ",但 releaseAll 失败: " + t;
+            }
+            return "key clear: 已抬 " + (names.isEmpty() ? "(无记录)" : names) + ";已 releaseAll(clickCount 归零)";
+        }
+
+        private static boolean down(Minecraft mc, String name) {
+            try {
+                KeyMapping m = mappingFor(mc, name);
+                return m != null && m.isDown();
+            } catch (Throwable t) {
+                return false;
+            }
+        }
+
+        /** 只读诊断(反射;失败 ⇒ 缓存后显示 n/a)。 */
+        private static String clickCount(Minecraft mc, String name) {
+            if (clickCountFailed) return "n/a";
+            try {
+                KeyMapping m = mappingFor(mc, name);
+                if (m == null) return "n/a";
+                if (clickCountField == null) {
+                    java.lang.reflect.Field f = KeyMapping.class.getDeclaredField("clickCount");
+                    f.setAccessible(true);
+                    clickCountField = f;
+                }
+                return String.valueOf(clickCountField.getInt(m));
+            } catch (Throwable t) {
+                clickCountFailed = true;
+                return "n/a";
+            }
+        }
+
+        private static long nowMs() {
+            return System.nanoTime() / 1_000_000L;
+        }
+
+        private KeyInjectRuntime() {}
+    }
 }

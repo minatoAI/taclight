@@ -63,6 +63,10 @@ public class AllContracts {
         // 复用生产同一条 DDA;接线 = !voxprobe / !voxray。
         System.out.println("== VoxelProbeContract ==");
         VoxelProbeContract.main(args);
+        // 合成按键注入纯核心(2026-09-26 待办 A5,中继 !key):名字表 / 两类消费路径 /
+        // 毫秒自动抬起状态机 / Tracker(离线真跑) + dev 中继接线(进程内 KeyboardHandler.keyPress)。
+        System.out.println("== KeyInjectContract ==");
+        dev.taclight.channel.KeyInjectContract.main(args);
         System.out.println("== BoundedIdentityCacheContract ==");
         BoundedIdentityCacheContract.main(args);
         System.out.println("== VoxelGridWiringContract ==");
