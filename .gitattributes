@@ -2,3 +2,13 @@
 *.bat text eol=crlf
 *.cmd text eol=crlf
 *.ps1 text eol=crlf
+# ==== 二进制必须显式钉死(否则 `* text=auto` 会按"文本"清理它们)====
+# 实测事故:`git add --renormalize .` 把 4 个 PNG 当文本做 CRLF→LF 清理,**各掉 1 字节 ⇒ 图片损坏**
+# (pack.png 39928→39925、gun_light_slot.png 188→187、gun_light.png 219→218、flashlight.png 176→175)。
+# 根因:这些小 PNG 前 8000 字节内没有 NUL,git 的 text=auto 启发式把它们判成文本。
+# `binary` = `-diff -merge -text`,此后 add/renormalize 不再碰这些字节。
+*.png binary
+*.jar binary
+*.zip binary
+*.ogg binary
+*.nbt binary
