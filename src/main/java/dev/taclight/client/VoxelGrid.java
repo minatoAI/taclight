@@ -81,6 +81,14 @@ public final class VoxelGrid {
     /** 锥形盒开关(2026-09-25 性能轮第二步):只覆盖光锥(被照到的地方遮挡判定不变)。 */
     private static volatile boolean coneBox = VoxelField.DEFAULT_CONE_BOX;
 
+    /**
+     * 副作用实验专用(2026-09-25,test-only,只能经 dev 中继到达):
+     * 把<b>盒</b>用的灯方向绕 Y 轴回退 {@code coneLagDeg} 度,而着色器仍用真实方向
+     * ⇒ 静态复现"转动时箱形滞后"的状态,用于量化"滞后 X 度时画面差多少"。
+     * 生产路径恒为 0(中继不在发布包里),默认 0 时零行为变更、零分配。
+     */
+    private static volatile float coneLagDeg = 0f;
+
     private static final int SAMPLE_STRIDE = 256;
     private static final int SAMPLE_MAX = 1024;
 
@@ -190,6 +198,21 @@ public final class VoxelGrid {
             if (rest.equals("on")) { coneBox = true; snap = null; return "voxel cone=on"; }
             if (rest.equals("off")) { coneBox = false; snap = null; return "voxel cone=off"; }
             return "voxel cone=" + (coneBox ? "on" : "off") + " (usage: !voxel cone on|off)";
+        }
+        else if (a.startsWith("lag")) {
+            // !voxel lag <deg>:仅副作用实验用(见 coneLagDeg 注释)。改值即作废快照。
+            String rest = a.length() > 3 ? a.substring(3).trim() : "";
+            if (rest.isEmpty()) return "voxel lag=" + coneLagDeg + " (usage: !voxel lag <deg>, test-only)";
+            float d;
+            try {
+                d = Float.parseFloat(rest);
+            } catch (NumberFormatException e) {
+                return "voxel lag bad arg '" + rest + "'";
+            }
+            if (!(d > -180f) || d > 180f) d = 0f;
+            coneLagDeg = d;
+            snap = null;
+            return "voxel lag=" + d + " (test-only: box direction rolled back by this many degrees)";
         }
         else if (a.equals("profile reset")) {
             sumClearMs = sumLoopMs = 0; sumCells = sumPacked = 0;
@@ -336,7 +359,7 @@ public final class VoxelGrid {
         if (!enabled || lights.isEmpty() || mc.level == null) return null;
         Level level = mc.level;
         VoxelField.Box box = coneBox
-                ? VoxelField.boxForCones(lights, VoxelField.CONE_BOX_MARGIN)
+                ? VoxelField.boxForCones(lagDirs(lights, coneLagDeg), VoxelField.CONE_BOX_MARGIN)
                 : VoxelField.boxFor(lights, boxFraction);
         long tick = level.getGameTime();
         if (snap != null && level == lastLevel && tick == lastTick && box.equals(lastBox)) return snap;
@@ -361,6 +384,23 @@ public final class VoxelGrid {
         lastLevel = level;
         lastBox = box;
         return snap;
+    }
+
+    /** 把盒用的灯方向绕 Y 轴回退 deg 度(仅副作用实验;deg=0 时原样返回、零分配)。 */
+    private static List<SpotlightData> lagDirs(List<SpotlightData> lights, float deg) {
+        if (deg == 0f) return lights;
+        double r = Math.toRadians(deg), c = Math.cos(r), s = Math.sin(r);
+        List<SpotlightData> out = new java.util.ArrayList<>(lights.size());
+        for (SpotlightData l : lights) {
+            float dx = l.dirX(), dz = l.dirZ();
+            out.add(new SpotlightData(l.posX(), l.posY(), l.posZ(), l.radius(),
+                    l.red(), l.green(), l.blue(), l.intensity(),
+                    (float) (dx * c - dz * s), l.dirY(), (float) (dx * s + dz * c), l.type(),
+                    l.cosOuter(), l.cosInner(), l.coneReservedZ(), l.coneReservedW(),
+                    l.sideFloor(), l.density(), l.beam(), l.vlReservedW(),
+                    l.cookieR(), l.cookieG(), l.cookieB(), l.cookieA()));
+        }
+        return out;
     }
 
     /** 逐 chunk-section 填充:纯天空段整段跳过,其余段逐块分类打包。 */
