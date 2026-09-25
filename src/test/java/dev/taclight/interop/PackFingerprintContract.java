@@ -24,9 +24,59 @@ public class PackFingerprintContract {
         absolutePath();
         sha256Vector();
         fingerprintMatch();
+        digestNormalization();
         packNameMatching();
         pathMustUseRawName();
         System.out.println("PackFingerprintContract: ALL PASS (" + checks + " checks)");
+    }
+
+    /**
+     * 摘要前靶向规范化(2026-09-26 task-23):日期头免疫 + **作用域只限 .properties**(防"剥过头")。
+     *
+     * <p>事实来源:实例 {@code <gameDir>/patched_shaders/{block,entity,item}.properties} 是 Iris 的
+     * 补丁输出,每轮多写成一行 {@code #Sat Sep 26 01:34:39 CST 2026} ⇒ 两轮指纹不同(审核 R3)。</p>
+     */
+    private static void digestNormalization() {
+        String body = "block.1=minecraft:stone\nblock.2=minecraft:dirt\n";
+        String withHeader = "#Sat Sep 26 01:34:39 CST 2026\n" + body;
+        String withOtherHeader = "#Sun Sep 27 23:59:59 CST 2026\n" + body;
+        String sig = PackFingerprint.sha256Prefix16(PackFingerprint.normalizeForDigest("block.properties", body));
+        check(sig.equals(PackFingerprint.sha256Prefix16(
+                        PackFingerprint.normalizeForDigest("block.properties", withHeader))),
+                "只差 Properties.store() 日期头 ⇒ 摘要相同(旧写法:不同 ⇒ 指纹不可用)");
+        check(sig.equals(PackFingerprint.sha256Prefix16(
+                        PackFingerprint.normalizeForDigest("block.properties", withOtherHeader))),
+                "换一个日期/时区的日期头 ⇒ 摘要仍相同");
+        check(PackFingerprint.normalizeForDigest("block.properties", body).equals(body),
+                "不含日期头 ⇒ 规范化是**逐字节 no-op**(模板里已记录的 hash 不受影响)");
+        // 真实内容变化必须仍然敏感(防"剥过头"造假稳定性)
+        check(!sig.equals(PackFingerprint.sha256Prefix16(PackFingerprint.normalizeForDigest(
+                        "block.properties", "block.1=minecraft:gold\nblock.2=minecraft:dirt\n"))),
+                "property 键值真的变了 ⇒ 摘要必须变");
+        check(!sig.equals(PackFingerprint.sha256Prefix16(PackFingerprint.normalizeForDigest(
+                        "block.properties", "# 真实注释变了\n" + body))),
+                "真实(非日期头)注释变了 ⇒ 摘要必须变");
+        // ★ 作用域断言:非 .properties 一律不规范化(GLSL 的 #version/#define 不能被擦)
+        String glsl = "#version 330 core\n#define TACLIGHT 1\n";
+        check(PackFingerprint.normalizeForDigest("deferred1.fsh", withHeader.replace(body, glsl))
+                        .equals(withHeader.replace(body, glsl)),
+                "[作用域] .fsh/.glsl 文本**不被**规范化(否则 #version/#define 会被当注释擦掉)");
+        check(!PackFingerprint.sha256Prefix16(PackFingerprint.normalizeForDigest(
+                        "deferred1.fsh", "#Sat Sep 26 01:34:39 CST 2026\n" + glsl))
+                        .equals(PackFingerprint.sha256Prefix16(PackFingerprint.normalizeForDigest(
+                                "deferred1.fsh", glsl))),
+                "[作用域·必红] 同样一行日期头放在 .fsh 里 ⇒ 摘要**必须不同**(证明没被剥)");
+        check(!PackFingerprint.sha256Prefix16(PackFingerprint.normalizeForDigest(
+                        "pack.fsh", glsl.replace("#define TACLIGHT 1", "#define TACLIGHT 2")))
+                        .equals(PackFingerprint.sha256Prefix16(PackFingerprint.normalizeForDigest("pack.fsh", glsl))),
+                "[防剥过头] 改一个 #define 值 ⇒ 摘要必须变");
+        // 大小写与路径形态:.PROPERTIES 也按 properties 处理(大小写不敏感)
+        check(PackFingerprint.normalizeForDigest("BLOCK.PROPERTIES", withHeader)
+                        .equals(PackFingerprint.normalizeForDigest("BLOCK.PROPERTIES", body)),
+                "扩展名大小写不敏感(.PROPERTIES 同样规范化)");
+        check(PackFingerprint.normalizeForDigest(null, withHeader).equals(withHeader)
+                        && PackFingerprint.normalizeForDigest("block.properties", null) == null,
+                "null 路径 ⇒ 原样返回;null 文本 ⇒ null(不抛)");
     }
 
     /**

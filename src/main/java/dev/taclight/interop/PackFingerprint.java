@@ -160,12 +160,39 @@ public final class PackFingerprint {
         }
     }
 
+    /**
+     * 摘要前<b>靶向规范化</b>(2026-09-26 task-23):**只对 {@code *.properties}** 剔除
+     * {@code java.util.Properties.store()} 自动写的日期注释头(形如
+     * {@code #Sat Sep 26 01:34:39 CST 2026})。
+     *
+     * <p><b>为什么需要</b>:实例里 {@code <gameDir>/patched_shaders/{block,entity,item}.properties}
+     * 是 **Iris/Oculus 的补丁输出**(每轮重写)⇒ 每轮多一行新日期头 ⇒ 同一包、同一 mod 两轮指纹不同
+     * (审核 R3 实测:9 个包侧 .properties 字节数相同、哈希互异、逐文件只差这一行)⇒ 指纹失去
+     * "等价证据"的资格。写入方是第三方(不在我们两个仓里),所以修**比对口径**。</p>
+     *
+     * <p><b>作用域故意只限 {@code .properties}</b>:GLSL 的 {@code #version}/{@code #define}/{@code #ifdef}
+     * 也以 {@code #} 开头 —— 一律剥 {@code ^#} 会擦掉真实内容、制造<b>假稳定性</b>(比指纹不可用更坏)。
+     * 契约同时钉"只差日期头 ⇒ 同摘要"与"真实 {@code #} 行/键值变化 ⇒ 摘要仍变",并喂一个
+     * {@code .fsh} 文本断言它**不被**规范化。</p>
+     *
+     * <p>另外:不含日期头的文本**原样返回**(逐字节不变)⇒ 模板里已记录的 hash 不受影响。</p>
+     */
+    public static String normalizeForDigest(String relPath, String text) {
+        if (text == null) return null;
+        if (relPath == null
+                || !relPath.toLowerCase(java.util.Locale.ROOT).endsWith(".properties")) {
+            return text;
+        }
+        // 只删"日期头那一整行"(含行尾换行);其它字节原样保留(不做 split/join —— 免得改到行尾)
+        return text.replaceAll("(?m)^#\\w{3} \\w{3} \\d{2} \\d{2}:\\d{2}:\\d{2} \\w+ \\d{4}\\R?", "");
+    }
+
     /** 指纹:存在且可读的文件才有键(缺失键在 matches() 中判不匹配 = 保守零注入)。 */
     public static Map<String, String> fingerprint(Path packRoot, List<String> relPaths) {
         Map<String, String> m = new java.util.LinkedHashMap<>();
         if (packRoot == null || relPaths == null) return m;
         for (String rel : relPaths) {
-            readFile(packRoot, rel).ifPresent(s -> m.put(rel, sha256Prefix16(s)));
+            readFile(packRoot, rel).ifPresent(s -> m.put(rel, sha256Prefix16(normalizeForDigest(rel, s))));
         }
         return m;
     }
