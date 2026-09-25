@@ -259,6 +259,15 @@ tasks.named('jar', Jar).configure {
     def devHarness = findProperty('devHarness') != null
             ? findProperty('devHarness').toString().toBoolean()
             : gradle.startParameter.taskNames.any { it.toLowerCase().contains('runclient') }
+    // D12(2026-09-26 task-25):dev 变体**在命名上**不可能与发布件同名。
+    // 背景:`mod_version=0.11.0` 之后 `gradlew jar -PdevHarness=true` 也曾写成
+    // `build/libs/taclight-0.11.0.jar` ⇒ **静默覆盖发布件**;而 `InteropPackagingContract`
+    // 是**按名字**取 jar ⇒ 契约可能选到"别人未提交构建的产物"(测试已实测到同名 jar 被换掉)。
+    // 选 classifier(而不是 fail-loud):命名空间级别的隔离,连"忘记传版本后缀"都不会撞;
+    // 且 devharness 产物名 = `taclight-<ver>-devharness.jar`,发布件名只在 !devHarness 时出现。
+    if (devHarness) {
+        archiveClassifier = 'devharness'
+    }
     if (!devHarness) {
         exclude 'dev/taclight/debug/**'
         exclude 'dev/taclight/mixin/debug/**'
