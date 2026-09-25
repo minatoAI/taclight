@@ -47,6 +47,10 @@ import dev.taclight.tacz.GunLightAllowContract;
 /** 汇总契约运行器(离线、纯 JVM)。 */
 public class AllContracts {
     public static void main(String[] args) throws Exception {
+        // ⚠️ 2026-09-26 task-24(审核 R3 建议):本套件是 **fail-fast** —— 任一契约抛异常,其后的契约
+        // **根本不会跑**。读到 FAIL 时不要把它读成"后面的契约没抓到问题"。例如 KeyInjectContract 在
+        // 本轮排 8/46,它一红 ⇒ 后面 38 个契约全部未执行(这也是我当时"部分红"归因踩过的坑)。
+        System.out.println("[AllContracts] fail-fast 套件:任一契约 FAIL ⇒ 其后契约未执行(勿把'部分红'读成'没抓到')");
         System.out.println("== GunLaserReaderContract ==");
         GunLaserReaderContract.main(args);
         System.out.println("== GunLightAllowContract ==");

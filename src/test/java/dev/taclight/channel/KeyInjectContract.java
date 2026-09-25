@@ -240,10 +240,16 @@ public final class KeyInjectContract {
         c.clear();
         check(c.presses("flashlight") == 0 && c.releases("hotbar.3") == 0, "Counters.clear 归零");
         // ② 纯选择键(hotbar.N)缺省一次 tap:旧实现只回 usage ⇒ 测试第一轮 9 个槽全无效
-        check(KeyInject.defaultAction("hotbar.1") == KeyInject.ACTION_TAP
-                        && KeyInject.defaultTapMs("hotbar.1") == KeyInject.DEFAULT_SELECT_TAP_MS
-                        && KeyInject.defaultTapMs("hotbar.9") == KeyInject.DEFAULT_SELECT_TAP_MS,
-                "hotbar.N 缺省动作 = tap " + KeyInject.DEFAULT_SELECT_TAP_MS + "ms");
+        // ⚠️ 2026-09-26 task-24(审核 R3 抓的强度缺口①):数值必须锚到**独立来源**(字面量 + 范围),
+        // 不能只跟常量自身比 —— 否则 50→0 / 50→5000 都还是绿的(那种断言只证明"自洽",不证明"值合理")。
+        check(KeyInject.defaultAction("hotbar.1") == KeyInject.ACTION_TAP,
+                "hotbar.N 缺省动作 = tap");
+        check(KeyInject.DEFAULT_SELECT_TAP_MS == 50,
+                "DEFAULT_SELECT_TAP_MS 精确等于 50 ms(字面量锚定,而不是常量自比)");
+        check(KeyInject.DEFAULT_SELECT_TAP_MS >= 10 && KeyInject.DEFAULT_SELECT_TAP_MS <= 200,
+                "DEFAULT_SELECT_TAP_MS ∈ [10,200] ms(太短会被 tick 路径漏掉、太长会像\"按住\")");
+        check(KeyInject.defaultTapMs("hotbar.1") == 50 && KeyInject.defaultTapMs("hotbar.9") == 50,
+                "hotbar.N 缺省 tap 真的取到 50 ms(字面量,不是常量自比)");
         check(KeyInject.defaultAction("use") == KeyInject.ACTION_NONE && KeyInject.defaultTapMs("use") == -1
                         && KeyInject.defaultAction("flashlight") == KeyInject.ACTION_NONE
                         && KeyInject.defaultAction("bogus") == KeyInject.ACTION_NONE,
@@ -270,8 +276,14 @@ public final class KeyInjectContract {
         check(codeLineContains(relay, "COUNTERS.presses(name)") && codeLineContains(relay, "COUNTERS.releases(name)"),
                 "!key list 用同一真源查询(presses/releases)");
         check(codeLineContains(relay, "KeyInject.defaultAction(name)"), "缺省动作经纯函数 defaultAction");
-        check(codeLineContains(relay, "mc.setScreen(null);"),
-                "注入前清界面(mc.setScreen(null);qa 实测界面开着时注入被 MC 吞)");
+        // ⚠️ 2026-09-26 task-24(审核 R3 抓的强度缺口②):**位置无关的 contains 不构成证据** ——
+        // 旧写法 `codeLineContains(relay,"mc.setScreen(null);")` 会被 **!back 处理器那一行**满足,
+        // 于是"只删 closeScreen 体内那一行"仍然全绿,而"注入前清界面"正是 task-14 修的 bug。
+        // 修法选 (a) 作用域内检查(比删掉更强:仍保留真实守卫):
+        String closeBody = methodBody(relay, "private static String closeScreen(Minecraft mc)");
+        check(closeBody != null && closeBody.contains("mc.setScreen(null);"),
+                "[作用域内·删掉必红] closeScreen 方法体里必须有 mc.setScreen(null)"
+                        + "(不能靠 !back 那一行满足;方法体取到=" + (closeBody != null) + ")");
         int idxClose = relay.indexOf("String screen = closeScreen(mc);");
         int idxFire = relay.indexOf("fire(mc, name, m, true);");
         check(idxClose > 0 && idxFire > idxClose, "关界面发生在注入**之前**(order)");
@@ -286,6 +298,31 @@ public final class KeyInjectContract {
             throw new AssertionError("FAIL " + FAILURES.size() + " 条: " + FAILURES);
         }
         System.out.println("KeyInjectContract: ALL PASS (" + checks + " checks)");
+    }
+
+    /**
+     * 取某方法的方法体(按大括号配平,含最外层花括号);找不到签名 ⇒ null。
+     *
+     * <p><b>为什么要它(2026-09-26 task-24)</b>:位置无关的 {@code contains} 会被"别处的同名调用"满足
+     * —— 审核 R3 实测:删掉 {@code closeScreen} 体内的 {@code mc.setScreen(null);}(保留 {@code !back}
+     * 处理器那一行)时,旧断言仍然全绿。行为类断言必须**限定在作用域内**。</p>
+     */
+    private static String methodBody(String src, String signature) {
+        int i = src.indexOf(signature);
+        if (i < 0) return null;
+        int open = src.indexOf('{', i);
+        if (open < 0) return null;
+        int depth = 0;
+        for (int j = open; j < src.length(); j++) {
+            char c = src.charAt(j);
+            if (c == '{') {
+                depth++;
+            } else if (c == '}') {
+                depth--;
+                if (depth == 0) return src.substring(open, j + 1);
+            }
+        }
+        return null;
     }
 
     private static boolean noDup(String[] arr) {
