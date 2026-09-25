@@ -140,19 +140,21 @@ public final class KeyInjectContract {
 
         // ================= 7. 文本级:纯核心零 MC 依赖 + 用法/报错含可选项 =================
         String pure = read(PURE);
-        // 只看**代码行**(跳过 javadoc/行注释):口径说明里提到 KeyMapping/GLFW 是允许的,
-        // 不许出现的是 import 或代码引用(否则纯核心就不再纯、发布路径也少一层保证)。
+        // 只看**代码行**(跳过 javadoc/行注释),并且**去掉字符串字面量**:口径说明/帮助文本里
+        // 提到 KeyMapping/GLFW_KEY_L 是允许的(conflictNote 就要写 "76=GLFW_KEY_L"),
+        // 不许出现的是 import 或真正的类型引用。
         boolean pureCode = true;
         for (String line : pure.split("\\R")) {
             String l = line.trim();
             if (l.startsWith("*") || l.startsWith("//") || l.startsWith("/*")) continue;
-            if (l.contains("KeyMapping") || l.contains("GLFW") || l.contains("net.minecraft")
-                    || l.contains("org.lwjgl") || l.contains("InputConstants")) {
+            String code = l.replaceAll("\"[^\"]*\"", "\"\"");
+            if (code.contains("KeyMapping") || code.contains("GLFW") || code.contains("net.minecraft")
+                    || code.contains("org.lwjgl") || code.contains("InputConstants")) {
                 pureCode = false;
             }
         }
         check(pureCode,
-                "KeyInject 是纯逻辑核心(代码行零 MC/GLFW 依赖 ⇒ 能进纯 JVM 契约,也不会把按键注入带进发布路径)");
+                "KeyInject 是纯逻辑核心(代码行零 MC/GLFW 依赖,字符串字面量除外 ⇒ 能进纯 JVM 契约,也不会把按键注入带进发布路径)");
         check(KeyInject.usage().contains("!key") && KeyInject.usage().contains("list")
                         && KeyInject.usage().contains("clear") && KeyInject.usage().contains("use"),
                 "usage 串含 !key / list / clear / 名字样例");
@@ -220,6 +222,52 @@ public final class KeyInjectContract {
             check(relay.contains("line.equals(\"" + cmd + "\")") || relay.contains("line.startsWith(\"" + cmd + "\")"),
                     "等价通道 " + cmd + " 在中继里确实存在");
         }
+
+        // ================= 9. 2026-09-26 task-14:计数真源 / 选择键缺省 tap / 冲突提示 =================
+        // ① 计数真源:记账键必须 == 查询键。旧实现按 KeyMapping.getName()(映射资源名)记账、
+        //    按可注入名查询 ⇒ 两侧永不相等 ⇒ !key list 的 press/release 恒 0(测试同事 task-10 实际踩到)。
+        KeyInject.Counters c = new KeyInject.Counters();
+        c.record("flashlight", true);
+        c.record("flashlight", true);
+        c.record("flashlight", false);
+        c.record("hotbar.3", true);
+        check(c.presses("flashlight") == 2 && c.releases("flashlight") == 1,
+                "Counters:按**可注入名**记账/查询(flashlight press=2 release=1)");
+        check(c.presses("hotbar.3") == 1 && c.presses("use") == 0 && c.releases("use") == 0,
+                "Counters:各名字互不串台;没记过的名字 ⇒ 0(可判定)");
+        check(c.presses(null) == 0 && c.releases(null) == 0, "Counters:null 安全 ⇒ 0");
+        c.clear();
+        check(c.presses("flashlight") == 0 && c.releases("hotbar.3") == 0, "Counters.clear 归零");
+        // ② 纯选择键(hotbar.N)缺省一次 tap:旧实现只回 usage ⇒ 测试第一轮 9 个槽全无效
+        check(KeyInject.defaultAction("hotbar.1") == KeyInject.ACTION_TAP
+                        && KeyInject.defaultTapMs("hotbar.1") == KeyInject.DEFAULT_SELECT_TAP_MS
+                        && KeyInject.defaultTapMs("hotbar.9") == KeyInject.DEFAULT_SELECT_TAP_MS,
+                "hotbar.N 缺省动作 = tap " + KeyInject.DEFAULT_SELECT_TAP_MS + "ms");
+        check(KeyInject.defaultAction("use") == KeyInject.ACTION_NONE && KeyInject.defaultTapMs("use") == -1
+                        && KeyInject.defaultAction("flashlight") == KeyInject.ACTION_NONE
+                        && KeyInject.defaultAction("bogus") == KeyInject.ACTION_NONE,
+                "其余名字没有缺省动作(⇒ 仍必须给 down|up|ms,不猜)");
+        // ③ 键位冲突提示:手电筒默认 L 与原版 key.advancements 同键(Options 里 76 = GLFW_KEY_L)
+        String note = KeyInject.conflictNote();
+        check(note.contains("key.advancements") && note.contains("GLFW_KEY_L") && note.contains("setScreen"),
+                "conflictNote:点名 key.advancements / L / 已加 setScreen 兜底");
+        check(KeyInject.usage().contains("hotbar.N"), "usage 里写明 hotbar.N 可省动作(用 'hotbar.N' 而非 INJECTABLE 里的 hotbar.1 判别)");
+        // ④ 接线层(只看代码行)
+        check(codeLineContains(relay, "COUNTERS.record(name, down);"),
+                "fire() 用**可注入名**记账(COUNTERS.record(name, down))");
+        check(!codeLineContains(relay, "COUNTERS.record(m.getName()") && !relay.contains("PRESSES.merge(")
+                        && !relay.contains("RELEASES.merge("),
+                "[旧码必红] 不再用 KeyMapping.getName()/两张散 map 记账");
+        check(codeLineContains(relay, "new KeyInject.Counters()"), "中继持有唯一计数真源 KeyInject.Counters");
+        check(codeLineContains(relay, "COUNTERS.presses(name)") && codeLineContains(relay, "COUNTERS.releases(name)"),
+                "!key list 用同一真源查询(presses/releases)");
+        check(codeLineContains(relay, "KeyInject.defaultAction(name)"), "缺省动作经纯函数 defaultAction");
+        check(codeLineContains(relay, "mc.setScreen(null);"),
+                "注入前清界面(mc.setScreen(null);qa 实测界面开着时注入被 MC 吞)");
+        int idxClose = relay.indexOf("String screen = closeScreen(mc);");
+        int idxFire = relay.indexOf("fire(mc, name, m, true);");
+        check(idxClose > 0 && idxFire > idxClose, "关界面发生在注入**之前**(order)");
+        check(codeLineContains(relay, "KeyInject.conflictNote()"), "!key list 打印键位冲突提示");
 
         if (!FAILURES.isEmpty()) {
             throw new AssertionError("FAIL " + FAILURES.size() + " 条: " + FAILURES);

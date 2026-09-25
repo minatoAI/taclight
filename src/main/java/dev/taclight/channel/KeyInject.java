@@ -74,6 +74,16 @@ public final class KeyInject {
     /** 按住硬上限(ms):任何情况下超过它就当"已抬起" ⇒ 防"忘了抬起"/时钟异常留下卡键。 */
     public static final long SAFETY_HOLD_MS = 60_000;
 
+    /**
+     * <b>纯选择键</b>({@code hotbar.1..9})缺省动作的 tap 时长(ms)。
+     *
+     * <p>2026-09-26 task-14:测试同事第一轮写 {@code !key hotbar.N} 想让手电筒进主手,
+     * 但旧实现要求必须给动作 ⇒ 9 个槽全部只回 {@code usage:},脚本静默失效。
+     * hotbar 这类键的语义就是"点一下选中",给它一个缺省 tap 才符合直觉;
+     * 其余名字(动作键/切换键)缺省动作仍有歧义(down?up?tap?)⇒ 继续报错,不猜。</p>
+     */
+    public static final int DEFAULT_SELECT_TAP_MS = 50;
+
     private KeyInject() {}
 
     private static String[] concat(String[] a, String[] b) {
@@ -142,6 +152,19 @@ public final class KeyInject {
         return tapMs(a) > 0 ? ACTION_TAP : ACTION_NONE;
     }
 
+    /**
+     * 缺省动作(参数省略时用):<b>纯选择键</b>({@code hotbar.1..9})⇒ {@link #ACTION_TAP};
+     * 其余名字 ⇒ {@link #ACTION_NONE}(调用方报 usage,不猜 down/up/tap)。
+     */
+    public static int defaultAction(String name) {
+        return hotbarIndex(name) >= 0 ? ACTION_TAP : ACTION_NONE;
+    }
+
+    /** 缺省 tap 时长:{@code hotbar.1..9} ⇒ {@link #DEFAULT_SELECT_TAP_MS};其余 ⇒ -1(无缺省)。 */
+    public static int defaultTapMs(String name) {
+        return hotbarIndex(name) >= 0 ? DEFAULT_SELECT_TAP_MS : -1;
+    }
+
     /** tap 时长(ms):合法范围 {@code 1..MAX_TAP_MS};否则 {@code -1}(非法)。 */
     public static int tapMs(String arg) {
         if (arg == null) return -1;
@@ -185,7 +208,8 @@ public final class KeyInject {
 
     /** {@code !key} 用法串(报错时回显;所有可选项都在里面)。 */
     public static String usage() {
-        return "usage: !key <name> <down|up|ms> | !key list | !key clear"
+        return "usage: !key <name> <down|up|ms> | !key hotbar.N(缺省 " + DEFAULT_SELECT_TAP_MS
+                + "ms 点一下) | !key list | !key clear"
                 + "   (可注入 " + INJECTABLE.length + " 个: " + String.join(" ", INJECTABLE)
                 + ";ms " + MIN_TAP_MS + ".." + MAX_TAP_MS + ")";
     }
@@ -193,6 +217,19 @@ public final class KeyInject {
     /** 未知名/坏参数的报错串(必须列出可选项,供测试当负对照)。 */
     public static String unknownName(String name) {
         return "unknown key '" + name + "'; " + usage();
+    }
+
+    /**
+     * 帮助/交接里必须写明的<b>已知键位冲突</b>(2026-09-26 qa task-10 实测):
+     * TacLight 的手电筒键(默认 {@code L})与原版 {@code key.advancements} 默认同键
+     * (反编译依据:{@code Options} 构造里 {@code new KeyMapping("key.advancements", 76, …)},76 = GLFW_KEY_L)
+     * ⇒ 注入/实按 L 会**同时打开成就界面**,而**界面开着时下一次注入会被 MC 吞掉**
+     * (qa 加 {@code !back} 后 4/4 生效)。本任务只做"注入前 setScreen(null)"这一层,换默认键位属产品决策。
+     */
+    public static String conflictNote() {
+        return "已知键位冲突: 手电筒键默认 L 与原版 key.advancements(76=GLFW_KEY_L)同键 ⇒ 按 L 会同时弹成就界面,"
+                + "界面开着时注入会被 MC 吞掉(已加:!key 注入前先 setScreen(null);保险起见前面也可发 !back)。"
+                + "换默认键位属产品决策,未改。";
     }
 
     /** {@code !key list} 第一行:可注入名字 + 各自消费路径。 */
@@ -264,6 +301,43 @@ public final class KeyInject {
 
         public int size() {
             return held.size();
+        }
+    }
+
+    /**
+     * 注入计数(纯数据,零 MC):<b>键 = 可注入名</b>(与 {@code !key list} 的查询键是同一个字符串)。
+     *
+     * <p><b>为什么要有这个类(2026-09-26 task-14 修的缺陷)</b>:旧实现 {@code fire()} 用
+     * {@code KeyMapping.getName()}(例如 {@code key.taclight.flashlight_toggle})记账,
+     * 而 {@code !key list} 用可注入名({@code flashlight})查 ⇒ 两侧名字永不相等 ⇒
+     * {@code 注入 press=/release=} **恒为 0**,判别手段失效(测试同事只能退回看 {@code down=} 和日志行)。
+     * 现在记账与查询走**同一个对象的同一个键** ⇒ 结构上不可能再错位;
+     * "记账键 == 查询键" 由契约用运行期断言钉死(把键改成派生串 ⇒ 必红)。</p>
+     */
+    public static final class Counters {
+        private final LinkedHashMap<String, Integer> press = new LinkedHashMap<>();
+        private final LinkedHashMap<String, Integer> release = new LinkedHashMap<>();
+
+        /** 记一次注入(键就是可注入名,不是映射资源名)。 */
+        public void record(String name, boolean down) {
+            if (name == null) return;
+            (down ? press : release).merge(name, 1, Integer::sum);
+        }
+
+        /** 该名字被注入按下的次数。 */
+        public int presses(String name) {
+            return name == null ? 0 : press.getOrDefault(name, 0);
+        }
+
+        /** 该名字被注入抬起的次数。 */
+        public int releases(String name) {
+            return name == null ? 0 : release.getOrDefault(name, 0);
+        }
+
+        /** 全部归零(与 {@code Tracker.clear()} 一起用)。 */
+        public void clear() {
+            press.clear();
+            release.clear();
         }
     }
 }

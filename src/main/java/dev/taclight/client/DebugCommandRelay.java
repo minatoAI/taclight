@@ -60,7 +60,10 @@ import java.nio.file.StandardCopyOption;
  *   <li>{@code !back} —— 程序化关界面(2026-09-04:ESC 菜单挡帧以往只能手点关,
  *       违反程序化纪律;本命令=setScreen(null),与菜单“回到游戏”同入口)。</li>
   *   <li>{@code !light} / {@code !neon} / {@code !gun} —— 手电 / 霓虹调试锥 / 枪灯开关
-  *       (L/K 键的程序化等价;场景照明状态的唯一可靠控制通道)。</li>
+  *       (L/K 键的程序化等价;场景照明状态的唯一可靠控制通道)。
+  *       <b>{@code !light}</b> 自 2026-09-26(task-14)起参数有明确语义:无参/{@code toggle} = 切换,
+  *       <b>{@code on}/{@code off} = 置位且幂等</b>,{@code status} = 只读,未知名报 usage 且不改状态;
+  *       回执串直接写明"toggle 还是 set"({@code LightCommand.describe})。{@code !neon} 仍是纯切换。</li>
   *   <li>{@code !bright} / {@code !dist} / {@code !atten} —— 手电三旋钮(2026-09-04,
   *       用户体感自助调参):绝对亮度 / 绝对照距 / 衰减系数 K。内存覆盖,重启清零;
   *       无参=status,{@code off}=回默认(用法见各命令日志回显)。</li>
@@ -384,21 +387,43 @@ public final class DebugCommandRelay {
             return;
         }
         if (line.startsWith("!light")) {
+            // 语义(2026-09-26 task-14 修):无参/toggle = 切换(向后兼容);on/off = **置位且幂等**;
+            // status = 只读;不认识的参数 ⇒ 报 usage 且**不改任何状态**。
+            // 旧实现忽略一切参数、永远 toggle ⇒ 交接里写的 `!light off` 实际是"切换",
+            // 让"先置 OFF 再加按键"这类因果链悄悄错位(测试同事 task-10 报的仪器缺陷)。
+            // 回执直接说明是 toggle 还是置位(LightCommand.describe),不再靠人猜。
+            String arg = line.length() > 6 ? line.substring(6).trim() : "";
+            int act = dev.taclight.channel.LightCommand.action(arg);
+            if (act == dev.taclight.channel.LightCommand.ACTION_NONE) {
+                TacLightMod.LOGGER.info("[TacLight] RELAY light -> bad arg '{}'; {}", arg,
+                        dev.taclight.channel.LightCommand.usage());
+                return;
+            }
+            if (act == dev.taclight.channel.LightCommand.ACTION_STATUS) {
+                boolean now = ClientLightState.isOn();
+                TacLightMod.LOGGER.info("[TacLight] RELAY {}",
+                        dev.taclight.channel.LightCommand.describe(act, now, now));
+                return;
+            }
             // 持物门对齐 L 键(2026-09-25):未持手电筒且非霓虹调试时不改状态,回显原因(不假成功)。
             if (!ClientEvents.holdingFlashlight(mc.player) && !ClientLightState.debugMode()) {
                 TacLightMod.LOGGER.info("[TacLight] RELAY light -> ignored (not holding flashlight)");
                 return;
             }
-            ClientLightState.toggle();
+            boolean before = ClientLightState.isOn();
+            boolean after = dev.taclight.channel.LightCommand.nextState(act, before);
+            ClientLightState.setHandheld(after);
             // 08-31 实测坑:L 键路径(InjectionEvent) toggle 后会 sendSetLight 上报服务端,
             // relay 必须对齐,否则服务端实体数据不变 → 其他玩家看不到开关(ssbo count 假 1)。
             dev.taclight.network.TacLightNetwork.sendSetLight(ClientLightState.handheldEffective(), ClientLightState.gunLightEffective());
-            TacLightMod.LOGGER.info("[TacLight] RELAY light -> {}", ClientLightState.isOn());
+            TacLightMod.LOGGER.info("[TacLight] RELAY {}",
+                    dev.taclight.channel.LightCommand.describe(act, before, after));
             return;
         }
         if (line.startsWith("!neon")) {
+            // 说明:!neon(K 键的等价通道)仍是**纯切换**(无参数)；要置位请用两次或先 !diag 看状态。
             ClientLightState.toggleDebug();
-            TacLightMod.LOGGER.info("[TacLight] RELAY neon(debug cone) -> {}", ClientLightState.debugMode());
+            TacLightMod.LOGGER.info("[TacLight] RELAY neon(debug cone) toggle -> {}", ClientLightState.debugMode());
             return;
         }
         if (line.startsWith("!lv")) {
@@ -751,12 +776,25 @@ public final class DebugCommandRelay {
     // ★ 无卡键:每次注入都进 Tracker;每 client tick(20Hz)检查"到点/超 60s 兜底"⇒ 自动抬起;
     //   mc.level == null(退出世界)时全部抬起;`!key clear` = 全抬 + KeyMapping.releaseAll()
     //   (clickCount 一并归零,连"注入后没人消费的 click"也不会留到下一次真实按键)。
+    //
+    // ★ 2026-09-26 task-14 补的三处(来源:qa task-10 真机报告):
+    //   ① 计数真源:`KeyInject.Counters` 用**可注入名**记账,`!key list` 用同一个对象/同一个键查询
+    //      (旧版用 KeyMapping.getName() 记账 ⇒ press/release 恒 0);
+    //   ② 纯选择键缺省动作:`!key hotbar.N` 省略动作 = 一次 tap(50ms)(旧版只回 usage,9 个槽全废);
+    //   ③ 注入前 setScreen(null):界面开着时 MC 会吞掉按键(qa 实测:加 !back 后 4/4 生效)。
+    //   已知键位冲突(产品决策,未改):手电筒默认 L 与原版 key.advancements 同键 ⇒ 按 L 同时弹成就界面;
+    //   见 KeyInject.conflictNote(),`!key list` 会打印。
     // ==================================================================
     static final class KeyInjectRuntime {
         private static final KeyInject.Tracker TRACKER = new KeyInject.Tracker();
-        /** 诊断计数(自己注入了几次,与"消费者是否动作"无关;按名字累计)。 */
-        private static final java.util.Map<String, Integer> PRESSES = new java.util.LinkedHashMap<>();
-        private static final java.util.Map<String, Integer> RELEASES = new java.util.LinkedHashMap<>();
+        /**
+         * 诊断计数(纯核心 {@link KeyInject.Counters}):<b>键 = 可注入名</b>,
+         * 与 {@code !key list} 的查询键是同一个字符串。
+         *
+         * <p>2026-09-26 task-14 修的缺陷:旧实现用 {@code KeyMapping.getName()} 记账、用可注入名查询
+         * ⇒ 两侧永不相等 ⇒ {@code 注入 press=/release=} 恒为 0。现在两边共用这一个对象,结构上不可能错位。</p>
+         */
+        private static final KeyInject.Counters COUNTERS = new KeyInject.Counters();
         /** 只读诊断:KeyMapping.clickCount 是 private(vanilla 无 getter),反射读不到就显示 n/a。 */
         private static java.lang.reflect.Field clickCountField;
         private static boolean clickCountFailed;
@@ -767,33 +805,48 @@ public final class DebugCommandRelay {
             if (a.equals("list")) return list(mc);
             if (a.equals("clear")) return clear(mc);
             String[] p = a.split("\\s+");
-            if (p.length != 2) return KeyInject.usage();
             String name = p[0];
             if (!KeyInject.isInjectable(name)) return KeyInject.unknownName(name);
-            int act = KeyInject.actionFor(p[1]);
-            if (act == KeyInject.ACTION_NONE) {
-                return "bad arg '" + p[1] + "' for " + name + "; " + KeyInject.usage();
+            int act;
+            String rawArg;
+            if (p.length == 1) {
+                // 纯选择键(hotbar.N)缺省一次 tap(2026-09-26 task-14:测试第一轮 9 个槽全只回 usage)
+                act = KeyInject.defaultAction(name);
+                rawArg = String.valueOf(KeyInject.defaultTapMs(name));
+                if (act == KeyInject.ACTION_NONE) {
+                    return "key '" + name + "' 需要动作参数(down|up|ms); " + KeyInject.usage();
+                }
+            } else if (p.length == 2) {
+                act = KeyInject.actionFor(p[1]);
+                rawArg = p[1];
+                if (act == KeyInject.ACTION_NONE) {
+                    return "bad arg '" + p[1] + "' for " + name + "; " + KeyInject.usage();
+                }
+            } else {
+                return KeyInject.usage();
             }
-            return apply(mc, name, act, p[1]);
+            return apply(mc, name, act, rawArg);
         }
 
         private static String apply(Minecraft mc, String name, int act, String rawArg) {
             KeyMapping m = mappingFor(mc, name);
             if (m == null) return "key '" + name + "' 是合法名字但本实例拿不到映射(未注册?): " + name;
+            // 注入前清界面:界面开着时 MC 会吞掉映射更新(qa task-10 实测:加 !back 后 4/4 生效)
+            String screen = closeScreen(mc);
             String before = stateProbe(name);
             try {
                 if (act == KeyInject.ACTION_UP) {
-                    fire(mc, m, false);
+                    fire(mc, name, m, false);
                     TRACKER.forget(name);
-                    return describe(mc, name, "up", before, null);
+                    return describe(mc, name, "up", before, screen);
                 }
                 int ms = act == KeyInject.ACTION_TAP ? KeyInject.tapMs(rawArg) : (int) KeyInject.SAFETY_HOLD_MS;
-                fire(mc, m, true);
+                fire(mc, name, m, true);
                 TRACKER.hold(name, ms, nowMs());
                 String what = act == KeyInject.ACTION_TAP
                         ? "tap " + ms + "ms(到点自动抬起)"
                         : "down(保持;60s 兜底自动抬起,或 !key " + name + " up / !key clear)";
-                return describe(mc, name, what, before, null);
+                return describe(mc, name, what, before, screen);
             } catch (Throwable t) {
                 // 异常路径也必须抬起:先忘记录,再强制 setDown(false)(fire 里可能已 set(true))
                 TRACKER.forget(name);
@@ -805,6 +858,22 @@ public final class DebugCommandRelay {
             }
         }
 
+        /**
+         * 注入前清界面({@code setScreen(null)},与 {@code !back} 同入口)。
+         * 返回一行诊断(仅在真的关了界面时非 null),让回执能说明"这次注入是干净的"。
+         */
+        private static String closeScreen(Minecraft mc) {
+            try {
+                if (mc != null && mc.screen != null) {
+                    String was = mc.screen.getClass().getSimpleName();
+                    mc.setScreen(null);
+                    return "screen=closed(" + was + ")";
+                }
+            } catch (Throwable ignored) {
+            }
+            return null;
+        }
+
         /** 每 client tick 调用(先于所有门控):到点/兜底抬起 + 退出世界全抬。 */
         static void tick(Minecraft mc) {
             if (TRACKER.size() == 0) return;
@@ -814,7 +883,7 @@ public final class DebugCommandRelay {
                 KeyMapping m = mappingFor(mc, name);
                 if (m != null) {
                     try {
-                        fire(mc, m, false);
+                        fire(mc, name, m, false);
                     } catch (Throwable t) {
                         try {
                             m.setDown(false);
@@ -842,7 +911,7 @@ public final class DebugCommandRelay {
         }
 
         /** 注入一次"物理按下/抬起"。键盘类走真实 keyPress;鼠标类退化为 set+click。 */
-        private static void fire(Minecraft mc, KeyMapping m, boolean down) {
+        private static void fire(Minecraft mc, String name, KeyMapping m, boolean down) {
             com.mojang.blaze3d.platform.InputConstants.Key key = m.getKey();
             if (key.getType() == com.mojang.blaze3d.platform.InputConstants.Type.KEYSYM) {
                 // 真实路径:keyPress 内部 = KeyMapping.set + KeyMapping.click + InputEvent.Key
@@ -853,8 +922,8 @@ public final class DebugCommandRelay {
                 KeyMapping.set(key, down);
                 if (down) KeyMapping.click(key);
             }
-            if (down) PRESSES.merge(m.getName(), 1, Integer::sum);
-            else RELEASES.merge(m.getName(), 1, Integer::sum);
+            // 记账键 = 可注入名(name),不是 m.getName()(映射资源名)⇒ 与 !key list 的查询键一致
+            COUNTERS.record(name, down);
         }
 
         /** 名字 → KeyMapping(未知名/越界 ⇒ null;{@code !key list} 与注入共用)。 */
@@ -897,8 +966,8 @@ public final class DebugCommandRelay {
                     .append(" | path=").append(KeyInject.consumptionPath(name))
                     .append(" down=").append(down(mc, name))
                     .append(" clickCount=").append(clickCount(mc, name))
-                    .append(" | 注入 press=").append(PRESSES.getOrDefault(name, 0))
-                    .append(" release=").append(RELEASES.getOrDefault(name, 0));
+                    .append(" | 注入 press=").append(COUNTERS.presses(name))
+                    .append(" release=").append(COUNTERS.releases(name));
             String after = stateProbe(name);
             if (before != null && after != null) {
                 sb.append(" | ").append(before).append(" -> ").append(after);
@@ -921,20 +990,25 @@ public final class DebugCommandRelay {
                         .append(" path=").append(KeyInject.consumptionPath(name))
                         .append(" down=").append(down(mc, name))
                         .append(" clickCount=").append(clickCount(mc, name))
-                        .append(" 注入 press=").append(PRESSES.getOrDefault(name, 0))
-                        .append(" release=").append(RELEASES.getOrDefault(name, 0));
+                        .append(" 注入 press=").append(COUNTERS.presses(name))
+                        .append(" release=").append(COUNTERS.releases(name))
+                        .append("(记账键=可注入名,与查询同一真源)");
             }
             sb.append("\n").append(KeyInject.taclightLine());
             sb.append("\nholds(到点自动抬起): ").append(TRACKER.tracked());
+            sb.append("\n缺省动作: ").append("hotbar.N 可省动作(缺省 ").append(KeyInject.DEFAULT_SELECT_TAP_MS)
+                    .append("ms 点一下);其余名字必须给 down|up|ms");
+            sb.append("\n键位冲突: ").append(KeyInject.conflictNote());
             sb.append("\nTacLight 键诊断:按没反应时看 latest.log —— `flashlight ON/OFF`/`gun light ...`/`SNAP key/F9 -> ...`")
                     .append(" = 事件已到;`handheld toggle ignored (not holding flashlight)` = 事件已到但被**持物门**拒;")
-                    .append("两者都没有 = 事件路径没到(先 !back 关界面、确认本构建是 devharness、看注入行是否报异常)");
+                    .append("两者都没有 = 事件路径没到(本实现注入前已自动 setScreen(null);仍失败就看注入行是否报异常)");
             sb.append("\n注:clickCount 由真实按下路径同步消费 ⇒ 注入后立刻读常常是 0(正常);判别用 '注入 press=' 与上面的日志行");
             return sb.toString();
         }
 
         private static String clear(Minecraft mc) {
             java.util.List<String> names = TRACKER.tracked();
+            closeScreen(mc);
             for (String name : names) {
                 KeyMapping m = mappingFor(mc, name);
                 if (m != null) {

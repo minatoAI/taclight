@@ -20,10 +20,15 @@ import java.nio.file.Path;
  */
 public class HandheldGateContract {
     private static int checks;
+    private static final java.util.List<String> FAILURES = new java.util.ArrayList<>();
 
     public static void main(String[] args) throws Exception {
         contentLayer();
         wiringLayer();
+        lightSemantics();
+        if (!FAILURES.isEmpty()) {
+            throw new AssertionError("FAIL " + FAILURES.size() + " 条: " + FAILURES);
+        }
         System.out.println("HandheldGateContract: ALL PASS (" + checks + " checks)");
     }
 
@@ -81,9 +86,85 @@ public class HandheldGateContract {
         check(it.contains("ClientLightState.handheldEffective()"), "接线⑦:Iris 物品光源用同一口径");
     }
 
+    /**
+     * {@code !light} 参数语义(2026-09-26 task-14):修"忽略参数、永远 toggle"的仪器缺陷。
+     *
+     * <p><b>为什么这属于持物门契约</b>:{@code !light} 是 L 键(受持物门管)的程序化等价通道,
+     * 它的语义错位会直接让"先置 OFF 再加按键"这条因果链失效(测试同事 task-10 实际踩到)。
+     * 内容层用纯函数 {@link dev.taclight.channel.LightCommand} 真值表;接线层钉中继分支。</p>
+     */
+    private static void lightSemantics() throws Exception {
+        // ---- 内容层:参数解析(旧码必红锚点:旧实现没有解析,任何参数都当 toggle) ----
+        check(dev.taclight.channel.LightCommand.action(null) == dev.taclight.channel.LightCommand.ACTION_TOGGLE
+                        && dev.taclight.channel.LightCommand.action("") == dev.taclight.channel.LightCommand.ACTION_TOGGLE,
+                "无参/null = toggle(向后兼容)");
+        check(dev.taclight.channel.LightCommand.action("on") == dev.taclight.channel.LightCommand.ACTION_ON
+                        && dev.taclight.channel.LightCommand.action(" ON ") == dev.taclight.channel.LightCommand.ACTION_ON
+                        && dev.taclight.channel.LightCommand.action("off") == dev.taclight.channel.LightCommand.ACTION_OFF
+                        && dev.taclight.channel.LightCommand.action("Off") == dev.taclight.channel.LightCommand.ACTION_OFF
+                        && dev.taclight.channel.LightCommand.action("status") == dev.taclight.channel.LightCommand.ACTION_STATUS,
+                "on/off/status(大小写与空白不敏感)");
+        check(dev.taclight.channel.LightCommand.action("oops") == dev.taclight.channel.LightCommand.ACTION_NONE,
+                "[旧码必红] 未知名 ⇒ NONE(旧实现忽略参数照样 toggle;中继据此报 usage 且不改状态)");
+        check(dev.taclight.channel.LightCommand.isSet(dev.taclight.channel.LightCommand.ACTION_ON)
+                        && dev.taclight.channel.LightCommand.isSet(dev.taclight.channel.LightCommand.ACTION_OFF)
+                        && !dev.taclight.channel.LightCommand.isSet(dev.taclight.channel.LightCommand.ACTION_TOGGLE),
+                "isSet 只对 on/off 为真");
+        check(!dev.taclight.channel.LightCommand.mutates(dev.taclight.channel.LightCommand.ACTION_STATUS)
+                        && !dev.taclight.channel.LightCommand.mutates(dev.taclight.channel.LightCommand.ACTION_NONE)
+                        && dev.taclight.channel.LightCommand.mutates(dev.taclight.channel.LightCommand.ACTION_TOGGLE),
+                "status/NONE 不改状态");
+
+        // ---- 置位幂等 + 切换 ----
+        check(dev.taclight.channel.LightCommand.nextState(dev.taclight.channel.LightCommand.ACTION_ON, false)
+                        && dev.taclight.channel.LightCommand.nextState(dev.taclight.channel.LightCommand.ACTION_ON, true),
+                "set ON 幂等(→ ON,无论原状态)");
+        check(!dev.taclight.channel.LightCommand.nextState(dev.taclight.channel.LightCommand.ACTION_OFF, true)
+                        && !dev.taclight.channel.LightCommand.nextState(dev.taclight.channel.LightCommand.ACTION_OFF, false),
+                "set OFF 幂等(→ OFF,无论原状态)");
+        check(!dev.taclight.channel.LightCommand.nextState(dev.taclight.channel.LightCommand.ACTION_TOGGLE, true)
+                        && dev.taclight.channel.LightCommand.nextState(dev.taclight.channel.LightCommand.ACTION_TOGGLE, false),
+                "toggle 双向翻转");
+
+        // ---- 回执必须能区分"切换/置位"(task-14 验收原话:回执必须含"我是 toggle 还是置位") ----
+        String tg = dev.taclight.channel.LightCommand.describe(dev.taclight.channel.LightCommand.ACTION_TOGGLE, true, false);
+        String on = dev.taclight.channel.LightCommand.describe(dev.taclight.channel.LightCommand.ACTION_ON, false, true);
+        String off = dev.taclight.channel.LightCommand.describe(dev.taclight.channel.LightCommand.ACTION_OFF, true, false);
+        String st = dev.taclight.channel.LightCommand.describe(dev.taclight.channel.LightCommand.ACTION_STATUS, true, true);
+        check(tg.contains("toggle") && on.contains("set ON") && off.contains("set OFF") && st.contains("status"),
+                "回执措辞区分 toggle / set / status: [" + tg + "] [" + on + "] [" + off + "]");
+
+        // ---- 接线层(源码文本级,只看代码行) ----
+        Path relay = Path.of("src/main/java/dev/taclight/client/DebugCommandRelay.java");
+        String rl = Files.readString(relay, StandardCharsets.UTF_8);
+        check(codeLine(rl, "LightCommand.action(arg)"), "接线①:!light 先解析参数(LightCommand.action)");
+        int idxNone = rl.indexOf("LightCommand.ACTION_NONE");
+        int idxSet = rl.indexOf("ClientLightState.setHandheld(after)");
+        check(idxNone > 0 && idxSet > idxNone,
+                "接线②:未知名分支在建状态**之前**(order: NONE@" + idxNone + " < setHandheld@" + idxSet + ")");
+        check(codeLine(rl, "ClientLightState.setHandheld(after)"), "接线③:on/off 走置位 setHandheld(不再只有 toggle)");
+        check(!codeLine(rl, "ClientLightState.toggle();"), "[旧码必红] 中继不再用无参 toggle()(语义含糊)");
+        check(codeLine(rl, "LightCommand.describe(act, before, after)"), "接线④:回执带 toggle/set 措辞");
+        check(codeLine(rl, "LightCommand.ACTION_STATUS"), "接线⑤:status 只读分支存在");
+    }
+
+    /** 是否存在**代码行**(跳过注释行)包含该子串 —— 防"注释里提过"就算接线在场。 */
+    private static boolean codeLine(String src, String needle) {
+        for (String line : src.split("\\R")) {
+            String l = line.trim();
+            if (l.startsWith("*") || l.startsWith("//") || l.startsWith("/*")) continue;
+            if (l.contains(needle)) return true;
+        }
+        return false;
+    }
+
     private static void check(boolean cond, String what) {
         checks++;
-        if (!cond) throw new AssertionError("FAIL " + what);
+        if (!cond) {
+            FAILURES.add(what);
+            System.out.println("  FAIL " + what);
+            return;
+        }
         System.out.println("  PASS " + what);
     }
 }
