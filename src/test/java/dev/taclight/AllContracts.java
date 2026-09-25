@@ -71,6 +71,10 @@ public class AllContracts {
         // 毫秒自动抬起状态机 / Tracker(离线真跑) + dev 中继接线(进程内 KeyboardHandler.keyPress)。
         System.out.println("== KeyInjectContract ==");
         dev.taclight.channel.KeyInjectContract.main(args);
+        // 按键存档值持久化(2026-09-26 task-32):纯解析口径 + "先注册后应用"的顺序断言
+        // + 可观测行(供真机判定"注册 vs Options.load"先后)⇒ 修"改键重启失效"的玩家级 bug。
+        System.out.println("== KeyPersistContract ==");
+        dev.taclight.client.KeyPersistContract.main(args);
         System.out.println("== BoundedIdentityCacheContract ==");
         BoundedIdentityCacheContract.main(args);
         System.out.println("== VoxelGridWiringContract ==");

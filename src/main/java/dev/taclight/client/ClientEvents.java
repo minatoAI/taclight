@@ -63,6 +63,77 @@ public class ClientEvents {
             event.register(KeyBindings.DEBUG_TOGGLE);
             event.register(KeyBindings.DIAG_DUMP);
             event.register(KeyBindings.BENCH);
+            // ⚠️ 顺序要求(task-32):**先注册,后应用存档值**。反过来的话,applySaved 时映射还可能没进
+            // KeyMapping.ALL/MAP,存档值就无处落地(契约用"顺序断言"钉住这一点,改反 ⇒ 必红)。
+            applySavedKeybindingsOnce();
+        }
+
+        /**
+         * 把 {@code options.txt} 里本模组的存档键位应用到映射(2026-09-26 task-32)。
+         *
+         * <p><b>为什么放在这里</b>:实测算术上"存档值不生效"(原版键生效、我们的键落回代码默认)。
+         * 结构性证据 = 应用点 {@code Options.processOptionsForge} 按 {@code KeyMapping.getName()}
+         * 字符串匹配,而映射是构造时登记 ⇒ 只要本模组映射在那一刻尚未存在,存档行就无处落地。
+         * 本模组的注册/加载先后在 forge 产物里查不到(123 个 jar 都没有
+         * {@code onRegisterKeyMappings} 的调用点)⇒ 机制**未定论**,所以修法走**与机制无关**的路线:
+         * 注册完成后由我们自己把存档值读出来应用一次。</p>
+         *
+         * <p><b>只在初始化阶段调用一次</b>(本方法唯一调用点就是 {@code onRegisterKeys})⇒ 之后玩家在
+         * "控制设置"里的即时改动<b>不会</b>被我们覆盖。无存档值 ⇒ 保持 task-16 的新默认 {@code J}。</p>
+         *
+         * <p><b>可观测行</b>(供 task-34 真机复验捞取):日志同时打印
+         * {@code before=}(登记时我们的键)与 {@code applied=}(真正被我们改掉的条数)——
+         * 若 {@code before} 已是存档值 ⇒ 说明加载器此前已经应用过;若 {@code before} 是代码默认
+         * 而 {@code applied>0} ⇒ 正是"注册晚于应用"的形状。</p>
+         */
+        private static void applySavedKeybindingsOnce() {
+            try {
+                java.util.Map<String, net.minecraft.client.KeyMapping> ours = new java.util.LinkedHashMap<>();
+                ours.put("key.taclight.flashlight_toggle", KeyBindings.FLASHLIGHT_TOGGLE);
+                ours.put("key.taclight.gunlight_toggle", KeyBindings.GUNLIGHT_TOGGLE);
+                ours.put("key.taclight.debug_toggle", KeyBindings.DEBUG_TOGGLE);
+                ours.put("key.taclight.diag_dump", KeyBindings.DIAG_DUMP);
+                ours.put("key.taclight.bench", KeyBindings.BENCH);
+                String before = describeKeys(ours);
+                java.nio.file.Path file = net.minecraftforge.fml.loading.FMLPaths.GAMEDIR.get()
+                        .resolve("options.txt");
+                boolean exists = java.nio.file.Files.isRegularFile(file);
+                String text = exists
+                        ? new String(java.nio.file.Files.readAllBytes(file), java.nio.charset.StandardCharsets.UTF_8)
+                        : "";
+                java.util.Map<String, String> saved = KeyPersist.parse(text, ours.keySet());
+                int applied = 0;
+                for (java.util.Map.Entry<String, String> e : saved.entrySet()) {
+                    try {
+                        net.minecraft.client.KeyMapping m = ours.get(e.getKey());
+                        if (m != null) {
+                            m.setKey(com.mojang.blaze3d.platform.InputConstants.getKey(e.getValue()));
+                            applied++;
+                        }
+                    } catch (Throwable bad) {
+                        // 单个值坏(例如 key.keyboard.unknown 之外的怪值)不影响其它映射
+                        TacLightMod.LOGGER.warn("[TacLight] keybind persist: 值 '{}= {}' 应用失败: {}",
+                                e.getKey(), e.getValue(), bad.toString());
+                    }
+                }
+                TacLightMod.LOGGER.info("[TacLight] keybind persist: file={} exists={} saved={} applied={} before={} after={}",
+                        file, exists, saved.size(), applied, before, describeKeys(ours));
+            } catch (Throwable t) {
+                // 失败一律不改默认(task-16 的 J 保住),只留日志
+                TacLightMod.LOGGER.warn("[TacLight] keybind persist: 应用存档键位失败(保持代码默认): {}", t.toString());
+            }
+        }
+
+        /** 把 5 个映射的当前键压成一行(诊断用;键名去掉 {@code key.taclight.} 前缀)。 */
+        private static String describeKeys(java.util.Map<String, net.minecraft.client.KeyMapping> ours) {
+            StringBuilder sb = new StringBuilder();
+            for (java.util.Map.Entry<String, net.minecraft.client.KeyMapping> e : ours.entrySet()) {
+                if (sb.length() > 0) sb.append(',');
+                String n = e.getKey();
+                sb.append(n.startsWith("key.taclight.") ? n.substring("key.taclight.".length()) : n)
+                        .append('=').append(e.getValue().getKey().getName());
+            }
+            return sb.toString();
         }
     }
 
