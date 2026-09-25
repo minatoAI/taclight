@@ -54,17 +54,22 @@ public class ClientEvents {
     private static int boardTick;
     private static final String DERIVED_PACK = "iterationT 3.2.0 (taclight)";
 
-    @Mod.EventBusSubscriber(modid = TacLightMod.MODID, value = Dist.CLIENT, bus = Mod.EventBusSubscriber.Bus.MOD)
-    public static class ModBus {
-        @SubscribeEvent
-        public static void onRegisterKeys(RegisterKeyMappingsEvent event) {
-            event.register(KeyBindings.FLASHLIGHT_TOGGLE);
-            event.register(KeyBindings.GUNLIGHT_TOGGLE);
-            event.register(KeyBindings.DEBUG_TOGGLE);
-            event.register(KeyBindings.DIAG_DUMP);
-            event.register(KeyBindings.BENCH);
-            // ⚠️ 顺序要求(task-32):**先注册,后应用存档值**。反过来的话,applySaved 时映射还可能没进
-            // KeyMapping.ALL/MAP,存档值就无处落地(契约用"顺序断言"钉住这一点,改反 ⇒ 必红)。
+    /**
+     * 应用逻辑的容器(2026-09-26 task-32 v2)。
+     *
+     * <p><b>它不再是 MOD 总线订阅类</b>:注册已搬到顶层 {@link KeyBindingsModBus}(原来挂在这里的
+     * {@code @Mod.EventBusSubscriber(bus = MOD)} 已移除)。理由见 {@link KeyBindingsModBus}:
+     * 复验实测"注册处理器没有产生任何可观测副作用",而机制无法从测试侧判定 ⇒ 不再把关键逻辑
+     * 挂在"未验证会被触发的事件"上。</p>
+     */
+    static final class ModBus {
+        /** 首 tick 兜底应用的 once-only 守卫(幂等;应用后玩家在同一会话里的即时改动不受影响)。 */
+        private static boolean appliedSavedKeys;
+
+        /** 由 {@code onClientTick}(FORGE 总线,**已被中继/tick 证明存活**)在首个 tick 调用一次。 */
+        static void applySavedKeysOnceAtFirstTick() {
+            if (appliedSavedKeys) return;
+            appliedSavedKeys = true;
             applySavedKeybindingsOnce();
         }
 
@@ -78,13 +83,15 @@ public class ClientEvents {
          * {@code onRegisterKeyMappings} 的调用点)⇒ 机制**未定论**,所以修法走**与机制无关**的路线:
          * 注册完成后由我们自己把存档值读出来应用一次。</p>
          *
-         * <p><b>只在初始化阶段调用一次</b>(本方法唯一调用点就是 {@code onRegisterKeys})⇒ 之后玩家在
-         * "控制设置"里的即时改动<b>不会</b>被我们覆盖。无存档值 ⇒ 保持 task-16 的新默认 {@code J}。</p>
+         * <p><b>调用点 = 首个客户端 tick</b>({@code onClientTick} → {@code ModBus.applySavedKeysOnceAtFirstTick()},
+         * 有 once-only 守卫)⇒ 与"注册事件是否被投递"无关;{@code Options.load()} 在 Minecraft 构造期、
+         * <b>早于首 tick</b> ⇒ 应用必然发生在加载之后。之后玩家在"控制设置"里的即时改动
+         * <b>不会</b>被我们覆盖(唯一调用点 + 幂等)。无存档值 ⇒ 保持 task-16 的新默认 {@code J}。</p>
          *
-         * <p><b>可观测行</b>(供 task-34 真机复验捞取):日志同时打印
-         * {@code before=}(登记时我们的键)与 {@code applied=}(真正被我们改掉的条数)——
-         * 若 {@code before} 已是存档值 ⇒ 说明加载器此前已经应用过;若 {@code before} 是代码默认
-         * 而 {@code applied>0} ⇒ 正是"注册晚于应用"的形状。</p>
+         * <p><b>可观测行</b>(供 task-34 复验捞取;两条日志各自记账,不许互相冒领):
+         * 本方法只报<b>它自己实际改了几条</b>({@code changed=})、以及"目标值本来就已经是这样"的条数
+         * ({@code already=})⇒ 若 {@code changed=0, already>0} 说明是**注册路径**已经生效;若
+         * {@code changed>0} 说明是**本兜底路径**在救场。</p>
          */
         private static void applySavedKeybindingsOnce() {
             try {
@@ -102,22 +109,30 @@ public class ClientEvents {
                         ? new String(java.nio.file.Files.readAllBytes(file), java.nio.charset.StandardCharsets.UTF_8)
                         : "";
                 java.util.Map<String, String> saved = KeyPersist.parse(text, ours.keySet());
-                int applied = 0;
+                int changed = 0;
+                int already = 0;
                 for (java.util.Map.Entry<String, String> e : saved.entrySet()) {
                     try {
                         net.minecraft.client.KeyMapping m = ours.get(e.getKey());
-                        if (m != null) {
-                            m.setKey(com.mojang.blaze3d.platform.InputConstants.getKey(e.getValue()));
-                            applied++;
+                        if (m == null) continue;
+                        com.mojang.blaze3d.platform.InputConstants.Key want =
+                                com.mojang.blaze3d.platform.InputConstants.getKey(e.getValue());
+                        if (m.getKey().equals(want)) {
+                            // 当前绑定已经是存档值 ⇒ 不是本路径的功劳(多半是注册路径已生效)⇒ 不计入 changed
+                            already++;
+                            continue;
                         }
+                        m.setKey(want);
+                        changed++;
                     } catch (Throwable bad) {
                         // 单个值坏(例如 key.keyboard.unknown 之外的怪值)不影响其它映射
                         TacLightMod.LOGGER.warn("[TacLight] keybind persist: 值 '{}= {}' 应用失败: {}",
                                 e.getKey(), e.getValue(), bad.toString());
                     }
                 }
-                TacLightMod.LOGGER.info("[TacLight] keybind persist: file={} exists={} saved={} applied={} before={} after={}",
-                        file, exists, saved.size(), applied, before, describeKeys(ours));
+                TacLightMod.LOGGER.info(
+                        "[TacLight] keybind persist: file={} exists={} saved={} changed={} already={} before={} after={}",
+                        file, exists, saved.size(), changed, already, before, describeKeys(ours));
             } catch (Throwable t) {
                 // 失败一律不改默认(task-16 的 J 保住),只留日志
                 TacLightMod.LOGGER.warn("[TacLight] keybind persist: 应用存档键位失败(保持代码默认): {}", t.toString());
@@ -397,6 +412,10 @@ public class ClientEvents {
     @SubscribeEvent
     public static void onClientTick(TickEvent.ClientTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;
+        // task-32 v2:按键存档值**兜底应用**(首个客户端 tick 一次,once-only/幂等)——
+        // 不依赖"MOD 总线注册事件是否被投递";Options.load() 在 Minecraft 构造期、早于首 tick
+        // ⇒ 应用必然发生在加载之后。放在 world-null 提前返回**之前**,保证没进世界也会执行。
+        ModBus.applySavedKeysOnceAtFirstTick();
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null || mc.player == null) {
             // 退出世界后可信关闭录制并停摆 SSBO；shutdown 幂等，可被多个 world-null hook 调用。

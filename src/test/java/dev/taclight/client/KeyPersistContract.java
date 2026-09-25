@@ -25,6 +25,8 @@ public final class KeyPersistContract {
     private static final List<String> FAILURES = new ArrayList<>();
     private static final String EVENTS = "src/main/java/dev/taclight/client/ClientEvents.java";
     private static final String PURE = "src/main/java/dev/taclight/client/KeyPersist.java";
+    private static final String MODBUS_SRC = "src/main/java/dev/taclight/client/KeyBindingsModBus.java";
+    private static final String SNAPSHOT_SRC = "src/main/java/dev/taclight/client/TacSnapshotKeys.java";
     private static final List<String> OURS = List.of(
             "key.taclight.flashlight_toggle", "key.taclight.gunlight_toggle", "key.taclight.debug_toggle",
             "key.taclight.diag_dump", "key.taclight.bench");
@@ -103,28 +105,46 @@ public final class KeyPersistContract {
     /** 接线层:先注册后应用 + 只应用一次 + 可观测行(源码文本级)。 */
     private static void wiringLayer() throws Exception {
         String ev = Files.readString(Path.of(EVENTS), StandardCharsets.UTF_8);
-        // 作用域内检查(不要用全文件 indexOf —— 方法定义在调用点之后,顺序比较会自我打脸)
-        String onReg = methodBody(ev, "public static void onRegisterKeys(RegisterKeyMappingsEvent event)");
-        check(onReg != null, "取到 onRegisterKeys 的方法体");
-        check(onReg != null && onReg.contains("applySavedKeybindingsOnce();"),
-                "onRegisterKeys 里确实调用了 applySavedKeybindingsOnce()(作用域内)");
-        int lastRegister = onReg == null ? -1 : onReg.lastIndexOf("event.register(");
-        int call = onReg == null ? -1 : onReg.indexOf("applySavedKeybindingsOnce();");
-        check(lastRegister > 0 && call > lastRegister,
-                "[顺序·改反必红] 应用发生在**最后一次 event.register(...) 之后**(register@" + lastRegister
-                        + " < call@" + call + ",作用域限定在 onRegisterKeys 体内)");
-        check(occurrences(ev, "applySavedKeybindingsOnce()") == 2,
-                "全文件只在\"定义 + 唯一一次调用\"出现(实际 " + occurrences(ev, "applySavedKeybindingsOnce()")
-                        + " 次 ⇒ 不能有 tick/事件里的第二次调用,否则会覆盖玩家即时改动)");
+        // (1) 注册搬进**顶层**类(task-32 v2);两个嵌套 MOD 订阅都不再存在
+        String reg = Files.readString(Path.of(MODBUS_SRC), StandardCharsets.UTF_8);
+        String snap = Files.readString(Path.of(SNAPSHOT_SRC), StandardCharsets.UTF_8);
+        check(reg.contains("Bus.MOD"), "顶层 KeyBindingsModBus 是 MOD 总线订阅类");
+        check(reg.contains("event.register(") && reg.contains("TacSnapshotKeys.SNAPSHOT"),
+                "顶层类同时注册五个 TacLight 键与快照键 SNAPSHOT(两个嵌套订阅的活儿都搬来了)");
+        check(reg.contains("keybind register:") && reg.contains("registered="),
+                "注册处理器自带可观测行 keybind register: registered=(task-34 的判据)");
+        check(!ev.contains("Bus.MOD"), "[旧结构必红] ClientEvents 里不再有嵌套 MOD 总线订阅");
+        check(!snap.contains("Bus.MOD"),
+                "[旧结构必红] TacSnapshotKeys 里不再有嵌套 MOD 总线订阅(否则 F9 同样'没有可观测副作用')");
+        // (2) 应用点必须在**确定存活**的路径上:onClientTick 方法体内(作用域内检查)
+        String tick = methodBody(ev, "public static void onClientTick(TickEvent.ClientTickEvent event)");
+        check(tick != null, "取到 onClientTick 的方法体");
+        check(tick != null && tick.contains("applySavedKeysOnceAtFirstTick()"),
+                "[★摘掉即必红] 首 tick 兜底应用在 onClientTick **方法体内**(FORGE 总线:tick 已被中继证明存活)");
+        check(tick != null && tick.contains("applySavedKeysOnceAtFirstTick()")
+                        && tick.indexOf("applySavedKeysOnceAtFirstTick()") < tick.indexOf("mc.level == null"),
+                "兜底应用放在 world-null 提前返回**之前**(没进世界也会执行)");
+        // (3) once-only 幂等守卫 + 唯一调用点
+        check(ev.contains("if (appliedSavedKeys) return;") && ev.contains("appliedSavedKeys = true;"),
+                "once-only 守卫存在(幂等 ⇒ 不覆盖玩家同一会话里的即时改动)");
+        check(occurrences(ev, "ModBus.applySavedKeysOnceAtFirstTick();") == 1,
+                "唯一调用点是 `ModBus.applySavedKeysOnceAtFirstTick();`(实际 "
+                        + occurrences(ev, "ModBus.applySavedKeysOnceAtFirstTick();") + " 次;文档里的提及不算)");
         check(codeLine(ev, "KeyPersist.parse(text, ours.keySet())"), "接线用纯解析器 KeyPersist.parse(...)");
-        check(codeLine(ev, "m.setKey(com.mojang.blaze3d.platform.InputConstants.getKey(e.getValue()))"),
-                "存档值经 InputConstants.getKey(...) 应用到映射(setKey)");
+        check(ev.contains("getKey(e.getValue())") && codeLine(ev, "m.setKey(want);"),
+                "存档值经 InputConstants.getKey(...) 解析后 setKey 到映射");
         check(codeLine(ev, "FMLPaths.GAMEDIR.get()") && codeLine(ev, "resolve(\"options.txt\")"),
                 "读的是 <gameDir>/options.txt(与 MC 的真源一致)");
-        // 可观测行:task-34 要捞的就是这一行 ⇒ 关键字必须在
-        check(ev.contains("keybind persist:") && ev.contains("saved=") && ev.contains("applied=")
-                        && ev.contains("before=") && ev.contains("after="),
-                "可观测行含 keybind persist / saved= / applied= / before= / after=(供 task-34 判定机制)");
+        // (4) 两条日志各自记账:兜底路径只报自己改的(不冒领注册路径的功劳)
+        check(ev.contains("changed=") && ev.contains("already="),
+                "应用日志分别报 changed=/already=(不把注册路径的功劳记到兜底路径头上)");
+        check(codeLine(ev, "if (m.getKey().equals(want)) {") && codeLine(ev, "already++;"),
+                "逐映射比较:m.getKey() 与目标值相同 ⇒ 记 already、不 setKey(幂等、不冒领)");
+        check(ev.contains("keybind persist:") && ev.contains("saved=") && ev.contains("before=")
+                        && ev.contains("after="),
+                "应用日志保留 saved=/before=/after=(供 task-34 判定机制)");
+        check(!ev.contains("字节码被证明"),
+                "措辞纪律:不声称\"字节码被证明是死代码\"(只说该处理器没有产生可观测副作用)");
         check(ev.contains("保持代码默认"),
                 "异常路径明确\"保持代码默认\"(task-16 的默认 J 不被破坏)");
     }

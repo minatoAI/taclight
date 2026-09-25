@@ -30,13 +30,9 @@ public final class TacSnapshotKeys {
 
     private TacSnapshotKeys() {}
 
-    @Mod.EventBusSubscriber(modid = TacLightMod.MODID, value = Dist.CLIENT, bus = Mod.EventBusSubscriber.Bus.MOD)
-    public static class ModBus {
-        @SubscribeEvent
-        public static void onRegisterKeys(RegisterKeyMappingsEvent event) {
-            event.register(SNAPSHOT);
-        }
-    }
+    // 2026-09-26 task-32 v2:这里的嵌套 MOD 总线订阅类已移除 —— SNAPSHOT 的注册统一搬到顶层
+    // KeyBindingsModBus(与五个 TacLight 键一起,并打印 "keybind register:" 可观测行)。
+    // 原因:复验实测"注册处理器没有产生任何可观测副作用",不再把关键逻辑挂在未验证会被触发的事件上。
 
     @SubscribeEvent
     public static void onKeyInput(InputEvent.Key event) {
