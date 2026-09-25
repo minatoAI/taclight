@@ -14,6 +14,7 @@ import net.minecraft.world.level.block.StairBlock;
 import net.minecraft.world.level.block.TrapDoorBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.Half;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.Property;
 import net.minecraft.world.level.block.state.properties.SlabType;
 import net.minecraft.world.phys.shapes.VoxelShape;
@@ -112,10 +113,12 @@ public class VoxelRealRegistryContract {
         checkCode("栅栏 oak_fence(碰撞柱 1.5)", Blocks.OAK_FENCE.defaultBlockState(), VoxelField.CODE_SOLID, p);
         checkCode("墙 cobblestone_wall(碰撞柱 1.5)", Blocks.COBBLESTONE_WALL.defaultBlockState(), VoxelField.CODE_SOLID, p);
 
-        // ---- 位置无关档(ID 表 / 流体 / 空气)在真 registry 上的分支仍生效 ----
+        // ---- 位置无关档(ID 表 / 空气)在真 registry 上的分支仍生效 ----
+        // 注:水/熔岩这两条在**离线**靠"coll 空 ⇒ 守卫 1"通过,不是流体分支(见 3b 的离线口径哨兵);
+        // 真机(登录后 rebuildCache 已跑)流体分支才活。标签刻意不写"流体分支"以免误导读者。
         checkCode("空气", Blocks.AIR.defaultBlockState(), VoxelField.CODE_EMPTY, p);
-        checkCode("水(流体分支)", Blocks.WATER.defaultBlockState(), VoxelField.CODE_EMPTY, p);
-        checkCode("熔岩(流体分支)", Blocks.LAVA.defaultBlockState(), VoxelField.CODE_EMPTY, p);
+        checkCode("水(离线走守卫 1:coll 空;流体分支见 3b)", Blocks.WATER.defaultBlockState(), VoxelField.CODE_EMPTY, p);
+        checkCode("熔岩(离线走守卫 1:coll 空;流体分支见 3b)", Blocks.LAVA.defaultBlockState(), VoxelField.CODE_EMPTY, p);
         checkCode("草 grass(VEG 表)", Blocks.GRASS.defaultBlockState(), VoxelField.CODE_VEG, p);
         checkCode("树叶 oak_leaves(LEAF 表)", Blocks.OAK_LEAVES.defaultBlockState(), VoxelField.CODE_LEAF, p);
 
@@ -128,6 +131,9 @@ public class VoxelRealRegistryContract {
         // ---- 全 registry 穷举 + golden(2026-09-25):把"每个方块状态 ⇒ 码"变成可 diff 的映射 ----
         // 手写清单抓不到"雪 1 层 occ=0.125 却判 EMPTY"这类单例;全量穷举 + golden 天然能抓。
         fullRegistryGolden();
+
+        // ---- 分类快路径 A/B(!voxel classcache on|off,2026-09-25) ----
+        classCacheAb();
 
         if (!MISMATCH.isEmpty()) {
             throw new AssertionError("FAIL 真 registry 分档不符 " + MISMATCH.size() + " 例: " + MISMATCH);
@@ -267,6 +273,209 @@ public class VoxelRealRegistryContract {
                     + "\n  ⇒ 若为刻意变更:加 -Dtaclight.voxelGolden.update=true 重生成并审阅 diff");
         }
     }
+
+    // ================= 分类快路径 A/B(!voxel classcache on|off,2026-09-25) =================
+
+    /**
+     * <b>快路径与旧路径的对账 + 机制断言</b>({@code !voxel classcache on|off},默认 on)。
+     *
+     * <p>为什么必须有它:{@code VoxelGrid.classify} 的快路径把"逐格注册 ID → String +
+     * 两次字符串哈希"折叠成"每方块一次"的类别查表。这类改动的危险不是"算错"而是
+     * <b>冻结</b> —— 一旦把 state/坐标相关的结论按方块缓存,就会重演 2026-09-18 根因③
+     * (雪地方格阵列)。所以本组断言分三层:</p>
+     * <ol>
+     *   <li><b>机制</b>:on 时类别缓存确有命中,未命中数 = 方块"种"数(不是格数/状态数)⇒ 折叠真的发生了;</li>
+     *   <li><b>语义</b>:off(旧路径)时类别计数不动 + 开关两侧<b>全 registry 逐状态同码</b>
+     *       ⇒ "语义一个字都不变"变成可判定;</li>
+     *   <li><b>反冻结</b>:同一种方块的 8 种雪层状态必须给 8 个不同的码、且与判定次序无关、
+     *       类别缓存只多出 1 个条目 ⇒ 状态/形状结论没有被方块身份缓存冻结(根因③同族)。</li>
+     * </ol>
+     *
+     * <p><b>红对照(已做;还原后 sha256 核对一致,见 commit 信息)</b>:
+     * ① 把 {@code classify} 的快路径改回旧路径(逐格 {@code toString()} + 两次字符串哈希,
+     * 不查表)⇒ 第 1 层断言必红;
+     * ② 只删掉命中/未命中自增(接线文本不变)⇒ 第 1 层断言必红(证明它盯的是"快路径在跑");
+     * ③ 把形状查询改成按 {@code state.getBlock().defaultBlockState()} 求值(根因③复刻)
+     * ⇒ 第 3 层断言 + 全量同码断言必红;
+     * ④ 把 {@code VoxelClassifier.leafVegCategory} 两档换位 ⇒ 全量同码断言 + golden 必红。</p>
+     *
+     * <p><b>离线口径(如实)</b>:JavaExec 不会触发 {@code Blocks.rebuildCache()} ⇒ 所有 state 的
+     * {@code getFluidState()} 恒空(见 3b 的哨兵断言)⇒ 流体分支在离线<b>不可运行验证</b>:
+     * 离线只钉接线(WiringContract 文本断言)+ 运行期口径哨兵,真机行为由 {@code !voxprobe} 验。</p>
+     */
+    private static void classCacheAb() {
+        List<BlockState> states = new ArrayList<>();
+        for (Block block : BuiltInRegistries.BLOCK) {
+            states.addAll(block.getStateDefinition().getPossibleStates());
+        }
+        BlockPos p = new BlockPos(0, 64, 0);
+
+        // ---- 1. 机制:on 时类别缓存真的在用 ----
+        VoxelGrid.configure("classcache on");
+        VoxelGrid.resetBlockCategoryCache();
+        int[] onCodes = sweep(states, p);
+        long hits = VoxelGrid.categoryCacheHits();
+        long misses = VoxelGrid.categoryCacheMisses();
+        check(hits > 0, "classcache=on 时方块类别缓存有命中(命中 " + hits + ")⇒ 快路径真的在跑");
+        check(misses > 0 && misses < states.size(),
+                "未命中 = 首次遇到的方块\"种\"数(" + misses + "),远小于状态数(" + states.size()
+                        + ")⇒ 判定已折叠到每方块一次");
+        check(VoxelGrid.blockCategoryCacheSize() <= VoxelGrid.blockCategoryCacheCap(),
+                "方块类别缓存有界:size=" + VoxelGrid.blockCategoryCacheSize()
+                        + " ≤ cap=" + VoxelGrid.blockCategoryCacheCap());
+        check(VoxelGrid.blockCategoryCacheSize() <= misses,
+                "类别条目数 ≤ 首次遇到的方块数(" + VoxelGrid.blockCategoryCacheSize() + " ≤ " + misses
+                        + ")⇒ 一个方块至多一条(未命中才写)");
+
+        // ---- 2. off = 旧路径:类别计数不动(证明没走快路径),且逐状态同码 ----
+        VoxelGrid.configure("classcache off");
+        int[] offCodes = sweep(states, p);
+        check(VoxelGrid.categoryCacheHits() == hits && VoxelGrid.categoryCacheMisses() == misses,
+                "classcache=off 时不碰方块类别缓存(计数不变 ⇒ 走的确实是旧路径)");
+        int diff = 0;
+        String firstDiff = null;
+        for (int i = 0; i < states.size(); i++) {
+            if (onCodes[i] != offCodes[i]) {
+                diff++;
+                if (firstDiff == null) {
+                    firstDiff = BuiltInRegistries.BLOCK.getKey(states.get(i).getBlock()) + propsOf(states.get(i))
+                            + " on=" + onCodes[i] + " off=" + offCodes[i];
+                }
+            }
+        }
+        check(diff == 0, "开关两侧逐状态同码(" + states.size() + " 个状态,差异 " + diff + " 处)"
+                + (firstDiff == null ? "" : " 首个: " + firstDiff) + " ⇒ 快路径语义不变");
+
+        // ---- 3. 反冻结:同一种方块的不同 state 必须仍然不同码(类别缓存不得冻结状态/坐标相关结论) ----
+        // 样本 = 雪层:同一方块 8 种状态 ⇒ 8 个不同码(1..7 层薄板码 4..10 / 8 层 SOLID),
+        // 且判定走形状档(SHAPE_CACHE 主键 = occ 实例)⇒ 正好检验"方块身份缓存只吃 ID 档"。
+        VoxelGrid.configure("classcache on");
+        BlockState[] snowStates = new BlockState[8];
+        for (int i = 0; i < 8; i++) snowStates[i] = snow(i + 1);
+        VoxelGrid.resetBlockCategoryCache();
+        int[] asc = new int[8];
+        for (int i = 0; i < 8; i++) {
+            asc[i] = VoxelGrid.classify(EmptyBlockGetter.INSTANCE, snowStates[i], p.getX(), p.getY(), p.getZ());
+        }
+        VoxelGrid.resetBlockCategoryCache();
+        int[] desc = new int[8];
+        for (int i = 0; i < 8; i++) {
+            desc[i] = VoxelGrid.classify(EmptyBlockGetter.INSTANCE, snowStates[7 - i], p.getX(), p.getY(), p.getZ());
+        }
+        check(asc[0] == VoxelField.slabBottomCode(1) && asc[6] == VoxelField.slabBottomCode(7)
+                        && asc[7] == VoxelField.CODE_SOLID,
+                "快路径:雪 1 / 7 / 8 层仍按 state 分档(码 " + asc[0] + " / " + asc[6] + " / " + asc[7] + ")");
+        boolean orderFree = true;
+        for (int i = 0; i < 8; i++) {
+            if (asc[i] != desc[7 - i]) orderFree = false;
+        }
+        check(orderFree, "8 种雪层状态正序/倒序分类结果一致 ⇒ 同方块的状态差异没有被类别缓存冻结");
+        check(VoxelGrid.blockCategoryCacheSize() == 1,
+                "8 种状态同属一个方块 ⇒ 类别缓存只有 1 个条目(" + VoxelGrid.blockCategoryCacheSize()
+                        + ")⇒ 状态/形状结论没有进按方块的类别缓存");
+
+        // ---- 3b. 流体分支的离线口径自检(为什么"水logged 不同 ⇒ 码不同"在此环境验不了) ----
+        // 实测(2026-09-25):JavaExec 里 **所有** state 的 getFluidState() 都是空 —— 连
+        // Blocks.WATER/LAVA 也是。根因:`Blocks.rebuildCache()`(把每个 state 的 fluidState
+        // 由默认 EMPTY 重算成 Block.getFluidState)只在**客户端登录**
+        // (ClientPacketListener / ReloadableServerResources)与 ItemRenderer 路径被调用,
+        // headless 契约不会触发。⇒ 离线 golden 钉的是"无 fluidState 口径":水/熔岩之所以是 0,
+        // 靠的是"coll 空 ⇒ 守卫 1",不是流体分支。真机(登录后 rebuildCache 已跑)流体分支是活的。
+        // 本条是**口径哨兵**:若此条变红 ⇒ 离线口径变了(有人调了 rebuildCache)⇒ golden 必须
+        // 重生成并逐个复核 waterlogged 状态的差异。流体"逐 state 判"的接线由
+        // VoxelGridWiringContract 的文本断言钉住,真机行为由 !voxprobe 验(见交付说明)。
+        BlockState wet = Blocks.OAK_STAIRS.defaultBlockState()
+                .setValue(BlockStateProperties.WATERLOGGED, true);
+        BlockState dry = Blocks.OAK_STAIRS.defaultBlockState()
+                .setValue(BlockStateProperties.WATERLOGGED, false);
+        VoxelGrid.resetBlockCategoryCache(); // 只留这一对 state,便于断言"两种状态 ⇒ 1 个条目"
+        int wetCode = VoxelGrid.classify(EmptyBlockGetter.INSTANCE, wet, p.getX(), p.getY(), p.getZ());
+        int dryCode = VoxelGrid.classify(EmptyBlockGetter.INSTANCE, dry, p.getX(), p.getY(), p.getZ());
+        check(Blocks.WATER.defaultBlockState().getFluidState().isEmpty()
+                        && Blocks.LAVA.defaultBlockState().getFluidState().isEmpty()
+                        && wet.getFluidState().isEmpty() && wetCode == dryCode
+                        && dryCode != VoxelField.CODE_EMPTY,
+                "离线口径哨兵:JavaExec 未调 Blocks.rebuildCache() ⇒ fluidState 恒空(水logged 也空)"
+                        + ",干/湿两态在此环境同码(" + wetCode + "/" + dryCode + ")且干态非空码"
+                        + "(否则\"同码\"可能两边都是 0 = 空洞真);真机登录后湿态应 ⇒ 0。"
+                        + "本条变红 ⇒ 必须重生成 golden 并复核 waterlogged 差异");
+        check(VoxelGrid.blockCategoryCacheSize() == 1,
+                "干/湿两态只占 1 个类别条目(" + VoxelGrid.blockCategoryCacheSize()
+                        + ")⇒ 流体结论不在按方块的类别缓存里(离线靠接线断言,真机靠 !voxprobe)");
+
+        // ---- 4. 开关表面(测试同事靠它确认"这一轮测的是哪条路径") ----
+        check(VoxelGrid.configure("classcache off").equals("voxel classcache=off")
+                        && VoxelGrid.configure("classcache on").equals("voxel classcache=on"),
+                "!voxel classcache on|off 回显与状态一致(默认 on;改值即作废快照 ⇒ 下一帧按新路径重建)");
+        check(VoxelGrid.configure("classcache").startsWith("voxel classcache=on"),
+                "!voxel classcache 无参 = 只读回状态(默认 on,回显带 usage 提示,与 box/cone 同规)");
+        check(VoxelGrid.profile().contains("classcache=on"),
+                "!voxel profile 行回报 classcache=on(驱动可用一条正则确认路径)");
+        VoxelGrid.configure("classcache off");
+        check(VoxelGrid.profile().contains("classcache=off"),
+                "!voxel profile 行回报 classcache=off(off 时 cat=0/0)");
+        VoxelGrid.configure("classcache on"); // 还原默认,避免影响后续契约
+
+        // ---- 5. 离线微基准(仅参考,不是判据) ----
+        classCacheMicroBench();
+    }
+
+    /** 全 registry 穷举一遍(与 golden 同一驱动路径),返回逐状态码。 */
+    private static int[] sweep(List<BlockState> states, BlockPos p) {
+        int[] out = new int[states.size()];
+        for (int i = 0; i < states.size(); i++) {
+            out[i] = VoxelGrid.classify(EmptyBlockGetter.INSTANCE, states.get(i), p.getX(), p.getY(), p.getZ());
+        }
+        return out;
+    }
+
+    /**
+     * 离线微基准:<b>仅参考</b>——小工作集(15 种状态)× 30 万格,近似重建循环里
+     * {@code classify} 的逐格成本与"工作集小 ⇒ 缓存命中"的真实形态。
+     *
+     * <p>不作为判据的原因:JavaExec 没有真机的渲染线程/JIT/内存布局,且小工作集会把
+     * 形状缓存全部命中(真机同姿势也接近)。<b>唯一判据是真机 {@code !voxel profile} 的
+     * {@code classify=XXns} 与 {@code loop=XXms}</b>(同实例开关 A/B)。这里只回答
+     * "方向对不对、量级大概多少"。</p>
+     */
+    private static void classCacheMicroBench() {
+        BlockState[] mix = {
+                Blocks.STONE.defaultBlockState(), Blocks.DIRT.defaultBlockState(),
+                Blocks.GRASS_BLOCK.defaultBlockState(), Blocks.SAND.defaultBlockState(),
+                snow(1), snow(3), snow(4), Blocks.OAK_LEAVES.defaultBlockState(),
+                Blocks.GRASS.defaultBlockState(), Blocks.WATER.defaultBlockState(),
+                Blocks.OAK_STAIRS.defaultBlockState().setValue(BlockStateProperties.WATERLOGGED, true),
+                Blocks.COBBLESTONE.defaultBlockState(), Blocks.GRAVEL.defaultBlockState(),
+                Blocks.OAK_LOG.defaultBlockState(), Blocks.AIR.defaultBlockState(),
+        };
+        int cells = 300_000;
+        runMix(mix, cells, true);   // 预热两条路径(JIT + 两侧缓存)
+        runMix(mix, cells, false);
+        long on = Math.min(runMix(mix, cells, true), runMix(mix, cells, true));
+        long off = Math.min(runMix(mix, cells, false), runMix(mix, cells, false));
+        VoxelGrid.configure("classcache on");
+        System.out.println(String.format(Locale.ROOT,
+                "  [classcache] 离线微基准(仅参考,判据 = 真机 !voxel profile):%d 格 × %d 种状态 "
+                        + "on=%.1f ns/格 off=%.1f ns/格 Δ=%.1f ns/格(%.0f%%) sink=%d",
+                cells, mix.length, (double) on / cells, (double) off / cells,
+                (double) (off - on) / cells, 100.0 * (off - on) / off, benchSink));
+    }
+
+    /** 混合工作集跑 {@code cells} 次 classify,返回耗时 ns(坐标轮转 ⇒ 形状缓存稳态命中)。 */
+    private static long runMix(BlockState[] mix, int cells, boolean cacheOn) {
+        VoxelGrid.configure(cacheOn ? "classcache on" : "classcache off");
+        long t0 = System.nanoTime();
+        int sink = 0;
+        for (int i = 0; i < cells; i++) {
+            sink += VoxelGrid.classify(EmptyBlockGetter.INSTANCE, mix[i % mix.length],
+                    i & 31, 64, (i >> 5) & 31);
+        }
+        benchSink = sink;
+        return System.nanoTime() - t0;
+    }
+
+    /** 微基准结果落点(防止 JIT 把整段判成死代码)。 */
+    private static int benchSink;
 
     /** 状态属性规范化串(按属性名排序 ⇒ 稳定 diff)。 */
     private static String propsOf(BlockState st) {

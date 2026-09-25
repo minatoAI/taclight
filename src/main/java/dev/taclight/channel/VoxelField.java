@@ -166,8 +166,13 @@ public final class VoxelField {
      * 变亮(热图见 {@code docs/evidence/2026-09-25-voxel-box/})。</p>
      *
      * <p>几何:锥 = {pos + t·dir + u : t∈[0,L], |u| ≤ t·tanθ}(θ = 外锥半角,L = 灯半径)。
-     * 沿轴 i 的极值 = {@code pos_i + L·max(0, dir_i ± tanθ)}——因 |u_i| ≤ |u| ≤ t·tanθ,
-     * 该界必然包含整个锥。方向退化 / 锥过宽 / cosOuter 非法 ⇒ <b>该灯退回球盒</b>(不缩,安全侧)。</p>
+     * 张开量垂直于光线,它在轴 i 上的分量是 {@code tanθ·√(1−n_i²)}(n = 归一化方向)
+     * ⇒ 沿轴 i 的极值 = {@code pos_i + L·min/max(0, n_i ± tanθ·√(1−n_i²))}。
+     * <b>旧式</b>(写成分量就是 {@code pos_i + L·max(0, dir_i ± tanθ)})<b>是错的</b>:等于把整份
+     * 张开加到<b>每一根</b>轴上(包括"沿着光线"的那根,那里分量恰好为 0)⇒ 45° 时沿轴延伸被算成
+     * <b>2L</b>(应为 L),盒反而比球盒大(真机实测 82³ &gt; 76³,重建 10.40 ms,比优化前更差);
+     * 精确式 + 与球盒求交后才回到 41×73×53 / 3.13 ms(见 {@code docs/evidence/2026-09-25-voxel-heavy/} §6)。
+     * 方向退化 / 锥过宽 / cosOuter 非法 ⇒ <b>该灯退回球盒</b>(不缩,安全侧)。</p>
      */
     public static Box boxForCones(List<SpotlightData> lights, float margin) {
         double minX = Double.MAX_VALUE, minY = Double.MAX_VALUE, minZ = Double.MAX_VALUE;

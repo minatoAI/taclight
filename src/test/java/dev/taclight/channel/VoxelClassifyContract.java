@@ -137,6 +137,36 @@ public class VoxelClassifyContract {
         int again = VoxelClassifier.classifyByShape(probe, "L", "minecraft:snow", 2, 70, 1);
         check(again == atFull && calls.size() == 3, "同坐标重复调用 ⇒ 同码且仍重新探测(无反例缓存)");
 
+        // ================= 9. 位置无关"类别"纯判定(2026-09-25 classify 快路径) =================
+        // 背景:VoxelGrid 的快路径把"逐格 getKey().toString() + 两次字符串哈希"折叠成
+        // "每方块一次"的类别查表。本组钉住**折叠前的那张判定表**的语义(顺序 + 不早返回)。
+        // 红对照:把 CAT_VEG/CAT_LEAF 的先后调换(或让 CAT_OTHER 也返回码)⇒ 本组必红。
+        check(VoxelClassifier.leafVegCategory(true, true) == VoxelClassifier.CAT_LEAF,
+                "两张表都命中 ⇒ 树叶(顺序 = 旧代码 if/else:树叶先于软植被)");
+        check(VoxelClassifier.leafVegCategory(true, false) == VoxelClassifier.CAT_LEAF,
+                "只命中树叶表 ⇒ 树叶");
+        check(VoxelClassifier.leafVegCategory(false, true) == VoxelClassifier.CAT_VEG,
+                "只命中软植被表 ⇒ 软植被");
+        check(VoxelClassifier.leafVegCategory(false, false) == VoxelClassifier.CAT_OTHER,
+                "两表都不命中 ⇒ 其它(必须继续走流体/形状,不得早返回)");
+        check(VoxelClassifier.CAT_LEAF != VoxelClassifier.CAT_VEG
+                        && VoxelClassifier.CAT_VEG != VoxelClassifier.CAT_OTHER
+                        && VoxelClassifier.CAT_LEAF != VoxelClassifier.CAT_OTHER,
+                "三个类别值互不相同");
+        check(VoxelClassifier.codeForBlockCategory(VoxelClassifier.CAT_LEAF) == VoxelField.CODE_LEAF
+                        && VoxelClassifier.codeForBlockCategory(VoxelClassifier.CAT_VEG) == VoxelField.CODE_VEG,
+                "树叶/软植被 ⇒ 对应的位置无关码(纯 block-id 判定 ⇒ 按方块身份缓存才安全)");
+        check(VoxelClassifier.codeForBlockCategory(VoxelClassifier.CAT_OTHER)
+                        == VoxelClassifier.CODE_FALLTHROUGH,
+                "其它 ⇒ 哨兵 CODE_FALLTHROUGH(不早返回;否则等于重演\"非空气非树叶非软植被 ⇒ 默认实心\"兜底)");
+        check(VoxelClassifier.CODE_FALLTHROUGH < 0
+                        && VoxelClassifier.CODE_FALLTHROUGH != VoxelField.CODE_EMPTY
+                        && VoxelClassifier.CODE_FALLTHROUGH != VoxelField.CODE_VEG
+                        && VoxelClassifier.CODE_FALLTHROUGH != VoxelField.CODE_LEAF
+                        && VoxelClassifier.CODE_FALLTHROUGH != VoxelField.CODE_SOLID
+                        && !VoxelField.isSlab(VoxelClassifier.CODE_FALLTHROUGH),
+                "哨兵在 VoxelField 合法码(0..15)之外,不会与任何真实码混淆");
+
         // 收集式断言:一次跑出全部失败项(变异实验要看"雪层断言"确实在红名单里,而不是被首条中断掩盖)
         if (!FAILURES.isEmpty()) {
             throw new AssertionError("FAIL " + FAILURES.size() + " 条: " + FAILURES);

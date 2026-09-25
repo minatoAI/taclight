@@ -65,6 +65,59 @@ public final class VoxelClassifier {
     /** 平坦 AABB 数组的步长：[minX, minY, minZ, maxX, maxY, maxZ]。 */
     public static final int BOX_STRIDE = 6;
 
+    // ==================================================================
+    // 位置无关档的"按方块身份缓存"类别(2026-09-25 classify 快路径)
+    // ------------------------------------------------------------------
+    // 动机:`VoxelGrid.classify` 原来对**每个非空气格**都做
+    // `BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString()`(每格新建 String)
+    // + 两次 HashSet<String> 查找。但"是否树叶 / 是否软植被"只取决于**方块注册 ID**
+    // (与 state、与坐标都无关)⇒ 可以按 `Block` 身份缓存,每格只做一次 O(1) 查表。
+    //
+    // 语义边界(三条,写死在纯函数里,别看走眼):
+    //  ① 顺序 = 旧代码的 if/else 顺序:树叶表先于软植被表(同一方块同时在两表 ⇒ LEAF);
+    //  ② **只**缓存这两档;空气是 **state 谓词**(`BlockState.isAir()` → `Block.isAir(state)`,
+    //     模组可按状态覆写)、流体也是 state 谓词(水logged 的同种方块 fluid state 不同)
+    //     ⇒ 二者都不得按方块冻结,必须留在 `VoxelGrid` 里逐 state 判;
+    //  ③ 其余(CAT_OTHER)是"**不早返回**"的哨兵:必须继续走"流体(state)→ 形状(坐标)"。
+    //     这一条是根因③的同族防线 —— 位置相关结论不得按方块/状态冻结首次求值。
+    // ==================================================================
+
+    /** 分类类别:命中 LEAF_IDS(树叶档)。 */
+    public static final int CAT_LEAF = 1;
+    /** 分类类别:命中 VEG_IDS(软植被档)。 */
+    public static final int CAT_VEG = 2;
+    /** 分类类别:两张表都不命中 ⇒ 不早返回(继续走流体/形状判定)。 */
+    public static final int CAT_OTHER = 3;
+    /**
+     * {@link #codeForBlockCategory} 的"不早返回"哨兵(取值必须在 {@code VoxelField}
+     * 合法码 0..15 之外,避免与任何真实码混淆)。
+     */
+    public static final int CODE_FALLTHROUGH = -1;
+
+    /**
+     * 位置无关"类别"的纯判定(零 MC 依赖):顺序即语义 —— 树叶先于软植被
+     * (与旧代码 {@code if (LEAF_IDS.contains(key)) … else if (VEG_IDS.contains(key))} 逐字一致)。
+     * 入参 = 该方块注册 ID 是否命中两张表;调用方负责"每方块只算一次"。
+     */
+    public static int leafVegCategory(boolean inLeafIds, boolean inVegIds) {
+        if (inLeafIds) return CAT_LEAF;
+        if (inVegIds) return CAT_VEG;
+        return CAT_OTHER;
+    }
+
+    /**
+     * 位置无关类别 ⇒ 分类码;{@link #CAT_OTHER} ⇒ {@link #CODE_FALLTHROUGH}(不早返回)。
+     *
+     * <p>把"哪几档可以按方块冻结"收敛成一条可断言的规则:只有 LEAF/VEG 能直接出码,
+     * 其余必须回到逐 state / 逐坐标的判定。若有人图省事让 CAT_OTHER 也返回一个码,
+     * 就等于"非空气/非树叶/非软植被 ⇒ 默认实心"(旧兜底)重演 —— 雪地方格阵列的根因。</p>
+     */
+    public static int codeForBlockCategory(int category) {
+        if (category == CAT_LEAF) return VoxelField.CODE_LEAF;
+        if (category == CAT_VEG) return VoxelField.CODE_VEG;
+        return CODE_FALLTHROUGH;
+    }
+
     /**
      * C 口径总规则(守卫顺序写死，勿调换——两条守卫各自防一个漏光/误挡方向)：
      * <ol>

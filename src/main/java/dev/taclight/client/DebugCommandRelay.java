@@ -654,7 +654,10 @@ public final class DebugCommandRelay {
             return;
         }
         if (line.startsWith("!voxel")) {
-            // 体素 DDA 遮挡总开关(09-01 深夜④,墙后漏光立项):off = SSBO 无效位,GLSL 回退 SSO
+            // 体素 DDA 遮挡总开关(09-01 深夜④,墙后漏光立项):off = SSBO 无效位,GLSL 回退 SSO。
+            // 子旋钮同走本分支(VoxelGrid.configure):box / cone / lagmax / lag / classcache /
+            // profile [reset];classcache on|off = 分类快路径开关(2026-09-25,默认 on,
+            // off = 旧路径,供同实例 A/B;profile 行尾回报 classcache=on|off)。
             String arg = line.length() > 6 ? line.substring(6).trim() : "";
             TacLightMod.LOGGER.info("[TacLight] RELAY voxel -> {}", VoxelGrid.configure(arg));
             return;

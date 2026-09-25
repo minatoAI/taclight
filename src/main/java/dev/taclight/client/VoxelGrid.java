@@ -11,6 +11,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.block.state.BlockState;
@@ -53,7 +54,11 @@ import java.util.Set;
  * </ol></p>
  *
  * <p>运行时开关(客户端本地,DebugCommandRelay):{@code !voxel <on|off|status>},
- * 默认 on;off = 上传无效位,GLSL 逐光线回退屏幕空间 SSO(A/B 对照与一键回退)。</p>
+ * 默认 on;off = 上传无效位,GLSL 逐光线回退屏幕空间 SSO(A/B 对照与一键回退)。
+ * 另有 {@code !voxel classcache on|off}(2026-09-25,默认 on):只切<b>分类快路径</b>
+ * ——on = 按方块身份缓存"树叶/软植被"类别(每格 O(1) 查表),off = 改动前的逐格字符串判定,
+ * <b>两条路径逐状态同码</b>(由 {@code VoxelRealRegistryContract} 的全 registry 穷举钉死),
+ * 供同实例 A/B 与一键回退;{@code !voxel profile} 行尾回报 {@code classcache=on|off}。</p>
  */
 public final class VoxelGrid {
     private static volatile boolean enabled = true;
@@ -117,8 +122,10 @@ public final class VoxelGrid {
 
     private static final BlockPos.MutableBlockPos CURSOR = new BlockPos.MutableBlockPos();
     /**
-     * 位置无关档的 state 级分类缓存(仅 空气 / 树叶 ID / 软植被 ID / 流体 会写入)。
-     * <b>缓存策略(显式选择,取任务书推荐 (i) 的两个子项,合起来用)</b>:
+     * 位置无关档的 state 级分类缓存 —— <b>仅 {@link #classifyLegacy}({@code !voxel classcache off})
+     * 使用</b>,即改动前的旧路径原样保留(见 {@link #classifyLegacy} 的方法注释)。
+     * 快路径(默认)不再写它:类别按 {@code Block} 身份走 {@link #BLOCK_CAT}。
+     * <p>缓存策略(显式选择,取任务书推荐 (i) 的两个子项,合起来用)</b>:
      * <ol>
      *   <li>位置无关档按 {@code BlockState} 身份缓存;</li>
      *   <li>位置相关(形状)档<b>绝不</b>写本缓存,改由 {@link #SHAPE_CACHE} 以
@@ -128,6 +135,44 @@ public final class VoxelGrid {
      * 渲染线程单线程访问。
      */
     private static final java.util.IdentityHashMap<BlockState, Integer> CLASS_CACHE = new java.util.IdentityHashMap<>();
+
+    // ------------------------------------------------------------------
+    // 2026-09-25 分类快路径(!voxel classcache,默认 on)
+    // ------------------------------------------------------------------
+    // 动机(唯一剩下的单格热点头,见 BACKLOG §2.22 ⑤):旧路径**每个非空气格**都要
+    //   BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString()  ← 每格新建 String
+    //   + LEAF_IDS.contains(key) / VEG_IDS.contains(key)              ← 两次字符串哈希
+    // 而这两张表按**方块注册 ID** 判定(与 state / 坐标无关)⇒ 折叠成"每方块一次"。
+    // 雪原场景一次重建约 15.6 万非空气格,全部走这条路。
+    //
+    // 与根因③的边界(逐条对应,勿合并):
+    //  · 树叶/软植被 = 纯 block-id 判定 ⇒ 按 Block 身份缓存安全;
+    //  · **空气不按方块冻结**:`state.isAir()` 是 state 谓词(BlockStateBase.isAir()
+    //    → Block.isAir(BlockState),模组可按状态覆写),逐格判的成本只是一次虚调用;
+    //  · **流体仍逐 state 判**:水logged 的同种方块(isAir 相同、注册 ID 相同)fluid state
+    //    不同 ⇒ 按方块冻结会把"湿"的状态冻到"干"的状态上(漏光/误挡);
+    //  · 形状档(位置相关)策略未动,仍走 SHAPE_CACHE(主键 = occ 实例)。
+    // 有界性:与 SHAPE_CACHE 同款 —— BoundedIdentityCache(满则整体清空),容量见常量。
+    // ------------------------------------------------------------------
+    /** 方块身份类别缓存的容量上限(与 CLASS_CACHE 既有 4096 策略同款;防极端模组包方块数爆炸)。 */
+    private static final int BLOCK_CAT_CAP = 4096;
+    /**
+     * 方块身份 ⇒ {@link VoxelClassifier#CAT_LEAF}/{@link VoxelClassifier#CAT_VEG}/
+     * {@link VoxelClassifier#CAT_OTHER}(只这两档 + 哨兵;**空气与流体不入此表**)。
+     * 值是小整数(自动装箱走 Integer 缓存),命中路径零分配。
+     * 有界性由 {@code BoundedIdentityCacheContract} 断言;此处只断言接线。
+     */
+    private static final BoundedIdentityCache<Block, Integer> BLOCK_CAT =
+            new BoundedIdentityCache<>(BLOCK_CAT_CAP);
+
+    /**
+     * 分类快路径总开关:{@code !voxel classcache on|off},默认 on;off = 旧路径
+     * ({@link #classifyLegacy},逐格字符串判定 + state 级 CLASS_CACHE),供同实例 A/B 与一键回退。
+     */
+    private static volatile boolean classCacheEnabled = true;
+
+    /** 类别缓存命中/未命中累计(诊断 + 契约;渲染线程单线程,不追求原子)。 */
+    private static long catHits, catMisses;
     /**
      * 位置相关档的"形状身份"缓存:<b>主键 = {@code getOcclusionShape} 的 {@code VoxelShape} 实例</b>
      * (occ 是分档占比的真源,Lead 复核项 ③),值里再存 {@code getCollisionShape} 实例做一致性校验
@@ -189,6 +234,18 @@ public final class VoxelGrid {
         String a = arg == null ? "" : arg.trim();
         if ("on".equals(a)) { enabled = true; snap = null; }
         else if ("off".equals(a)) { enabled = false; }
+        else if (a.startsWith("classcache")) {
+            // !voxel classcache on|off(2026-09-25,默认 on):分类快路径总开关。
+            // on  = 按方块身份缓存"树叶/软植被"类别(去掉逐格 String 分配 + 两次字符串哈希);
+            // off = 改动前的逐格字符串判定(见 classifyLegacy)。
+            // 两条路径逐状态同码(VoxelRealRegistryContract 全 registry 穷举钉死)⇒ 可同实例 A/B。
+            // 改值即作废快照 ⇒ 下一帧按所选路径重建,便于"同实例同姿势"的 A/B。
+            String rest = a.length() > 10 ? a.substring(10).trim() : "";
+            if (rest.equals("on")) { classCacheEnabled = true; snap = null; return "voxel classcache=on"; }
+            if (rest.equals("off")) { classCacheEnabled = false; snap = null; return "voxel classcache=off"; }
+            return "voxel classcache=" + (classCacheEnabled ? "on" : "off")
+                    + " (usage: !voxel classcache on|off)";
+        }
         else if (a.startsWith("box")) {
             // !voxel box <0.1..1.0>:遮挡盒半径收缩系数(2026-09-25 性能轮)。
             // 改值即作废快照 ⇒ 下一帧按新盒重建,便于"同实例同姿势"的 A/B/C 对照。
@@ -248,6 +305,11 @@ public final class VoxelGrid {
             sumClearMs = sumLoopMs = 0; sumCells = sumPacked = 0;
             sReadNs = sClassifyNs = sPackNs = 0; sRcSamples = sPackSamples = 0;
             builds = 0;
+            // cat 计数是"这一轮"的诊断量 ⇒ 一起清零;但 **BLOCK_CAT 本身刻意不清**
+            // ——它是稳态缓存(按方块身份,内容与轮次无关),清了只会让下一帧白重算一遍、
+            // 把 A/B 的第一帧污染成"未命中风暴"。⇒ 判断"这一轮跑的是哪条路径"请只看
+            // profile 行尾的 classcache=on|off 字段,不要用 cat= 计数当臂标识。
+            catHits = catMisses = 0;
             return "voxel profile reset";
         }
         else if (a.equals("profile")) {
@@ -266,6 +328,10 @@ public final class VoxelGrid {
      * <p>单行输出(与 {@code !voxel status} 同规,便于中继逐行回显与驱动正则匹配)。
      * {@code perCell} 的单位成本来自采样(每 {@value #SAMPLE_STRIDE} 格一次);
      * 用它 × 计数器即可把 {@code loop} 拆成 read/classify/pack 三段。</p>
+     *
+     * <p>行尾 {@code classcache=on|off} = 分类快路径开关({@code !voxel classcache}),
+     * 供测试同事确认"这一轮测的是哪条路径";{@code cat=命中/未命中} = 方块身份类别缓存的
+     * 累计计数(off 时恒 0/0;on 时未命中数应 ≈ 本场景用到的方块种数,不是格数)。</p>
      */
     public static String profile() {
         double avgClear = builds > 0 ? sumClearMs / builds : 0;
@@ -280,10 +346,35 @@ public final class VoxelGrid {
         return String.format(java.util.Locale.ROOT,
                 "voxel profile: builds=%d box=%.2f last: clear=%.2fms loop=%.2fms total=%.2fms "
                         + "cells=%d packed=%d sections=%d air=%d filled=%d | perCell %s %s | "
-                        + "avg: clear=%.2fms loop=%.2fms | sum cells=%d packed=%d cone=%s lagmax=%.1f",
+                        + "avg: clear=%.2fms loop=%.2fms | sum cells=%d packed=%d cone=%s lagmax=%.1f "
+                        + "classcache=%s cat=%d/%d",
                 builds, boxFraction, lastClearMs, lastLoopMs, lastBuildMs,
                 lastCells, lastPacked, lastSecTotal, lastSecAir, lastSecFilled,
-                perRc, perPack, avgClear, avgLoop, sumCells, sumPacked, (coneBox ? "on" : "off"), maxBoxLagDeg);
+                perRc, perPack, avgClear, avgLoop, sumCells, sumPacked, (coneBox ? "on" : "off"), maxBoxLagDeg,
+                (classCacheEnabled ? "on" : "off"), catHits, catMisses);
+    }
+
+    // ------------------------------------------------------------------
+    // 契约/诊断钩子(包私有:只给同包的契约与 !voxel profile 用,生产路径不调用)
+    // ------------------------------------------------------------------
+
+    /** 方块身份类别缓存容量上限(接线契约断言用)。 */
+    static int blockCategoryCacheCap() { return BLOCK_CAT_CAP; }
+
+    /** 方块身份类别缓存当前条目数(有界性运行期断言用)。 */
+    static int blockCategoryCacheSize() { return BLOCK_CAT.size(); }
+
+    /** 类别缓存命中数(累计;不受 {@code !voxel profile reset} 之外的读写影响)。 */
+    static long categoryCacheHits() { return catHits; }
+
+    /** 类别缓存未命中数(累计;每"种"方块计一次,不是每格)。 */
+    static long categoryCacheMisses() { return catMisses; }
+
+    /** 契约钩子:清空类别缓存与计数,使"第一次遇到某方块"可被确定性地观察。 */
+    static void resetBlockCategoryCache() {
+        BLOCK_CAT.clear();
+        catHits = 0;
+        catMisses = 0;
     }
 
     public static String status() {
@@ -517,24 +608,97 @@ public final class VoxelGrid {
     }
 
     /**
-     * 分类(2026-09-18 雪地方格阵列根因轮重写;C 口径)。
+     * 分类(2026-09-18 雪地方格阵列根因轮重写;C 口径;2026-09-25 加分类快路径)。
      *
      * <p>两级:<b>位置无关档</b>(空气 / 树叶 ID / 软植被 ID / 流体,与
-     * block.properties 的 2001/2002 同源)按 state 身份缓存;<b>位置相关档</b>
+     * block.properties 的 2001/2002 同源);<b>位置相关档</b>
      * (其余所有方块,含雪层/地毯/半砖/楼梯/栅栏/模组方块)按当前格真实
-     * <b>碰撞形 + 遮挡形</b>分档,且不入 {@link #CLASS_CACHE}(见该字段注释的缓存策略)。</p>
+     * <b>碰撞形 + 遮挡形</b>分档,且不写任何按方块/状态冻结的类别缓存
+     * (改走有界 {@link #SHAPE_CACHE} 且主键 = occ 实例)。</p>
+     *
+     * <p><b>快路径(默认,{@code !voxel classcache on})</b>:空气逐 {@code state} 判;
+     * 树叶/软植被按 {@code Block} 身份走 {@link #BLOCK_CAT}(每方块一次注册 ID 判定,
+     * 取代旧路径的逐格 {@code toString()} + 两次字符串哈希);流体仍逐 {@code state} 判
+     * (水logged);形状档未变。判定顺序与旧路径逐字一致:
+     * 空气 → 树叶 → 软植被 → 流体 → 形状。</p>
      *
      * <p>根因②:形状查询前必须 {@code CURSOR.set(x, y, z)};旧代码从不 set ⇒
      * {@code isSolidRender} 永远在世界原点求值。{@code VoxelGridWiringContract}
      * 以源码文本钉住"set 先于两个形状查询、形状分支不含 CODE_SOLID、形状分支不写
-     * CLASS_CACHE(改走有界 SHAPE_CACHE 且主键 = occ 实例)"。</p>
+     * CLASS_CACHE/BLOCK_CAT(改走有界 SHAPE_CACHE 且主键 = occ 实例)"。</p>
      *
      * <p><b>可见性</b>:包私有 + 形参类型 {@link BlockGetter}(而非 Level),以便
      * {@code VoxelRealRegistryContract} 用真 registry 的 {@code Blocks.*} +
      * {@code EmptyBlockGetter.INSTANCE} <b>直接驱动本生产方法</b>(而不是在测试里复制一份
-     * 分档逻辑)——"测的路径 = 生产路径"。</p>
+     * 分档逻辑)——"测的路径 = 生产路径";该契约还会把 {@code !voxel classcache} 两侧的
+     * 全 registry 穷举逐状态对账(语义不变的可判定证据)。</p>
      */
     static int classify(BlockGetter level, BlockState state, int x, int y, int z) {
+        // !voxel classcache off = 改动前的旧路径(classifyLegacy 一字不改地保留)
+        if (!classCacheEnabled) return classifyLegacy(level, state, x, y, z);
+        // 空气:**逐 state** 判定,不按方块身份冻结 —— isAir 是 state 谓词
+        // (BlockStateBase.isAir() → Block.isAir(BlockState),模组可按状态覆写),
+        // 而逐格判的成本只是一次虚调用 + 布尔读,与查表同量级。旧路径同样先判空气。
+        if (state.isAir()) return VoxelField.CODE_EMPTY;
+        int code;
+        Block block = state.getBlock();
+        Integer cat = BLOCK_CAT.get(block);
+        if (cat == null) {
+            // 每个方块只做一次:注册 ID ⇒ 类别(树叶表先于软植被表,顺序即语义)
+            String key = BuiltInRegistries.BLOCK.getKey(block).toString();
+            cat = VoxelClassifier.leafVegCategory(LEAF_IDS.contains(key), VEG_IDS.contains(key));
+            BLOCK_CAT.put(block, cat);
+            catMisses++;
+        } else {
+            catHits++;
+        }
+        int early = VoxelClassifier.codeForBlockCategory(cat);
+        if (early != VoxelClassifier.CODE_FALLTHROUGH) {
+            code = early; // 树叶 / 软植被:纯 block-id 判定 ⇒ 按方块身份缓存安全
+        } else if (!state.getFluidState().isEmpty()) {
+            code = VoxelField.CODE_EMPTY; // 水/熔岩:与 SSO 一致透光(**仍逐 state 判**:水logged 不同)
+        } else {
+            // 位置相关档:必须按当前格 set CURSOR(根因②)。
+            CURSOR.set(x, y, z);
+            VoxelShape coll = state.getCollisionShape(level, CURSOR);
+            VoxelShape occ = state.getOcclusionShape(level, CURSOR);
+            // 缓存主键 = occ 实例(占比真源);命中还需 coll 身份一致(守卫 1/2 读 coll)。
+            ShapeCode hit = SHAPE_CACHE.get(occ);
+            if (hit != null && hit.coll() == coll) return hit.code();
+            List<AABB> collBoxes = coll.toAabbs();
+            List<AABB> occBoxes = occ.toAabbs();
+            int collN = collBoxes.size();
+            int occN = occBoxes.size();
+            if (COLL_SCRATCH.length < collN * VoxelClassifier.BOX_STRIDE) {
+                COLL_SCRATCH = new double[collN * VoxelClassifier.BOX_STRIDE];
+            }
+            if (OCC_SCRATCH.length < occN * VoxelClassifier.BOX_STRIDE) {
+                OCC_SCRATCH = new double[occN * VoxelClassifier.BOX_STRIDE];
+            }
+            fill(collBoxes, COLL_SCRATCH);
+            fill(occBoxes, OCC_SCRATCH);
+            int shapeCode = VoxelClassifier.codeForShapes(COLL_SCRATCH, collN, OCC_SCRATCH, occN);
+            SHAPE_CACHE.put(occ, new ShapeCode(coll, shapeCode));
+            return shapeCode;
+        }
+        return code;
+    }
+
+    /**
+     * <b>改动前的旧路径</b>({@code !voxel classcache off}):逐格
+     * {@code getKey(state.getBlock()).toString()} + 两次 {@code HashSet<String>} 查找 +
+     * 流体判定,位置无关档按 {@code BlockState} 身份走 {@link #CLASS_CACHE}。
+     *
+     * <p>为什么原样留一份而不与快路径共用代码:它同时是 ① 同实例 A/B 的<b>对照臂</b>
+     * ② 一键回退的实现,所以它必须是"读起来就是改前那份代码",不能顺手重构
+     * (否则 A/B 的对照就不再是"新旧之差")。两条路径的形状分支<b>逐字相同</b>,
+     * 且 {@code VoxelRealRegistryContract} 以<b>全 registry 穷举</b>断言"开关两侧逐状态同码"
+     * —— 任何一侧(含形状分支)被改动都会立刻变红,不存在"两份悄悄漂移"的空间。</p>
+     *
+     * <p>行为与 {@link #classify} 的唯一差别是速度:语义(判定顺序 空气 → 树叶 → 软植被 →
+     * 流体 → 形状)与产物逐字相同。</p>
+     */
+    static int classifyLegacy(BlockGetter level, BlockState state, int x, int y, int z) {
         Integer cached = CLASS_CACHE.get(state);
         if (cached != null) return cached;
         int code;

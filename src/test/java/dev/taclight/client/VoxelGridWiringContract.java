@@ -27,9 +27,15 @@ import java.util.regex.Pattern;
  *   <li>根因② 接线:{@code CURSOR.set(x, y, z)} 必须在 {@code getCollisionShape(level, CURSOR)}
  *       之前,且旧的 {@code isSolidRender(level, CURSOR)} 已被移除;{@code classify} 包私有 +
  *       形参 {@code BlockGetter}(供真 registry 契约直接驱动);</li>
- *   <li>根因③ 缓存策略:形状分支不得写 {@code CLASS_CACHE}(位置无关档)且不得回
+ *   <li>根因③ 缓存策略:形状分支不得写 {@code CLASS_CACHE}/{@code BLOCK_CAT}(位置无关档)且不得回
  *       {@code CODE_SOLID};形状键必须是 {@code VoxelShape} 实例,且由有界
  *       {@code BoundedIdentityCache} 承载;</li>
+ *   <li>分类快路径接线(2026-09-25,{@code !voxel classcache on|off}):{@code classify} 首行按开关
+ *       分派 ⇒ off 走旧路径 {@code classifyLegacy};快路径 = 空气逐 state 判 + 树叶/软植被按
+ *       {@code Block} 身份查有界 {@code BLOCK_CAT} + <b>流体仍逐 state 判</b> + 形状不变;
+ *       旧路径必须原样保留(逐格 {@code toString()} + 两次字符串哈希 + state 级 CLASS_CACHE),
+ *       且两条路径的<b>形状分支逐字相同</b>。运行时的"开关两侧逐状态同码"由
+ *       {@code VoxelRealRegistryContract} 承担;</li>
  *   <li>镜像一致性:{@code block.properties} 的 2001/2002 与 {@code VoxelGrid} 的
  *       VEG_IDS/LEAF_IDS 同源;新增的 2003(透光档)与着色器 0.0 分支对齐。</li>
  * </ul>
@@ -55,7 +61,7 @@ public class VoxelGridWiringContract {
         check(!body.contains("isSolidRender"),
                 "旧的 isSolidRender(level, CURSOR) 判定已移除(同一 CURSOR 被两处复用是根因②的成因)");
 
-        // ---------------- 2. 根因①③:形状分档 + 缓存策略 ----------------
+        // ---------------- 2. 根因①③:形状分档 + 缓存策略(快路径) ----------------
         int elseAt = body.lastIndexOf("else {", setAt);
         check(elseAt > 0, "形状分支是 classify 内的 else { ... } 块");
         String shapeBranch = balancedBlock(body, body.indexOf('{', elseAt));
@@ -65,7 +71,8 @@ public class VoxelGridWiringContract {
         check(shapeBranch.contains("VoxelClassifier.codeForShapes"), "形状分支用 VoxelClassifier.codeForShapes 落档(不再是兜底实心)");
         check(!shapeBranch.contains("CODE_SOLID"),
                 "形状分支不得回 CODE_SOLID(旧兜底 = 雪层整格实心 ⇒ 方格阵列;违反即本断言变红)");
-        check(!shapeBranch.contains("CLASS_CACHE"), "形状分支不写位置无关档的 CLASS_CACHE(位置相关结论不得按 state 冻结)");
+        check(!shapeBranch.contains("CLASS_CACHE") && !shapeBranch.contains("BLOCK_CAT"),
+                "形状分支不写任何按方块/状态冻结的类别缓存(位置相关结论不得按 state/block 冻结)");
         check(shapeBranch.contains("SHAPE_CACHE.get(occ)")
                         && shapeBranch.contains("SHAPE_CACHE.put(occ, new ShapeCode(coll, shapeCode))"),
                 "形状缓存主键 = occ 形状实例(占比真源),值里带 coll 实例");
@@ -73,20 +80,65 @@ public class VoxelGridWiringContract {
                 "命中还需 coll 身份一致(守卫 1/2 读 coll;只按 occ 命中在模组方块常量 occ + 变 coll 时会误命中)");
         check(!shapeBranch.contains("get(state)") && !shapeBranch.contains("put(state"),
                 "形状缓存键必须是形状而非 BlockState(键回退到 state 即等于重演根因③)");
+        check(!shapeBranch.contains("SHAPE_CACHE.clear()"),
+                "形状分支不自带清空逻辑(上限+清空已内聚到 BoundedIdentityCache,避免两处口径分叉)");
         // 有界性接线(Lead 复核项 ①):上限必须真的接上纯类,而不是裸露 IdentityHashMap
         check(grid.contains("private static final int SHAPE_CACHE_CAP = 4096;"),
                 "SHAPE_CACHE 容量常量 = 4096");
         check(grid.contains("new BoundedIdentityCache<>(SHAPE_CACHE_CAP)")
                         && grid.contains("BoundedIdentityCache<VoxelShape, ShapeCode> SHAPE_CACHE"),
                 "SHAPE_CACHE 由 BoundedIdentityCache 承载(有界性语义在纯类里,由 BoundedIdentityCacheContract 断言)");
-        check(!shapeBranch.contains("SHAPE_CACHE.clear()"),
-                "形状分支不自带清空逻辑(上限+清空已内聚到 BoundedIdentityCache,避免两处口径分叉)");
-        int putAt = body.indexOf("CLASS_CACHE.put");
-        check(putAt > setAt,
-                "唯一的 CLASS_CACHE.put 位于形状分支之后 ⇒ 形状分支已 return、不可达(位置相关结论永不入 state 级缓存)");
         check(!body.contains("CODE_SOLID"),
                 "classify 方法体内不出现 CODE_SOLID(实心只能经 codeForShapes 依真实形状产出)");
         check(!body.contains("默认实心"), "classify 内不再有\"默认实心\"兜底");
+
+        // ---------------- 2b. 分类快路径接线(2026-09-25,!voxel classcache on) ----------------
+        // 红对照(已做,见 commit 信息):把 classify 改回旧路径(直接 return classifyLegacy)⇒
+        // 本组断言(BLOCK_CAT/leafVegCategory/分派行)全部变红。
+        check(body.contains("if (!classCacheEnabled) return classifyLegacy(level, state, x, y, z);"),
+                "classify 首行按 classcache 开关分派:off ⇒ 旧路径 classifyLegacy(一键回退)");
+        check(body.contains("if (state.isAir()) return VoxelField.CODE_EMPTY;"),
+                "空气逐 state 判(不按方块冻结:isAir 是 state 谓词 Block.isAir(BlockState),模组可按状态覆写)");
+        check(body.contains("Block block = state.getBlock();") && body.contains("BLOCK_CAT.get(block)"),
+                "树叶/软植被按 Block 身份查有界缓存(取代逐格 getKey().toString() + 两次字符串哈希)");
+        check(body.contains("VoxelClassifier.leafVegCategory(LEAF_IDS.contains(key), VEG_IDS.contains(key))"),
+                "类别判定收敛到纯函数 VoxelClassifier.leafVegCategory(顺序 = 树叶先于软植被)");
+        check(body.contains("VoxelClassifier.codeForBlockCategory(cat)")
+                        && body.contains("CODE_FALLTHROUGH"),
+                "只有 LEAF/VEG 能早返回(=codeForBlockCategory);CAT_OTHER ⇒ 哨兵,继续走流体/形状");
+        check(body.contains("!state.getFluidState().isEmpty()"),
+                "流体仍逐 state 判(水logged 的同种方块 fluid state 不同 ⇒ 不得按 Block 冻结)");
+        int catPutAt = body.indexOf("BLOCK_CAT.put");
+        int fluidAt = body.indexOf("state.getFluidState()");
+        check(catPutAt > 0 && fluidAt > catPutAt,
+                "类别缓存写入区先于流体判定出现 ⇒ 流体结论永不入按方块的类别缓存");
+        check(body.indexOf("state.isAir()") < body.indexOf("BLOCK_CAT.get"),
+                "判定顺序与旧路径一致:空气 → 树叶 → 软植被 → 流体 → 形状");
+        check(grid.contains("private static final int BLOCK_CAT_CAP = 4096;"),
+                "BLOCK_CAT 容量常量 = 4096(与 CLASS_CACHE 既有策略同款)");
+        check(grid.contains("new BoundedIdentityCache<>(BLOCK_CAT_CAP)")
+                        && grid.contains("BoundedIdentityCache<Block, Integer> BLOCK_CAT"),
+                "BLOCK_CAT 由 BoundedIdentityCache 承载(有界性语义在纯类里,由 BoundedIdentityCacheContract 断言)");
+
+        // ---------------- 2c. 旧路径必须原样存在(!voxel classcache off 的对照臂) ----------------
+        String legacy = methodBody(grid, "static int classifyLegacy(");
+        check(legacy.contains("BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString()"),
+                "旧路径保留逐格注册 ID → String(off = 改动前的逐格字符串判定)");
+        check(legacy.contains("LEAF_IDS.contains(key)") && legacy.contains("VEG_IDS.contains(key)"),
+                "旧路径保留两次字符串 HashSet 查找(正是快路径要消掉的成本)");
+        check(legacy.contains("CLASS_CACHE.get(state)") && legacy.contains("CLASS_CACHE.put(state, code)"),
+                "旧路径保留 state 级 CLASS_CACHE(快路径不写它)");
+        int legacyShapeReturn = legacy.indexOf("return shapeCode;");
+        int legacyPutAt = legacy.indexOf("CLASS_CACHE.put");
+        check(legacyShapeReturn > 0 && legacyPutAt > legacyShapeReturn,
+                "旧路径唯一的 CLASS_CACHE.put 位于形状分支之后 ⇒ 形状分支已 return、不可达(位置相关结论永不入 state 级缓存)");
+        String legacyShapeBranch = balancedBlock(legacy,
+                legacy.indexOf('{', legacy.lastIndexOf("else {", legacyShapeReturn)));
+        check(sameLines(legacyShapeBranch, shapeBranch),
+                "两条路径的形状分支逐行同文(缩进层级不同,内容必须一致)⇒ 不允许悄悄漂移"
+                        + "(运行时防线 = 全 registry 的开关两侧对账)");
+        check(!legacy.contains("CODE_SOLID") && !legacy.contains("默认实心"),
+                "旧路径同样不出现 CODE_SOLID / \"默认实心\"兜底(off 不是回到更旧的雪地方格阵列版本)");
 
         // ---------------- 3. 镜像一致性:2001/2002 与 Java ID 表同源 ----------------
         Set<String> veg = javaIds(grid, "VEG_IDS");
@@ -132,6 +184,17 @@ public class VoxelGridWiringContract {
         check(adapter.contains("0.0 薄片档"), "adapter 遮挡系数注释登记 0.0 薄片档(跨包移植面必须看到新档位)");
 
         System.out.println("VoxelGridWiringContract: ALL PASS (" + checks + " checks)");
+    }
+
+    /** 逐行 trim 后比对(用于"两份代码是否同文"的断言;忽略缩进层级差异,但逐行内容必须一致)。 */
+    private static boolean sameLines(String a, String b) {
+        String[] x = a.trim().split("\\R");
+        String[] y = b.trim().split("\\R");
+        if (x.length != y.length) return false;
+        for (int i = 0; i < x.length; i++) {
+            if (!x[i].trim().equals(y[i].trim())) return false;
+        }
+        return true;
     }
 
     private static Set<String> tokenSet(Set<String>... groups) {
