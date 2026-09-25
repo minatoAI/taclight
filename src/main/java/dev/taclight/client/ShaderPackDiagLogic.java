@@ -27,6 +27,18 @@ public final class ShaderPackDiagLogic {
      */
     public enum Status { NO_PACK, ORIGINAL_PACK, TACLIGHT_PACK, INTEROP_INJECTED, INTEROP_FAILED, UNKNOWN }
 
+    /**
+     * 用户可见文案里的按键标签(纯类不能引用 {@code KeyBindings},所以这里放常量)。
+     *
+     * <p><b>2026-09-26 task-16</b>:开灯键默认由 L 改为 <b>J</b>(L 与原版 {@code key.advancements}
+     * 撞车 ⇒ 按 L 弹成就界面)。这两个常量必须与 {@code KeyBindings} 里的默认绑定一致 ——
+     * {@code HandheldGateContract} 用"常量 == {@code KeyMapping.getDefaultKey().getDisplayName()}"钉死,
+     * 谁改键不改文案(或反过来)都会变红。</p>
+     */
+    public static final String FLASHLIGHT_KEY_LABEL = "J";
+    /** 霓虹调试键标签(见 {@link #FLASHLIGHT_KEY_LABEL})。 */
+    public static final String DEBUG_KEY_LABEL = "K";
+
     private ShaderPackDiagLogic() {}
 
     /**
@@ -57,9 +69,11 @@ public final class ShaderPackDiagLogic {
      */
     public static String message(Status st, String pack, String derivedPack) {
         return switch (st) {
-            case TACLIGHT_PACK -> "[TacLight] \u2714 配套包已激活: L=手电筒开关, K=霓虹调试";
+            case TACLIGHT_PACK -> "[TacLight] \u2714 配套包已激活: " + FLASHLIGHT_KEY_LABEL + "=手电筒开关, "
+                    + DEBUG_KEY_LABEL + "=霓虹调试";
             case INTEROP_INJECTED -> "[TacLight] \u2714 已注入到 '" + pack
-                    + "' (运行时 interop 注入): L=手电筒开关, K=霓虹调试";
+                    + "' (运行时 interop 注入): " + FLASHLIGHT_KEY_LABEL + "=手电筒开关, "
+                    + DEBUG_KEY_LABEL + "=霓虹调试";
             case INTEROP_FAILED -> "[TacLight] \u2718 当前包 '" + pack
                     + "' 命中注入模板但注入失败(见日志 interop 行)。可先在光影界面选 '" + derivedPack + "' 绕过";
             case ORIGINAL_PACK -> "[TacLight] \u2718 当前包 '" + pack + "' 无 TacLight 注入。请到选项>视频设置>光影(shaders)选择 '"

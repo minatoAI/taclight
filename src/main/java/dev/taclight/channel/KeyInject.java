@@ -35,11 +35,15 @@ import java.util.List;
  * {@link Tracker} 全在这里,由 {@code KeyInjectContract} 钉(每条断言都有红对照)。</p>
  */
 public final class KeyInject {
-    /** 原版 {@code mc.options} 映射(tick 路径消费):5 个动作键 + 9 个 hotbar 槽位。 */
+    /** 原版 {@code mc.options} 映射(tick 路径消费):5 个动作键 + 9 个 hotbar 槽位 + 成就界面。 */
     public static final String[] VANILLA = {
             "use", "attack", "jump", "sneak", "sprint",
             "hotbar.1", "hotbar.2", "hotbar.3", "hotbar.4", "hotbar.5",
             "hotbar.6", "hotbar.7", "hotbar.8", "hotbar.9",
+            // 2026-09-26 task-16 加:原版 key.advancements(默认 L)。加它的目的是"换键后仍能验证
+            // 原版行为没被误伤"(task-16 验收要证"原版 L 仍照常打开成就界面"),同时它正好是
+            // 与旧默认手电键撞车的那一个。
+            "advancements",
     };
 
     /** TacLight 自己的按键(InputEvent.Key 路径消费;名字 = 语义名,顺序同 {@link #TACLIGHT_EQUIV})。 */
@@ -220,16 +224,20 @@ public final class KeyInject {
     }
 
     /**
-     * 帮助/交接里必须写明的<b>已知键位冲突</b>(2026-09-26 qa task-10 实测):
-     * TacLight 的手电筒键(默认 {@code L})与原版 {@code key.advancements} 默认同键
+     * 帮助/交接里必须写明的<b>键位冲突历史与现状</b>(2026-09-26 qa task-10 实测 + task-16 修复):
+     * TacLight 开灯键旧默认 {@code L} 与原版 {@code key.advancements} 默认同键
      * (反编译依据:{@code Options} 构造里 {@code new KeyMapping("key.advancements", 76, …)},76 = GLFW_KEY_L)
-     * ⇒ 注入/实按 L 会**同时打开成就界面**,而**界面开着时下一次注入会被 MC 吞掉**
-     * (qa 加 {@code !back} 后 4/4 生效)。本任务只做"注入前 setScreen(null)"这一层,换默认键位属产品决策。
+     * ⇒ 按 L 会**同时打开成就界面**,且**界面开着时下一次注入会被 MC 吞掉**(qa 加 {@code !back} 后 4/4 生效)。
+     *
+     * <p><b>现状(task-16)</b>:默认键已改为 {@code J}(未占用键,依据见 {@code KeyBindings} 普查),
+     * 冲突消除;{@code !key} 另外每次注入前 {@code setScreen(null)} 兜底(界面开着也不怕)。
+     * 老实例若在 {@code options.txt} 里显式存过 L,仍以用户配置为准(不强行覆盖)。</p>
      */
     public static String conflictNote() {
-        return "已知键位冲突: 手电筒键默认 L 与原版 key.advancements(76=GLFW_KEY_L)同键 ⇒ 按 L 会同时弹成就界面,"
-                + "界面开着时注入会被 MC 吞掉(已加:!key 注入前先 setScreen(null);保险起见前面也可发 !back)。"
-                + "换默认键位属产品决策,未改。";
+        return "键位冲突历史: 手电筒键旧默认 L 与原版 key.advancements(76=GLFW_KEY_L)同键 ⇒ 曾按 L 同时弹成就界面、"
+                + "界面开着还会吞掉下一次注入。**现状(2026-09-26 task-16): 默认键已改为 J(未占用键),冲突已消除**;"
+                + "!key 另外每次注入前先 setScreen(null) 兜底。老实例 options.txt 里显式存过旧值的仍以用户配置为准。"
+                + "验证原版行为未误伤: !key advancements 50 ⇒ 应照常打开成就界面。";
     }
 
     /** {@code !key list} 第一行:可注入名字 + 各自消费路径。 */

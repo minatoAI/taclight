@@ -196,6 +196,7 @@ public final class KeyInjectContract {
                 {"jump", "mc.options.keyJump"},
                 {"sneak", "mc.options.keyShift"},
                 {"sprint", "mc.options.keySprint"},
+                {"advancements", "mc.options.keyAdvancements"},
                 {"flashlight", "KeyBindings.FLASHLIGHT_TOGGLE"},
                 {"gunlight", "KeyBindings.GUNLIGHT_TOGGLE"},
                 {"debug", "KeyBindings.DEBUG_TOGGLE"},
@@ -247,10 +248,17 @@ public final class KeyInjectContract {
                         && KeyInject.defaultAction("flashlight") == KeyInject.ACTION_NONE
                         && KeyInject.defaultAction("bogus") == KeyInject.ACTION_NONE,
                 "其余名字没有缺省动作(⇒ 仍必须给 down|up|ms,不猜)");
-        // ③ 键位冲突提示:手电筒默认 L 与原版 key.advancements 同键(Options 里 76 = GLFW_KEY_L)
+        // ③ 键位冲突提示:手电筒键旧默认 L 与原版 key.advancements 同键(Options 里 76 = GLFW_KEY_L);
+        //    task-16 已把默认改成 J,note 里要说明"现状 + 怎么验证原版没被误伤(!key advancements)"
         String note = KeyInject.conflictNote();
         check(note.contains("key.advancements") && note.contains("GLFW_KEY_L") && note.contains("setScreen"),
                 "conflictNote:点名 key.advancements / L / 已加 setScreen 兜底");
+        check(note.contains("J") && note.contains("advancements"),
+                "conflictNote 说明现状(默认已改 J)+ 给出验证方式(!key advancements): " + note);
+        // 原版成就键可注入(2026-09-26 task-16):用来证"换键没误伤原版行为"
+        check(KeyInject.isVanilla("advancements")
+                        && KeyInject.PATH_TICK.equals(KeyInject.consumptionPath("advancements")),
+                "advancements = 原版(tick 路径)可注入名字(默认 L,用于验证原版行为未被误伤)");
         check(KeyInject.usage().contains("hotbar.N"), "usage 里写明 hotbar.N 可省动作(用 'hotbar.N' 而非 INJECTABLE 里的 hotbar.1 判别)");
         // ④ 接线层(只看代码行)
         check(codeLineContains(relay, "COUNTERS.record(name, down);"),
@@ -268,6 +276,11 @@ public final class KeyInjectContract {
         int idxFire = relay.indexOf("fire(mc, name, m, true);");
         check(idxClose > 0 && idxFire > idxClose, "关界面发生在注入**之前**(order)");
         check(codeLineContains(relay, "KeyInject.conflictNote()"), "!key list 打印键位冲突提示");
+        // 有效键名(task-16):把"新键到底生效没有"从排除法推理变成日志级硬证据
+        check(codeLineContains(relay, ".append(\" key=\").append(keyName(mc, name))"),
+                "!key list/注入回执每行打印**有效键名**(key=key.keyboard.j)");
+        check(codeLineContains(relay, "m.getKey().getName()"),
+                "有效键名取自 InputConstants.Key.getName()(vanilla 真源,不是我们自己拼的)");
 
         if (!FAILURES.isEmpty()) {
             throw new AssertionError("FAIL " + FAILURES.size() + " 条: " + FAILURES);

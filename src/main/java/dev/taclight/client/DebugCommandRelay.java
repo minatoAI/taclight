@@ -373,7 +373,7 @@ public final class DebugCommandRelay {
             TacLightMod.LOGGER.info("[TacLight] RELAY agent -> {}", dev.taclight.debug.AgentInput.configure(arg));
             return;
         }
-        // 灯光控制(L 键的程序化等价 —— 键注入不可靠,灯光状态走文件通道)
+        // 灯光控制(开灯键的程序化等价 —— 灯光状态走文件通道)
         if (line.equals("!synth") || line.startsWith("!synth ")) {
             // T11 测试光源夹具:向 SSBO 追加 N 盏合成灯(默认关=0,重启清零)。
             // 命名坑(先例见 L230"必须排在 !beam 之前(startsWith 前缀包含)"):本中继用
@@ -405,7 +405,7 @@ public final class DebugCommandRelay {
                         dev.taclight.channel.LightCommand.describe(act, now, now));
                 return;
             }
-            // 持物门对齐 L 键(2026-09-25):未持手电筒且非霓虹调试时不改状态,回显原因(不假成功)。
+            // 持物门对齐开灯键(2026-09-25):未持手电筒且非霓虹调试时不改状态,回显原因(不假成功)。
             if (!ClientEvents.holdingFlashlight(mc.player) && !ClientLightState.debugMode()) {
                 TacLightMod.LOGGER.info("[TacLight] RELAY light -> ignored (not holding flashlight)");
                 return;
@@ -413,7 +413,7 @@ public final class DebugCommandRelay {
             boolean before = ClientLightState.isOn();
             boolean after = dev.taclight.channel.LightCommand.nextState(act, before);
             ClientLightState.setHandheld(after);
-            // 08-31 实测坑:L 键路径(InjectionEvent) toggle 后会 sendSetLight 上报服务端,
+            // 08-31 实测坑:开灯键路径(InjectionEvent) toggle 后会 sendSetLight 上报服务端,
             // relay 必须对齐,否则服务端实体数据不变 → 其他玩家看不到开关(ssbo count 假 1)。
             dev.taclight.network.TacLightNetwork.sendSetLight(ClientLightState.handheldEffective(), ClientLightState.gunLightEffective());
             TacLightMod.LOGGER.info("[TacLight] RELAY {}",
@@ -782,8 +782,8 @@ public final class DebugCommandRelay {
     //      (旧版用 KeyMapping.getName() 记账 ⇒ press/release 恒 0);
     //   ② 纯选择键缺省动作:`!key hotbar.N` 省略动作 = 一次 tap(50ms)(旧版只回 usage,9 个槽全废);
     //   ③ 注入前 setScreen(null):界面开着时 MC 会吞掉按键(qa 实测:加 !back 后 4/4 生效)。
-    //   已知键位冲突(产品决策,未改):手电筒默认 L 与原版 key.advancements 同键 ⇒ 按 L 同时弹成就界面;
-    //   见 KeyInject.conflictNote(),`!key list` 会打印。
+    //   键位冲突(task-16 已修):旧默认 L 与原版 key.advancements 同键 ⇒ 曾按 L 同时弹成就界面;默认已改 J;
+    //   现状与验证方式见 KeyInject.conflictNote(),!key list 会打印。
     // ==================================================================
     static final class KeyInjectRuntime {
         private static final KeyInject.Tracker TRACKER = new KeyInject.Tracker();
@@ -935,6 +935,9 @@ public final class DebugCommandRelay {
                 case "jump": return mc.options.keyJump;
                 case "sneak": return mc.options.keyShift;
                 case "sprint": return mc.options.keySprint;
+                // task-16:原版成就界面(key.advancements,默认 L)。加它是为了"换键后仍能验证
+                // 原版行为没被误伤":!key advancements 50 ⇒ 应照常打开成就界面。
+                case "advancements": return mc.options.keyAdvancements;
                 case "flashlight": return KeyBindings.FLASHLIGHT_TOGGLE;
                 case "gunlight": return KeyBindings.GUNLIGHT_TOGGLE;
                 case "debug": return KeyBindings.DEBUG_TOGGLE;
@@ -964,6 +967,7 @@ public final class DebugCommandRelay {
         private static String describe(Minecraft mc, String name, String what, String before, String extra) {
             StringBuilder sb = new StringBuilder("key ").append(name).append(' ').append(what)
                     .append(" | path=").append(KeyInject.consumptionPath(name))
+                    .append(" key=").append(keyName(mc, name))
                     .append(" down=").append(down(mc, name))
                     .append(" clickCount=").append(clickCount(mc, name))
                     .append(" | 注入 press=").append(COUNTERS.presses(name))
@@ -988,6 +992,7 @@ public final class DebugCommandRelay {
             for (String name : KeyInject.INJECTABLE) {
                 sb.append("\n  ").append(name)
                         .append(" path=").append(KeyInject.consumptionPath(name))
+                        .append(" key=").append(keyName(mc, name))
                         .append(" down=").append(down(mc, name))
                         .append(" clickCount=").append(clickCount(mc, name))
                         .append(" 注入 press=").append(COUNTERS.presses(name))
@@ -1034,6 +1039,23 @@ public final class DebugCommandRelay {
                 return m != null && m.isDown();
             } catch (Throwable t) {
                 return false;
+            }
+        }
+
+        /**
+         * <b>有效键名</b>(2026-09-26 task-16):vanilla 真源 {@code InputConstants.Key.getName()},
+         * 形如 {@code key.keyboard.j} / {@code key.mouse.left}。
+         *
+         * <p>为什么要有:换默认键之后,"新键到底生效没有"以前只能靠排除法推(先排除 L:没弹成就界面;
+         * 再排除 K:!key debug 没连带翻转 neon)⇒ 现在一行 {@code key=…} 就是**日志级硬证据**;
+         * 也让"options.txt 存了 K 但有效值仍是默认 L"这类持久化问题一眼可见(task-16 实测到)。</p>
+         */
+        private static String keyName(Minecraft mc, String name) {
+            try {
+                KeyMapping m = mappingFor(mc, name);
+                return m == null ? "n/a" : m.getKey().getName();
+            } catch (Throwable t) {
+                return "n/a";
             }
         }
 

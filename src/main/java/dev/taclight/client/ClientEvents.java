@@ -74,8 +74,11 @@ public class ClientEvents {
             if (!holdingFlashlight(Minecraft.getInstance().player) && !ClientLightState.debugMode()) {
                 Minecraft mcL = Minecraft.getInstance();
                 if (mcL.player != null) {
+                    // 键名不写死:从 KeyMapping 现取(2026-09-26 task-16 默认键由 L 改 J,
+                    // 写死文案会随下次改键再次过期)。
                     mcL.player.displayClientMessage(Component.literal(
-                            "[TacLight] 未手持手电筒(taclight:flashlight):先拿在手上再按 L"), false);
+                            "[TacLight] 未手持手电筒(taclight:flashlight):先拿在手上再按 "
+                                    + KeyBindings.FLASHLIGHT_TOGGLE.getTranslatedKeyMessage().getString()), false);
                 }
                 TacLightMod.LOGGER.info("[TacLight] handheld toggle ignored (not holding flashlight)");
                 continue;

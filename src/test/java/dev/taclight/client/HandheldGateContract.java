@@ -26,10 +26,76 @@ public class HandheldGateContract {
         contentLayer();
         wiringLayer();
         lightSemantics();
+        keybindingLayer();
         if (!FAILURES.isEmpty()) {
             throw new AssertionError("FAIL " + FAILURES.size() + " 条: " + FAILURES);
         }
         System.out.println("HandheldGateContract: ALL PASS (" + checks + " checks)");
+    }
+
+    /**
+     * 键位层(2026-09-26 task-16):开灯<b>默认键不得与任何默认绑定撞车</b>。
+     *
+     * <p><b>为什么必须有这条</b>:旧默认 L 撞了原版 {@code key.advancements}(76),导致玩家按 L 开灯
+     * 同时弹出成就界面(task-10 真机)。这次修完还要**防再犯**:谁把默认改回 L(或改成 TaCZ 占用的键)
+     * 都必须**变红**。依据表来自一次性普查(vanilla {@code Options} 构造 + TaCZ 1.1.8 各 {@code *Key}
+     * 类的默认绑定),写在 {@code KeyBindings} 的 javadoc 里可复核。</p>
+     */
+    private static void keybindingLayer() throws Exception {
+        int def = KeyBindings.FLASHLIGHT_TOGGLE.getDefaultKey().getValue();
+        check(KeyBindings.FLASHLIGHT_TOGGLE.getDefaultKey().getType()
+                        == com.mojang.blaze3d.platform.InputConstants.Type.KEYSYM,
+                "开灯默认键是键盘键(不是鼠标键)");
+        check(def > 0, "开灯默认键已绑定(不是 GLFW_KEY_UNKNOWN/0),实际值=" + def);
+        // 原版 1.20.1 默认占用:字母 W A S D E F Q T P L C X + 1..9 + SPACE/LSHIFT/LCTRL/TAB/SLASH + F2/F5/F7/F11
+        int[] vanillaKeys = {87, 65, 83, 68, 69, 70, 81, 84, 80, 76, 67, 88, 32, 340, 341, 258, 47,
+                291, 294, 296, 300, 49, 50, 51, 52, 53, 54, 55, 56, 57};
+        check(!contains(vanillaKeys, def),
+                "开灯默认键不与原版 1.20.1 默认键撞车(值=" + def + ")");
+        check(def != 76,
+                "[旧码必红] 开灯默认键不是 L(76 = 原版 key.advancements;旧默认就是它 ⇒ 按 L 弹成就界面)");
+        // TaCZ 1.1.8 默认:R(换弹) H(检视) G(开火模式) V(近战+变焦) C(匍匐) Z(改枪) O(交互) T(配置)
+        int[] taczKeys = {82, 72, 71, 86, 67, 90, 79, 84};
+        check(!contains(taczKeys, def),
+                "开灯默认键不与 TaCZ 1.1.8 默认键撞车(R/H/G/V/C/Z/O/T —— Lead 建议的 V/H/G/R 全在其中)");
+        // TacLight 自己的其它键:M(枪灯) K(霓虹) N(诊断) B(基准) F9(快照)
+        int[] ownKeys = {77, 75, 78, 66, 294};
+        check(!contains(ownKeys, def), "开灯默认键不与 TacLight 其它键撞车(M/K/N/B/F9)");
+        // 文案标签防漂移:纯类里的常量必须等于 KeyBindings 默认键的"字母符号"
+        // (不调 getDisplayName():它可能碰 GLFW 本地库;用 GLFW_KEY_A..Z 的纯算术换算,headless 安全)
+        check(ShaderPackDiagLogic.FLASHLIGHT_KEY_LABEL.equals(letterOf(def)),
+                "[防漂移] ShaderPackDiagLogic.FLASHLIGHT_KEY_LABEL == KeyBindings 默认键符号("
+                        + ShaderPackDiagLogic.FLASHLIGHT_KEY_LABEL + " vs " + letterOf(def) + ")");
+
+        // ---- 源码层:写死的 "L" 必须清干净(否则下次改键又会过期) ----
+        String kb = Files.readString(Path.of("src/main/java/dev/taclight/client/KeyBindings.java"), StandardCharsets.UTF_8);
+        check(codeLine(kb, "GLFW.GLFW_KEY_J"), "KeyBindings 默认改用 GLFW_KEY_J(代码行)");
+        check(!codeLine(kb, "GLFW.GLFW_KEY_L"), "[旧码必红] KeyBindings 不再把 GLFW_KEY_L 当默认键");
+        String ev = Files.readString(Path.of("src/main/java/dev/taclight/client/ClientEvents.java"), StandardCharsets.UTF_8);
+        check(codeLine(ev, "getTranslatedKeyMessage()"),
+                "持物门提示里的键名从 KeyMapping 现取(getTranslatedKeyMessage,不写死)");
+        check(!ev.contains("再按 L"), "[旧码必红] ClientEvents 不再写死 '再按 L'");
+        String diag = Files.readString(Path.of("src/main/java/dev/taclight/client/ShaderPackDiagLogic.java"), StandardCharsets.UTF_8);
+        check(diag.contains("FLASHLIGHT_KEY_LABEL + \"=手电筒开关, \""), "光影诊断文案用标签常量拼(不写死 L)");
+        check(!diag.contains("L=手电筒开关"), "[旧码必红] 光影诊断文案不再出现 'L=手电筒开关'");
+        String relay = Files.readString(Path.of("src/main/java/dev/taclight/client/DebugCommandRelay.java"), StandardCharsets.UTF_8);
+        check(codeLine(relay, "case \"advancements\": return mc.options.keyAdvancements;"),
+                "!key 可注入原版成就键(advancements ⇒ mc.options.keyAdvancements)");
+    }
+
+    private static boolean contains(int[] arr, int v) {
+        for (int x : arr) {
+            if (x == v) return true;
+        }
+        return false;
+    }
+
+    /** GLFW_KEY_A..Z(65..90)⇒ "A".."Z";其余键⇒ "?<code>"(纯算术,不碰 GLFW)。 */
+    private static String letterOf(int keyCode) {
+        if (keyCode >= 65 && keyCode <= 90) {
+            return String.valueOf((char) ('A' + (keyCode - 65)));
+        }
+        return "?" + keyCode;
     }
 
     private static void contentLayer() {
