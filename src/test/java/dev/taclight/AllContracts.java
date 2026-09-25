@@ -75,6 +75,10 @@ public class AllContracts {
         // + 可观测行(供真机判定"注册 vs Options.load"先后)⇒ 修"改键重启失效"的玩家级 bug。
         System.out.println("== KeyPersistContract ==");
         dev.taclight.client.KeyPersistContract.main(args);
+        // !hud off|on|status(2026-09-26 task-51 第 2 步):三分支真值表 / mutates /
+        // 赋值落在 !hud 分支片段内 / STATUS 块只读 / describe 逐字 / dev-only 命令串。
+        System.out.println("== HudCommandContract ==");
+        dev.taclight.client.HudCommandContract.main(args);
         System.out.println("== BoundedIdentityCacheContract ==");
         BoundedIdentityCacheContract.main(args);
         System.out.println("== VoxelGridWiringContract ==");
