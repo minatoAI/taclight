@@ -86,7 +86,67 @@ public class VoxelFieldContract {
         check(leaf[2] == 5.5, "树叶格不管(单格透射误差小,保持 scope 最小)");
         check(veg[2] < 5.0, "对照:同坐标实心格确被钳制(排除测试本身假阳性)");
 
-        System.out.println("VoxelFieldContract: ALL PASS (21 checks)");
+        // ---- 7. 盒收缩系数(2026-09-25 性能轮,证据 docs/evidence/2026-09-25-voxel-box/) ----
+        // 目的:灯自身衰减在 0.5r 处只剩 12.5%、0.8r 处 2.6% ⇒ 盒外那段"本来就没多少光",
+        // 缩盒的漏判代价有上界。契约钉死:默认零行为变更 + 收缩单调 + 灯心恒在盒内 + 非法值回 1.0。
+        VoxelField.Box full = VoxelField.boxFor(List.of(L));
+        VoxelField.Box same = VoxelField.boxFor(List.of(L), 1.0f);
+        check(full.dx == same.dx && full.dy == same.dy && full.dz == same.dz
+                        && full.ox == same.ox && full.oy == same.oy && full.oz == same.oz,
+                "fraction=1.0 与旧签名逐字段一致(默认零行为变更)");
+        VoxelField.Box half = VoxelField.boxFor(List.of(L), 0.5f);
+        check(half.dx < full.dx && half.dy < full.dy && half.dz < full.dz, "fraction=0.5 三轴都缩小");
+        // 红对照:若 fraction 被忽略,half == full ⇒ 本条必红。
+        check(half.dx * half.dy * half.dz * 4 < full.dx * full.dy * full.dz,
+                "fraction=0.5 体积 < 1/4(fraction 若被忽略必红)");
+        check(half.ox <= 10 && 10 < half.ox + half.dx && half.oz <= 20 && 20 < half.oz + half.dz,
+                "fraction=0.5 灯心仍在盒内(收缩不把灯挤出去)");
+        check(VoxelField.boxFor(List.of(L), Float.NaN).dx == full.dx, "NaN ⇒ 回 1.0(旧行为)");
+        VoxelField.Box zeroBox = VoxelField.boxFor(List.of(L), 0f);
+        check(zeroBox.dx >= 1 && zeroBox.dx <= full.dx, "0 ⇒ 钳到下限且非退化");
+        check(VoxelField.boxFor(List.of(L), 2.0f).dx == full.dx, ">1 ⇒ 回 1.0");
+        VoxelField.Box minBox = VoxelField.boxFor(List.of(L), 0.01f);
+        check(minBox.dx >= 1 && minBox.dx < half.dx, "0.01 ⇒ 钳到 MIN_BOX_FRACTION(更小且非退化)");
+        check(minBox.ox <= 10 && 10 < minBox.ox + minBox.dx, "下限档灯心仍在盒内");
+
+        // ---- 8. 锥形盒(2026-09-25 性能轮第二步) ----
+        // 目的:只覆盖光锥 ⇒ 被照到的片元(必在锥内)遮挡判定与全尺寸球盒逐格一致;
+        // 盒外只可能是照不到的方向。均匀缩盒做不到这点(实测远景地面变亮,已否)。
+        SpotlightData coneL = SpotlightData.spot(10.6f, 64.4f, 20.3f, 18f,
+                1f, 0.96f, 0.88f, 6f, 1f, 0f, 0f, 0.99f, 0.997f);
+        VoxelField.Box cone = VoxelField.boxForCones(List.of(coneL), VoxelField.CONE_BOX_MARGIN);
+        VoxelField.Box sphere = VoxelField.boxFor(List.of(coneL));
+        int coneVol = cone.dx * cone.dy * cone.dz, sphereVol = sphere.dx * sphere.dy * sphere.dz;
+        // 红对照:若 boxForCones 退化成球盒,本条必红。
+        check(coneVol * 8 < sphereVol, "窄锥盒体积 < 球盒的 1/8(实测约 1/18)");
+        check(cone.ox <= 10 && 10 < cone.ox + cone.dx && cone.oy <= 64 && 64 < cone.oy + cone.dy
+                && cone.oz <= 20 && 20 < cone.oz + cone.dz, "锥尖(灯位)在盒内");
+        double coneTan = Math.sqrt(1 - 0.99 * 0.99) / 0.99;
+        double coneBaseX = 10.6 + 18.0;
+        check(coneBaseX < cone.ox + cone.dx, "锥底心在盒内");
+        double coneEdgeY = 64.4 + 18.0 * coneTan;
+        check(coneEdgeY < cone.oy + cone.dy, "锥底边缘(垂直向 y)在盒内");
+        double coneEdgeZ = 20.3 + 18.0 * coneTan;
+        check(coneEdgeZ < cone.oz + cone.dz, "锥底边缘(垂直向 z)在盒内");
+        double retreat = 10.6 - 2.0; // pos − dir×DESOLIDIFY_MAX
+        check(cone.ox <= retreat && retreat < cone.ox + cone.dx,
+                "灯位−dir×2.0 回退通道在盒内(clampOutOfSolid 不失效)");
+        SpotlightData noDir = SpotlightData.spot(10.6f, 64.4f, 20.3f, 18f,
+                1f, 0.96f, 0.88f, 6f, 0f, 0f, 0f, 0.99f, 0.997f);
+        VoxelField.Box nb = VoxelField.boxForCones(List.of(noDir), VoxelField.CONE_BOX_MARGIN);
+        check(nb.dx * nb.dy * nb.dz >= sphereVol, "方向退化 ⇒ 退回球盒(不缩,安全侧)");
+        SpotlightData wideCone = SpotlightData.spot(10.6f, 64.4f, 20.3f, 18f,
+                1f, 0.96f, 0.88f, 6f, 1f, 0f, 0f, 0.05f, 0.02f);
+        VoxelField.Box wcb = VoxelField.boxForCones(List.of(wideCone), VoxelField.CONE_BOX_MARGIN);
+        check(wcb.dx * wcb.dy * wcb.dz >= sphereVol, "锥过宽(cosOuter=0.05)⇒ 退回球盒");
+        SpotlightData backCone = SpotlightData.spot(10.6f, 64.4f, 20.3f, 18f,
+                1f, 0.96f, 0.88f, 6f, -1f, 0f, 0f, 0.99f, 0.997f);
+        VoxelField.Box bothCone = VoxelField.boxForCones(List.of(coneL, backCone), VoxelField.CONE_BOX_MARGIN);
+        check(bothCone.ox <= 10 && 10 < bothCone.ox + bothCone.dx && bothCone.dx > cone.dx,
+                "两盏反向灯 ⇒ 盒同时含两灯且更宽");
+        check(VoxelField.DEFAULT_CONE_BOX, "锥形盒为默认(2026-09-25 性能轮定案,见证据 README)");
+
+        System.out.println("VoxelFieldContract: ALL PASS (45 checks)");
     }
 
     private static void check(boolean cond, String what) {

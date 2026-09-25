@@ -102,16 +102,103 @@ public final class VoxelField {
      * GLSL 端点出界检查回退 SSO(不会假遮挡,只会退化为旧行为)。
      */
     public static Box boxFor(List<SpotlightData> lights) {
+        return boxFor(lights, 1.0f);
+    }
+
+    /** 盒收缩系数下限(0.1 = 只覆盖射程的 10%,防退化盒)。 */
+    public static final float MIN_BOX_FRACTION = 0.1f;
+
+    /**
+     * 灯集合 → 覆盖盒,半径按 {@code fraction} 收缩(2026-09-25 性能轮,取证见
+     * {@code docs/evidence/2026-09-25-voxel-box/})。
+     *
+     * <p><b>为什么缩是安全的(有上界的取舍,不是拍脑袋)</b>:灯自身的衰减
+     * ({@code taclight_core.glsl:191-197},K=20)在 <b>0.5r 处只剩 12.5%、0.8r 处 2.6%、
+     * 1.0r 处恰好 0</b> ⇒ 盒外那段本来就没多少光,而"盒外 ⇒ 回退 SSO"只会退化为旧行为,
+     * 漏判的亮度上界 = 该距离的衰减值。盒心仍是灯位 ⇒ 灯永远在盒内。</p>
+     *
+     * <p>NaN / ≤0 / &gt;1 一律回 1.0(保持旧行为);低于 {@link #MIN_BOX_FRACTION} 钳到下限。</p>
+     */
+    public static Box boxFor(List<SpotlightData> lights, float fraction) {
+        float f = fraction;
+        if (!(f > 0f) || f > 1f) f = 1.0f;
+        if (f < MIN_BOX_FRACTION) f = MIN_BOX_FRACTION;
         double minX = Double.MAX_VALUE, minY = Double.MAX_VALUE, minZ = Double.MAX_VALUE;
         double maxX = -Double.MAX_VALUE, maxY = -Double.MAX_VALUE, maxZ = -Double.MAX_VALUE;
         for (SpotlightData l : lights) {
-            float r = l.radius();
+            float r = l.radius() * f;
             minX = Math.min(minX, l.posX() - r); maxX = Math.max(maxX, l.posX() + r);
             minY = Math.min(minY, l.posY() - r); maxY = Math.max(maxY, l.posY() + r);
             minZ = Math.min(minZ, l.posZ() - r); maxZ = Math.max(maxZ, l.posZ() + r);
         }
         int ox = floorI(minX), oy = floorI(minY), oz = floorI(minZ);
         int dx = ceilI(maxX) - ox, dy = ceilI(maxY) - oy, dz = ceilI(maxZ) - oz;
+        if (dx > MAX_DIM) { dx = MAX_DIM; ox = floorI((minX + maxX) * 0.5 - MAX_DIM * 0.5); }
+        if (dy > MAX_DIM) { dy = MAX_DIM; oy = floorI((minY + maxY) * 0.5 - MAX_DIM * 0.5); }
+        if (dz > MAX_DIM) { dz = MAX_DIM; oz = floorI((minZ + maxZ) * 0.5 - MAX_DIM * 0.5); }
+        return new Box(ox, oy, oz, dx, dy, dz);
+    }
+
+    /** 锥盒额外余量(格):①覆盖灯位起点格 ②"灯落墙内沿 −dir 回退"通道必须留在盒内
+     *  (clampOutOfSolid 的 DESOLIDIFY_MAX=2.0;余量 3 足够),否则那条 2026-09-05 的修复会静默失效。 */
+    public static final float CONE_BOX_MARGIN = 3.0f;
+
+    /** cosOuter 低于此值视为锥过宽(≈±78°,tanθ 爆炸且几乎无收益)⇒ 该灯退回球盒(安全侧)。 */
+    public static final float CONE_MIN_COS_OUTER = 0.2f;
+
+    /**
+     * 锥形盒是否默认启用(2026-09-25 性能轮定案:启用)。
+     *
+     * <p>真机同实例同姿势对照(证据 {@code docs/evidence/2026-09-25-voxel-box/},夜里锁时间):
+     * 重建 7.36 ms → 0.80–1.40 ms、CPU 体素相位 2.48 → 0.27 ms、p1Low 36.0–37.4 → 49.0–49.9;
+     * 而画面差异(远景区 meanDiff 0.93)<b>落在两组同状态控制对(0.58 / 1.08)之间</b>⇒ 与抖动不可区分。
+     * 对照:均匀缩盒(0.8r)在同一场景是 5.6 倍抖动且整片远景变亮 ⇒ 已否。</p>
+     */
+    public static final boolean DEFAULT_CONE_BOX = true;
+
+    /**
+     * 灯集合 → 覆盖盒:每灯取<b>光锥</b>的轴对齐包围盒(2026-09-25 性能轮第二步)。
+     *
+     * <p><b>为什么锥盒对被照到的地方是"无损"的</b>:光只能照到锥内(锥外 spot=0)⇒ 任何被照到的
+     * 片元都在锥内 ⇒ 灯→片元整条射线都在锥内(凸集)⇒ 该射线的遮挡体也都在锥内 ⇒
+     * <b>遮挡判定与全尺寸球盒逐格一致</b>;盒外只可能是"本来就照不到"的方向(身后/侧后方)。
+     * 这正是<b>均匀缩盒做不到</b>的:均匀缩会把"光能照到的远处"一起切掉——真机实测整片远景地面
+     * 变亮(热图见 {@code docs/evidence/2026-09-25-voxel-box/})。</p>
+     *
+     * <p>几何:锥 = {pos + t·dir + u : t∈[0,L], |u| ≤ t·tanθ}(θ = 外锥半角,L = 灯半径)。
+     * 沿轴 i 的极值 = {@code pos_i + L·max(0, dir_i ± tanθ)}——因 |u_i| ≤ |u| ≤ t·tanθ,
+     * 该界必然包含整个锥。方向退化 / 锥过宽 / cosOuter 非法 ⇒ <b>该灯退回球盒</b>(不缩,安全侧)。</p>
+     */
+    public static Box boxForCones(List<SpotlightData> lights, float margin) {
+        double minX = Double.MAX_VALUE, minY = Double.MAX_VALUE, minZ = Double.MAX_VALUE;
+        double maxX = -Double.MAX_VALUE, maxY = -Double.MAX_VALUE, maxZ = -Double.MAX_VALUE;
+        for (SpotlightData l : lights) {
+            double dx = l.dirX(), dy = l.dirY(), dz = l.dirZ();
+            double len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            double c = l.cosOuter();
+            if (len < 1e-6 || !(c > CONE_MIN_COS_OUTER) || c > 1.0) {
+                double r = l.radius() + margin;
+                minX = Math.min(minX, l.posX() - r); maxX = Math.max(maxX, l.posX() + r);
+                minY = Math.min(minY, l.posY() - r); maxY = Math.max(maxY, l.posY() + r);
+                minZ = Math.min(minZ, l.posZ() - r); maxZ = Math.max(maxZ, l.posZ() + r);
+                continue;
+            }
+            double tan = Math.sqrt(Math.max(0.0, 1.0 - c * c)) / c;
+            double L = l.radius();
+            double nx = dx / len, ny = dy / len, nz = dz / len;
+            minX = Math.min(minX, l.posX() + L * Math.min(0.0, nx - tan) - margin);
+            maxX = Math.max(maxX, l.posX() + L * Math.max(0.0, nx + tan) + margin);
+            minY = Math.min(minY, l.posY() + L * Math.min(0.0, ny - tan) - margin);
+            maxY = Math.max(maxY, l.posY() + L * Math.max(0.0, ny + tan) + margin);
+            minZ = Math.min(minZ, l.posZ() + L * Math.min(0.0, nz - tan) - margin);
+            maxZ = Math.max(maxZ, l.posZ() + L * Math.max(0.0, nz + tan) + margin);
+        }
+        if (minX > maxX || minY > maxY || minZ > maxZ) return new Box(0, 0, 0, 1, 1, 1);
+        int ox = floorI(minX), oy = floorI(minY), oz = floorI(minZ);
+        int dx = ceilI(maxX) - ox, dy = ceilI(maxY) - oy, dz = ceilI(maxZ) - oz;
+        if (dx < 1) dx = 1;
+        if (dy < 1) dy = 1;
+        if (dz < 1) dz = 1;
         if (dx > MAX_DIM) { dx = MAX_DIM; ox = floorI((minX + maxX) * 0.5 - MAX_DIM * 0.5); }
         if (dy > MAX_DIM) { dy = MAX_DIM; oy = floorI((minY + maxY) * 0.5 - MAX_DIM * 0.5); }
         if (dz > MAX_DIM) { dz = MAX_DIM; oz = floorI((minZ + maxZ) * 0.5 - MAX_DIM * 0.5); }

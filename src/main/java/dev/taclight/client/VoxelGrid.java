@@ -67,6 +67,31 @@ public final class VoxelGrid {
     private static float lastBuildMs;
     private static int builds;
 
+    // ------------------------------------------------------------------
+    // 2026-09-25 性能轮(证据 docs/evidence/2026-09-25-voxel-box/):
+    // ① 盒收缩系数:运行时旋钮 !voxel box <f>,默认见 DEFAULT_BOX_FRACTION;
+    // ② 分段计时 + 计数器:回答"7.2ms 花在哪"——擦缓冲 vs 遍历 vs 读/分类/打包。
+    //    采样只在每 SAMPLE_STRIDE 个格子上取一次 nanoTime(单条代码路径,不做分支复制),
+    //    故本 build 的绝对耗时含少量探针开销;同 build 内跨档对比(A/B/C)不受影响。
+    // ------------------------------------------------------------------
+    /** 盒收缩默认值(1.0 = 旧行为;实验后按真机数据定,见 BACKLOG §2.20)。 */
+    public static final float DEFAULT_BOX_FRACTION = 1.0f;
+    private static volatile float boxFraction = DEFAULT_BOX_FRACTION;
+
+    /** 锥形盒开关(2026-09-25 性能轮第二步):只覆盖光锥(被照到的地方遮挡判定不变)。 */
+    private static volatile boolean coneBox = VoxelField.DEFAULT_CONE_BOX;
+
+    private static final int SAMPLE_STRIDE = 256;
+    private static final int SAMPLE_MAX = 1024;
+
+    private static double lastClearMs, lastLoopMs;
+    private static int lastCells, lastPacked, lastSecTotal, lastSecAir, lastSecFilled;
+    private static long sReadNs, sClassifyNs, sPackNs;
+    private static int sRcSamples, sPackSamples;
+    // 跨轮累计(诊断用,不参与判据)
+    private static double sumClearMs, sumLoopMs;
+    private static long sumCells, sumPacked;
+
     private static final BlockPos.MutableBlockPos CURSOR = new BlockPos.MutableBlockPos();
     /**
      * 位置无关档的 state 级分类缓存(仅 空气 / 树叶 ID / 软植被 ID / 流体 会写入)。
@@ -138,9 +163,74 @@ public final class VoxelGrid {
 
     /** !voxel 旋钮:on/off 切换(切换即作废快照),空串/status 返回状态。 */
     public static String configure(String arg) {
-        if ("on".equals(arg)) { enabled = true; snap = null; }
-        else if ("off".equals(arg)) { enabled = false; }
+        String a = arg == null ? "" : arg.trim();
+        if ("on".equals(a)) { enabled = true; snap = null; }
+        else if ("off".equals(a)) { enabled = false; }
+        else if (a.startsWith("box")) {
+            // !voxel box <0.1..1.0>:遮挡盒半径收缩系数(2026-09-25 性能轮)。
+            // 改值即作废快照 ⇒ 下一帧按新盒重建,便于"同实例同姿势"的 A/B/C 对照。
+            String rest = a.length() > 3 ? a.substring(3).trim() : "";
+            if (rest.isEmpty()) return "voxel box=" + fmtF(boxFraction) + " (usage: !voxel box 0.1..1.0)";
+            float f;
+            try {
+                f = Float.parseFloat(rest);
+            } catch (NumberFormatException e) {
+                return "voxel box bad arg '" + rest + "' (want 0.1..1.0)";
+            }
+            float clamped = f;
+            if (!(clamped > 0f) || clamped > 1f) clamped = 1.0f;
+            if (clamped < VoxelField.MIN_BOX_FRACTION) clamped = VoxelField.MIN_BOX_FRACTION;
+            boxFraction = clamped;
+            snap = null;
+            return "voxel box=" + fmtF(clamped) + " (requested " + fmtF(f) + ")";
+        }
+        else if (a.startsWith("cone")) {
+            // !voxel cone on|off:锥形盒开关(2026-09-25 性能轮第二步)。改值即作废快照。
+            String rest = a.length() > 4 ? a.substring(4).trim() : "";
+            if (rest.equals("on")) { coneBox = true; snap = null; return "voxel cone=on"; }
+            if (rest.equals("off")) { coneBox = false; snap = null; return "voxel cone=off"; }
+            return "voxel cone=" + (coneBox ? "on" : "off") + " (usage: !voxel cone on|off)";
+        }
+        else if (a.equals("profile reset")) {
+            sumClearMs = sumLoopMs = 0; sumCells = sumPacked = 0;
+            sReadNs = sClassifyNs = sPackNs = 0; sRcSamples = sPackSamples = 0;
+            builds = 0;
+            return "voxel profile reset";
+        }
+        else if (a.equals("profile")) {
+            return profile();
+        }
         return status();
+    }
+
+    private static String fmtF(float v) {
+        return String.format(java.util.Locale.ROOT, "%.2f", v);
+    }
+
+    /**
+     * {@code !voxel profile}:上一次重建的分段计时与计数器(2026-09-25 性能轮)。
+     *
+     * <p>单行输出(与 {@code !voxel status} 同规,便于中继逐行回显与驱动正则匹配)。
+     * {@code perCell} 的单位成本来自采样(每 {@value #SAMPLE_STRIDE} 格一次);
+     * 用它 × 计数器即可把 {@code loop} 拆成 read/classify/pack 三段。</p>
+     */
+    public static String profile() {
+        double avgClear = builds > 0 ? sumClearMs / builds : 0;
+        double avgLoop = builds > 0 ? sumLoopMs / builds : 0;
+        String perRc = sRcSamples > 0
+                ? String.format(java.util.Locale.ROOT, "read=%.1fns classify=%.1fns n=%d",
+                        (double) sReadNs / sRcSamples, (double) sClassifyNs / sRcSamples, sRcSamples)
+                : "read=n/a classify=n/a n=0";
+        String perPack = sPackSamples > 0
+                ? String.format(java.util.Locale.ROOT, "pack=%.1fns n=%d", (double) sPackNs / sPackSamples, sPackSamples)
+                : "pack=n/a n=0";
+        return String.format(java.util.Locale.ROOT,
+                "voxel profile: builds=%d box=%.2f last: clear=%.2fms loop=%.2fms total=%.2fms "
+                        + "cells=%d packed=%d sections=%d air=%d filled=%d | perCell %s %s | "
+                        + "avg: clear=%.2fms loop=%.2fms | sum cells=%d packed=%d cone=%s",
+                builds, boxFraction, lastClearMs, lastLoopMs, lastBuildMs,
+                lastCells, lastPacked, lastSecTotal, lastSecAir, lastSecFilled,
+                perRc, perPack, avgClear, avgLoop, sumCells, sumPacked, (coneBox ? "on" : "off"));
     }
 
     public static String status() {
@@ -245,13 +335,25 @@ public final class VoxelGrid {
     public static VoxelField.Snapshot update(Minecraft mc, List<SpotlightData> lights) {
         if (!enabled || lights.isEmpty() || mc.level == null) return null;
         Level level = mc.level;
-        VoxelField.Box box = VoxelField.boxFor(lights);
+        VoxelField.Box box = coneBox
+                ? VoxelField.boxForCones(lights, VoxelField.CONE_BOX_MARGIN)
+                : VoxelField.boxFor(lights, boxFraction);
         long tick = level.getGameTime();
         if (snap != null && level == lastLevel && tick == lastTick && box.equals(lastBox)) return snap;
         long t0 = System.nanoTime();
-        java.util.Arrays.fill(DATA, 0);
+        // 只擦本次真正用到的区间:上传只传 usedUints,盒外旧数据从不被读(2026-09-25 性能轮)。
+        int used = (box.dx * box.dy * box.dz + VoxelField.VOXELS_PER_UINT - 1) / VoxelField.VOXELS_PER_UINT;
+        java.util.Arrays.fill(DATA, 0, Math.min(used, DATA.length), 0);
+        long t1 = System.nanoTime();
+        lastCells = 0; lastPacked = 0; lastSecTotal = 0; lastSecAir = 0; lastSecFilled = 0;
+        sReadNs = sClassifyNs = sPackNs = 0; sRcSamples = sPackSamples = 0;
         fill(level, box);
-        lastBuildMs = (System.nanoTime() - t0) / 1e6f;
+        long t2 = System.nanoTime();
+        lastClearMs = (t1 - t0) / 1e6;
+        lastLoopMs = (t2 - t1) / 1e6;
+        lastBuildMs = (t2 - t0) / 1e6f;
+        sumClearMs += lastClearMs; sumLoopMs += lastLoopMs;
+        sumCells += lastCells; sumPacked += lastPacked;
         builds++;
         version++;
         snap = new VoxelField.Snapshot(box.ox, box.oy, box.oz, box.dx, box.dy, box.dz, DATA, version);
@@ -276,16 +378,35 @@ public final class VoxelGrid {
                     int idx = sy - minSecY;
                     if (idx < 0 || idx >= secs.length) continue;
                     LevelChunkSection sec = secs[idx];
-                    if (sec.hasOnlyAir()) continue;
+                    lastSecTotal++;
+                    if (sec.hasOnlyAir()) { lastSecAir++; continue; }
+                    lastSecFilled++;
                     int bx0 = Math.max(box.ox, cx << 4), bx1 = Math.min(x1, (cx << 4) + 15);
                     int by0 = Math.max(box.oy, sy << 4), by1 = Math.min(y1, (sy << 4) + 15);
                     int bz0 = Math.max(box.oz, cz << 4), bz1 = Math.min(z1, (cz << 4) + 15);
                     for (int wy = by0; wy <= by1; wy++) {
                         for (int wz = bz0; wz <= bz1; wz++) {
                             for (int wx = bx0; wx <= bx1; wx++) {
-                                int code = classify(level, sec.getBlockState(wx & 15, wy & 15, wz & 15), wx, wy, wz);
+                                // 分段计时:每 SAMPLE_STRIDE 格采样一次(单条代码路径,不做分支复制)。
+                                lastCells++;
+                                boolean sRc = (lastCells & (SAMPLE_STRIDE - 1)) == 0 && sRcSamples < SAMPLE_MAX;
+                                long ta = sRc ? System.nanoTime() : 0L;
+                                BlockState st = sec.getBlockState(wx & 15, wy & 15, wz & 15);
+                                long tb = sRc ? System.nanoTime() : 0L;
+                                int code = classify(level, st, wx, wy, wz);
+                                long tc = sRc ? System.nanoTime() : 0L;
+                                if (sRc) {
+                                    sReadNs += tb - ta;
+                                    sClassifyNs += tc - tb;
+                                    sRcSamples++;
+                                }
                                 if (code != VoxelField.CODE_EMPTY) {
+                                    boolean sP = (lastPacked & (SAMPLE_STRIDE - 1)) == 0 && sPackSamples < SAMPLE_MAX;
+                                    long td = sP ? System.nanoTime() : 0L;
                                     VoxelField.pack(box, wx - box.ox, wy - box.oy, wz - box.oz, code, DATA);
+                                    long te = sP ? System.nanoTime() : 0L;
+                                    if (sP) { sPackNs += te - td; sPackSamples++; }
+                                    lastPacked++;
                                 }
                             }
                         }
