@@ -189,12 +189,20 @@ public final class VoxelField {
                 double tan = Math.sqrt(Math.max(0.0, 1.0 - c * c)) / c;
                 double L = r;
                 double nx = dx / len, ny = dy / len, nz = dz / len;
-                c0x = l.posX() + L * Math.min(0.0, nx - tan) - margin;
-                c1x = l.posX() + L * Math.max(0.0, nx + tan) + margin;
-                c0y = l.posY() + L * Math.min(0.0, ny - tan) - margin;
-                c1y = l.posY() + L * Math.max(0.0, ny + tan) + margin;
-                c0z = l.posZ() + L * Math.min(0.0, nz - tan) - margin;
-                c1z = l.posZ() + L * Math.max(0.0, nz + tan) + margin;
+                // 精确锥 AABB(2026-09-25 晚修正):垂直于光线的张开量在轴 i 上的分量是
+                // tan·sqrt(1-n_i^2),**不是** tan。原式(d_i ± tan)把整份张开加到每根轴上,
+                // 包括"沿着光线"的那根轴(那里分量恰好为 0)⇒ 45° 时沿轴被算成 2L 而非 L,
+                // 盒反而比球盒还大(真机实测 82 > 76,重建 10.40ms,比优化前更差)。
+                // 修正后:沿轴方向只剩 n_i 那一段,与几何一致。
+                double tx = tan * Math.sqrt(Math.max(0.0, 1.0 - nx * nx));
+                double ty = tan * Math.sqrt(Math.max(0.0, 1.0 - ny * ny));
+                double tz = tan * Math.sqrt(Math.max(0.0, 1.0 - nz * nz));
+                c0x = l.posX() + L * Math.min(0.0, nx - tx) - margin;
+                c1x = l.posX() + L * Math.max(0.0, nx + tx) + margin;
+                c0y = l.posY() + L * Math.min(0.0, ny - ty) - margin;
+                c1y = l.posY() + L * Math.max(0.0, ny + ty) + margin;
+                c0z = l.posZ() + L * Math.min(0.0, nz - tz) - margin;
+                c1z = l.posZ() + L * Math.max(0.0, nz + tz) + margin;
             }
             // 2026-09-25 晚(重场景轮实测):锥的 AABB 在宽锥下会比球盒还大(45° 实测 82³ vs 球盒 76³,
             // 重建 10.4ms vs 7.3ms ⇒ 反而比优化前更差)。与球盒求交:
@@ -220,6 +228,31 @@ public final class VoxelField {
         if (dy > MAX_DIM) { dy = MAX_DIM; oy = floorI((minY + maxY) * 0.5 - MAX_DIM * 0.5); }
         if (dz > MAX_DIM) { dz = MAX_DIM; oz = floorI((minZ + maxZ) * 0.5 - MAX_DIM * 0.5); }
         return new Box(ox, oy, oz, dx, dy, dz);
+    }
+
+    /** 盒原点一次位移超过这么多格就立即重建(瞬移/极速移动兜底,不参与转动节流)。 */
+    public static final float MAX_BOX_SHIFT_BLOCKS = 4.0f;
+
+    /**
+     * 重建决策(纯函数,2026-09-25 转动节流;契约见 {@code VoxelFieldContract})。
+     *
+     * <p>背景:重建门原来是"tick 变了 <b>或</b> 盒变了"。转动时箱形几乎每帧都变 ⇒ <b>逐帧重建</b>
+     * (真机实测 60 次/秒 vs 静止 20 次/秒)。但"箱形滞后一点"的代价是<b>有上界</b>的:
+     * 被照到的片元若落在旧盒外,只是回退到旧的屏幕空间遮挡,而那个方向的光本来就弱。</p>
+     *
+     * <p>所以加一层:<b>盒变了也要方向转过 {@code maxLagDeg} 才重建</b>(tick 门控仍是无条件安全网,
+     * 所以任何情况下的滞后都 ≤1 tick = 50 ms)。</p>
+     *
+     * <p><b>注意</b>{@code lightShiftBlocks} 必须是<b>灯位置</b>的位移,<b>不能</b>用盒原点位移:
+     * 转动本身就会让盒原点移动好几格(实测把瞬移兜底挂在盒原点上时,兜底每 2 帧就触发,
+     * 节流形同虚设:转动重建率被顶回 36/s)。</p>
+     */
+    public static boolean shouldRebuild(boolean tickDue, boolean boxChanged, float dirDeg,
+                                        float lightShiftBlocks, float maxLagDeg, float maxShiftBlocks) {
+        if (tickDue) return true;                  // 50ms 安全网:世界/位置/一切变化的兜底
+        if (!boxChanged) return false;
+        if (lightShiftBlocks >= maxShiftBlocks) return true;   // 瞬移:立刻跟上
+        return dirDeg >= maxLagDeg;                // 转动:滞后满 maxLagDeg 才重建
     }
 
     /** 线性体素索引(GLSL 侧镜像:x + y*dx + z*dx*dy)。局部坐标,调用方保证界内。 */

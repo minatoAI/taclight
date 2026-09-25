@@ -162,7 +162,42 @@ public class VoxelFieldContract {
         check(w45.ox <= hex && hex < w45.ox + w45.dx && w45.oy <= hey && hey < w45.oy + w45.dy,
                 "有效区极值点(锥面上距离恰=r)在盒内");
 
-        System.out.println("VoxelFieldContract: ALL PASS (47 checks)");
+        // ---- 10. 转动节流决策(2026-09-25;真机实测转动时逐帧重建 60/s,静止 20/s) ----
+        final float LAG = 12f, SHIFT = VoxelField.MAX_BOX_SHIFT_BLOCKS;
+        // 红对照:把下面第 3 条的 maxLagDeg 当 0 用(即旧的"盒变就重建")⇒ 该条必红。
+        check(VoxelField.shouldRebuild(true, false, 0f, 0f, LAG, SHIFT),
+                "tick 到点必重建(50ms 安全网)");
+        check(!VoxelField.shouldRebuild(false, false, 90f, 0f, LAG, SHIFT),
+                "盒没变就不重建(方向转了也一样,盒=方向的函数)");
+        check(!VoxelField.shouldRebuild(false, true, LAG - 0.5f, 0f, LAG, SHIFT),
+                "转动未满阈值不重建(旧逻辑此处会重建 ⇒ 逐帧重建)");
+        check(VoxelField.shouldRebuild(false, true, LAG, 0f, LAG, SHIFT),
+                "转动满阈值必重建");
+        check(VoxelField.shouldRebuild(false, true, 0f, SHIFT, LAG, SHIFT),
+                "灯位置瞬时位移>=阈值必重建(瞬移兜底,即使没转动;不能用盒原点——转动也移动盒原点)");
+
+        // ---- 11. 精确锥 AABB(2026-09-25 晚修正):张开量在轴 i 上的分量是 tan·√(1-n_i²) ----
+        // 入射方向按实测的斜向(归一化),45° 锥:旧式(d_i±tan)会给出"向后 16 格"的假延伸。
+        SpotlightData diag45 = SpotlightData.spot(10.6f, 64.4f, 20.3f, 18f,
+                1f, 0.96f, 0.88f, 6f, 0.815f, -0.158f, -0.558f, (float) cos45, (float) cos45);
+        VoxelField.Box dbox = VoxelField.boxForCones(List.of(diag45), VoxelField.CONE_BOX_MARGIN);
+        // 独立算一遍"解析精确 AABB"(再与球盒求交),断言盒不超出它 ±1 格取整。
+        double[] n = {0.815, -0.158, -0.558};
+        double[] pos = {10.6, 64.4, 20.3};
+        String[] ax = {"x", "y", "z"};
+        for (int i = 0; i < 3; i++) {
+            double t = Math.tan(Math.toRadians(45)) * Math.sqrt(Math.max(0.0, 1.0 - n[i] * n[i]));
+            double lo = pos[i] + 18.0 * Math.min(0.0, n[i] - t) - VoxelField.CONE_BOX_MARGIN;
+            double hi = pos[i] + 18.0 * Math.max(0.0, n[i] + t) + VoxelField.CONE_BOX_MARGIN;
+            lo = Math.max(lo, pos[i] - 18.0);
+            hi = Math.min(hi, pos[i] + 18.0);
+            int o = i == 0 ? dbox.ox : i == 1 ? dbox.oy : dbox.oz;
+            int d = i == 0 ? dbox.dx : i == 1 ? dbox.dy : dbox.dz;
+            check(o >= (int) Math.floor(lo) - 1 && o + d <= (int) Math.ceil(hi) + 1,
+                    "斜向 45° 锥的盒不超出解析精确 AABB@" + ax[i] + "(旧式 tan 会把向后延伸算大)");
+        }
+
+        System.out.println("VoxelFieldContract: ALL PASS (55 checks)");
     }
 
     private static void check(boolean cond, String what) {

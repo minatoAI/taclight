@@ -89,6 +89,21 @@ public final class VoxelGrid {
      */
     private static volatile float coneLagDeg = 0f;
 
+    /**
+     * 转动节流阈值(2026-09-25,度):盒变了也要灯方向转过这么多才重建。
+     * 真机实测:不节流时转动逐帧重建(60 次/秒 vs 静止 20 次/秒,见 docs/evidence/2026-09-25-voxel-turn);
+     * 而"箱形滞后 X 度"的画面影响有上界 —— 15° 与零滞后控制对无法区分,90° 才可分辨。
+     * tick 门控仍是无条件安全网 ⇒ 任何滞后 ≤1 tick(50 ms)。默认值由 evidence 的滞后-可见度曲线定。
+     */
+    public static final float DEFAULT_MAX_BOX_LAG_DEG = 12f;
+    private static volatile float maxBoxLagDeg = DEFAULT_MAX_BOX_LAG_DEG;
+    /** 上一次重建时的灯方向(用于算"转过多少度")。 */
+    private static double lastBuildDirX, lastBuildDirY, lastBuildDirZ;
+    private static boolean lastBuildDirValid;
+    /** 上一次重建时的灯位置(瞬移兜底判据;<b>不能</b>用盒原点 —— 转动也会移动盒原点)。 */
+    private static double lastBuildPosX, lastBuildPosY, lastBuildPosZ;
+    private static boolean lastBuildPosValid;
+
     private static final int SAMPLE_STRIDE = 256;
     private static final int SAMPLE_MAX = 1024;
 
@@ -199,6 +214,21 @@ public final class VoxelGrid {
             if (rest.equals("off")) { coneBox = false; snap = null; return "voxel cone=off"; }
             return "voxel cone=" + (coneBox ? "on" : "off") + " (usage: !voxel cone on|off)";
         }
+        else if (a.startsWith("lagmax")) {
+            // !voxel lagmax <deg>:转动节流阈值(0 = 不节流 = 逐帧重建;见 maxBoxLagDeg 注释)。
+            String rest = a.length() > 6 ? a.substring(6).trim() : "";
+            if (rest.isEmpty()) return "voxel lagmax=" + maxBoxLagDeg + "° (0 = 不节流)";
+            float d;
+            try {
+                d = Float.parseFloat(rest);
+            } catch (NumberFormatException e) {
+                return "voxel lagmax bad arg '" + rest + "'";
+            }
+            if (!(d >= 0f) || d > 180f) d = DEFAULT_MAX_BOX_LAG_DEG;
+            maxBoxLagDeg = d;
+            snap = null;
+            return "voxel lagmax=" + d + "° (转动最多滞后这么多才重建;0=逐帧)";
+        }
         else if (a.startsWith("lag")) {
             // !voxel lag <deg>:仅副作用实验用(见 coneLagDeg 注释)。改值即作废快照。
             String rest = a.length() > 3 ? a.substring(3).trim() : "";
@@ -250,10 +280,10 @@ public final class VoxelGrid {
         return String.format(java.util.Locale.ROOT,
                 "voxel profile: builds=%d box=%.2f last: clear=%.2fms loop=%.2fms total=%.2fms "
                         + "cells=%d packed=%d sections=%d air=%d filled=%d | perCell %s %s | "
-                        + "avg: clear=%.2fms loop=%.2fms | sum cells=%d packed=%d cone=%s",
+                        + "avg: clear=%.2fms loop=%.2fms | sum cells=%d packed=%d cone=%s lagmax=%.1f",
                 builds, boxFraction, lastClearMs, lastLoopMs, lastBuildMs,
                 lastCells, lastPacked, lastSecTotal, lastSecAir, lastSecFilled,
-                perRc, perPack, avgClear, avgLoop, sumCells, sumPacked, (coneBox ? "on" : "off"));
+                perRc, perPack, avgClear, avgLoop, sumCells, sumPacked, (coneBox ? "on" : "off"), maxBoxLagDeg);
     }
 
     public static String status() {
@@ -362,7 +392,27 @@ public final class VoxelGrid {
                 ? VoxelField.boxForCones(lagDirs(lights, coneLagDeg), VoxelField.CONE_BOX_MARGIN)
                 : VoxelField.boxFor(lights, boxFraction);
         long tick = level.getGameTime();
-        if (snap != null && level == lastLevel && tick == lastTick && box.equals(lastBox)) return snap;
+        // 转动节流(2026-09-25):盒变了也要方向转过 maxBoxLagDeg 才重建,否则复用旧快照
+        // (tick 门控是无条件安全网 ⇒ 任何滞后都 <=1 tick = 50ms)。
+        float dirDeg = 180f;
+        if (lastBuildDirValid && !lights.isEmpty()) {
+            SpotlightData l0 = lights.get(0);
+            double len = Math.sqrt(l0.dirX() * l0.dirX() + l0.dirY() * l0.dirY() + l0.dirZ() * l0.dirZ());
+            if (len > 1e-6) {
+                double dot = (l0.dirX() / len) * lastBuildDirX + (l0.dirY() / len) * lastBuildDirY + (l0.dirZ() / len) * lastBuildDirZ;
+                dirDeg = (float) Math.toDegrees(Math.acos(Math.max(-1.0, Math.min(1.0, dot))));
+            }
+        }
+        // 瞬移兜底判据 = 灯位置位移(不能用盒原点:转动也会移动盒原点,实测会把节流顶回 36/s)
+        float shift = lastBuildPosValid && !lights.isEmpty()
+                ? (float) Math.max(Math.abs(lights.get(0).posX() - lastBuildPosX),
+                        Math.max(Math.abs(lights.get(0).posY() - lastBuildPosY), Math.abs(lights.get(0).posZ() - lastBuildPosZ)))
+                : Float.MAX_VALUE;
+        if (snap != null && level == lastLevel
+                && !VoxelField.shouldRebuild(tick != lastTick, !box.equals(lastBox), dirDeg, shift,
+                        maxBoxLagDeg, VoxelField.MAX_BOX_SHIFT_BLOCKS)) {
+            return snap;
+        }
         long t0 = System.nanoTime();
         // 只擦本次真正用到的区间:上传只传 usedUints,盒外旧数据从不被读(2026-09-25 性能轮)。
         int used = (box.dx * box.dy * box.dz + VoxelField.VOXELS_PER_UINT - 1) / VoxelField.VOXELS_PER_UINT;
@@ -383,6 +433,16 @@ public final class VoxelGrid {
         lastTick = tick;
         lastLevel = level;
         lastBox = box;
+        if (!lights.isEmpty()) {
+            SpotlightData l0 = lights.get(0);
+            double len = Math.sqrt(l0.dirX() * l0.dirX() + l0.dirY() * l0.dirY() + l0.dirZ() * l0.dirZ());
+            if (len > 1e-6) {
+                lastBuildDirX = l0.dirX() / len; lastBuildDirY = l0.dirY() / len; lastBuildDirZ = l0.dirZ() / len;
+                lastBuildDirValid = true;
+            }
+            lastBuildPosX = l0.posX(); lastBuildPosY = l0.posY(); lastBuildPosZ = l0.posZ();
+            lastBuildPosValid = true;
+        }
         return snap;
     }
 
