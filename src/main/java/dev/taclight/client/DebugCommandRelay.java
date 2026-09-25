@@ -159,21 +159,75 @@ public final class DebugCommandRelay {
             return;
         }
         if (line.equals("!gl")) {
-            // GL 身份记录(2026-09-25):本机是 NVIDIA RTX 5070 Ti + AMD 核显的混合显卡,
-            // 必须知道游戏**实际**跑在哪块 GPU 上("测量的路径≠生产的路径"),
-            // 也决定 RenderDoc/Nsight 的可用性与 GL 扩展面。
+            // GL 身份 + 扩展面记录(2026-09-25):
+            // ① 本机是 NVIDIA RTX 5070 Ti + AMD 核显的混合显卡,必须知道游戏**实际**跑在哪块 GPU 上
+            //    ("测量的路径≠生产的路径"),也决定 RenderDoc/Nsight 的可用性与 GL 扩展面;
+            // ② Step2(KHR_debug → gl.messages)前置探测:debug context 标志位 + KHR_debug /
+            //    ARB_debug_output 是否存在 —— 决定"驱动结构化消息"这条线能不能走,避免先承诺后验证;
+            // ③ 记录 GL_ARB_shading_language_420pack:离线 glslang 校验必须补这一行才不误报
+            //    (Iris 只声明 SSBO 扩展,而 glslang 严格要求 420pack),这条日志是驱动侧依据。
+            // 全量扩展列表写 <gameDir>/taclight-gl-ext.txt(机器可读,供证据归档),日志只打摘要。
             String vendor = "?";
             String renderer = "?";
             String version = "?";
+            String glsl = "?";
+            String numExt = "?";
+            String ctxFlags = "?";
+            String debugCtx = "?";
+            String profile = "?";
+            StringBuilder present = new StringBuilder();
             try {
+                // 先清空陈旧 GL 错误,避免污染后续 gl.messages 判据
+                for (int guard = 0; guard < 64; guard++) {
+                    if (org.lwjgl.opengl.GL11.glGetError() == org.lwjgl.opengl.GL11.GL_NO_ERROR) {
+                        break;
+                    }
+                }
                 vendor = org.lwjgl.opengl.GL11.glGetString(org.lwjgl.opengl.GL11.GL_VENDOR);
                 renderer = org.lwjgl.opengl.GL11.glGetString(org.lwjgl.opengl.GL11.GL_RENDERER);
                 version = org.lwjgl.opengl.GL11.glGetString(org.lwjgl.opengl.GL11.GL_VERSION);
+                glsl = org.lwjgl.opengl.GL11.glGetString(org.lwjgl.opengl.GL20.GL_SHADING_LANGUAGE_VERSION);
+                int n = org.lwjgl.opengl.GL11.glGetInteger(0x821D /* GL_NUM_EXTENSIONS */);
+                numExt = Integer.toString(n);
+                // GL_CONTEXT_FLAGS = 0x821E; GL_CONTEXT_FLAG_DEBUG_BIT = 0x2
+                int flags = org.lwjgl.opengl.GL11.glGetInteger(0x821E);
+                ctxFlags = "0x" + Integer.toHexString(flags);
+                debugCtx = ((flags & 0x2) != 0) ? "YES" : "NO";
+                // GL_CONTEXT_PROFILE_MASK = 0x9126; CORE = 0x1; COMPAT = 0x2
+                int pm = org.lwjgl.opengl.GL11.glGetInteger(0x9126);
+                profile = (pm == 0x1) ? "CORE" : (pm == 0x2) ? "COMPAT" : ("0x" + Integer.toHexString(pm));
+                java.util.TreeSet<String> all = new java.util.TreeSet<>();
+                for (int i = 0; i < n; i++) {
+                    String e = org.lwjgl.opengl.GL30.glGetStringi(org.lwjgl.opengl.GL11.GL_EXTENSIONS, i);
+                    if (e != null) {
+                        all.add(e);
+                    }
+                }
+                String[] want = {"GL_KHR_debug", "GL_ARB_debug_output",
+                        "GL_ARB_shading_language_420pack", "GL_ARB_shader_storage_buffer_object"};
+                for (String w : want) {
+                    present.append(w).append('=').append(all.contains(w) ? "YES" : "NO").append(' ');
+                }
+                java.io.File f = new java.io.File(
+                        net.minecraft.client.Minecraft.getInstance().gameDirectory, "taclight-gl-ext.txt");
+                StringBuilder sb = new StringBuilder();
+                sb.append("vendor=").append(vendor).append('\n');
+                sb.append("renderer=").append(renderer).append('\n');
+                sb.append("version=").append(version).append('\n');
+                sb.append("glsl=").append(glsl).append('\n');
+                sb.append("num_extensions=").append(n).append('\n');
+                sb.append("context_flags=").append(ctxFlags).append('\n');
+                sb.append("debug_context=").append(debugCtx).append('\n');
+                sb.append("profile=").append(profile).append('\n');
+                for (String e : all) {
+                    sb.append(e).append('\n');
+                }
+                java.nio.file.Files.writeString(f.toPath(), sb.toString());
             } catch (Throwable t) {
                 vendor = "err:" + t.getClass().getSimpleName();
             }
-            TacLightMod.LOGGER.info("[TacLight] RELAY gl -> vendor={} renderer={} version={}",
-                    vendor, renderer, version);
+            TacLightMod.LOGGER.info("[TacLight] RELAY gl -> vendor={} renderer={} version={} glsl={} numExt={} flags={} debugCtx={} profile={} {}",
+                    vendor, renderer, version, glsl, numExt, ctxFlags, debugCtx, profile, present.toString().trim());
             return;
         }
         if (line.startsWith("!diag")) {

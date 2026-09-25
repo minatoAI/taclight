@@ -1,5 +1,25 @@
 > 本文所述 commit id 为 2026-09-17 历史重写前的旧 id；映射见 `docs/COMMIT-ID-REMAP-2026-09-17.md`
 
+## 09-25 上午(续) · `!gl` 扩展面探测(KHR_debug 前置) + 离线 GLSL 门禁取基线(未 push)
+
+- **`!gl` 扩展**(Step2 前置探测,避免"先承诺后验证"):除 vendor/renderer/version 外,新增
+  `GL_SHADING_LANGUAGE_VERSION`、`GL_NUM_EXTENSIONS`、`GL_CONTEXT_FLAGS`(含 debug 位)、`GL_CONTEXT_PROFILE_MASK`;
+  并把**全量扩展列表**写到 `<gameDir>/taclight-gl-ext.txt`(机器可读,供证据归档),日志只打摘要
+  + 4 个关心扩展的 YES/NO。同时**先清空陈旧 GL 错误**(最多 64 次 `glGetError`),避免污染后续 `gl.messages` 判据。
+  - 实测:`num_extensions=404`、`context_flags=0x1`(**`debug_context=NO`**)、`profile=CORE`;
+    `GL_KHR_debug=YES`、`GL_ARB_debug_output=YES`、`GL_ARB_shading_language_420pack=YES`、
+    `GL_ARB_shader_storage_buffer_object=YES`。
+  - ⇒ **`KHR_debug` 在,但当前上下文不是 debug context**;规范上非 debug context **不必须**产生消息
+    ⇒ 下一步(`gl.messages`)必须先做**可用性实验**(注册回调 + 故意触发已知错误),不许先承诺。
+- **离线 GLSL 门禁取到基线**(宿主侧工具 `modtest-mcp/tools/glslang-check.ps1`,**不在模组内**):
+  `patched_shaders` 的 **159 个最终 GLSL 文件 159/159 零错误**通过 `glslang 16.6.0`(约 5 秒,不启动游戏)。
+  - 关键发现:Iris 的 `glsl-transformer` 只声明 `GL_ARB_shader_storage_buffer_object`,而 `#version 410 core` 下的
+    `layout(binding = N) buffer` 在 glslang 里还需要 `GL_ARB_shading_language_420pack`
+    (NVIDIA 驱动宽容、glslang 严格)⇒ 校验时补一行扩展即可(显式记录,不改被测文件)。
+  - **在真实注入产物上验证门禁会红**:删掉注入核心一行的分号 ⇒ `FAIL exit 1` 并点名 `020_terrain_solid.fsh`
+    (`ERROR: 960: syntax error, unexpected RETURN, expecting COMMA or SEMICOLON`)。
+  - 详见 `docs/evidence/2026-09-25-glslang-baseline/`(modtest-mcp `1ed9692`)。
+
 ## 09-25 上午 · 全 registry 穷举 golden(分类可判定化) + `patched_shaders` 验证 + `!gl`(未 push)
 
 - **全 registry 穷举 + golden(P0,离线)**：`VoxelRealRegistryContract` 新增 `fullRegistryGolden()`——
