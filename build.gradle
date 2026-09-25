@@ -287,6 +287,13 @@ tasks.register('taclightContracts', JavaExec) {
     dependsOn 'taclightToolsSelftest'
     classpath = sourceSets.test.runtimeClasspath
     mainClass = 'dev.taclight.AllContracts'
+    // release-jar 选取确定化(2026-09-25,BACKLOG ⑯):InteropPackagingContract 不再按 mtime 取
+    // "最新的 jar"(残留 devtest/relayonly 变体会抢选择 ⇒ 假红;删掉又静默换包 ⇒ 假绿),
+    // 改为按名字取 build/libs/taclight-<mod_version>.jar;要指到别的产物(归档包 / 实例里的 jar)
+    // 就显式 -PreleaseJar=<path>,找不到即红。
+    if (findProperty('releaseJar')) {
+        systemProperty 'taclight.releaseJar', findProperty('releaseJar').toString()
+    }
 }
 
 // tools 自检(PS/Node 零依赖分析工具的已知答案测试;Windows 本机,需 node 在 PATH)
