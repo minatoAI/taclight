@@ -33,9 +33,16 @@ import java.util.Locale;
  *   <li>{@code !diag} 的 {@code ssbo count=N} = {@code LightBuffer.dumpLight0()} 的 {@code count=}
  *       (从 GPU 头第 0 字回读)= 实际上传槽数 = {@code min(列表长度, MAX_LIGHTS=8)},
  *       <b>含</b>合成灯,并等于 GLSL 每像素遍历的灯槽数(见 {@code LightBuffer.upload} 的口径段);</li>
- *   <li>{@code roundBudgetUsedSec}(harness 报告字段,<b>mod 侧无此量</b>)= 驱动配置的
- *       <b>预算上限</b>,不是用量(证据:同一生成器在 {@code -RoundBudgetSec 10} 的干跑里写 10、
- *       默认轮写 1500)⇒ 引用时必须写"预算上限";要"已用秒"须由驱动另行计时。</li>
+ *   <li><b>轮预算(harness 报告字段,<b>mod 侧无此量</b>;2026-09-26 双字段口径)</b>:
+ *       <ul>
+ *         <li>{@code roundBudgetCapSec} = 驱动配置的<b>预算上限</b>(默认 1500;证据:同一生成器在
+ *             {@code -RoundBudgetSec 10} 的干跑里写 10)⇒ 引用时必须写"预算上限",别当用量;</li>
+ *         <li>{@code roundBudgetElapsedSec} = 本轮<b>实际已用墙钟秒</b>(= harness 的
+ *             {@code roundWallSeconds})⇒ <b>"已用秒"直接读这个字段,不必由驱动另行计时</b>
+ *             (旧文档"要已用秒须由驱动另行计时"<b>作废</b>);</li>
+ *         <li>{@code roundBudgetUsedSec} = <b>已 deprecated</b>:与 {@code roundBudgetCapSec} 同值,
+ *             仅为读旧证据 JSON 的脚本兼容而保留 ⇒ <b>新引用一律不得再用这个名字</b>。</li>
+ *       </ul></li>
  * </ol>
  * <p><b>臂标识</b>只认配置/开关字段本身({@code !voxel classcache=on|off}、{@code !synth N} 回显、
  * {@code cone=}/{@code lagmax=}),<b>不要</b>用 {@code lights=}/{@code cat=} 这类会被上述口径差异

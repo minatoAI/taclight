@@ -112,12 +112,43 @@ public final class PerfStatsContract {
         check(events.contains("| ssbo {} |") && events.contains("LightBuffer.dumpLight0()"),
                 "日志字段 `ssbo count=` 与生产者 dumpLight0 绑定(驱动 grep 的目标有定义)");
 
-        // ---- (C) `roundBudgetUsedSec` 真源在 harness 报告,不在 mod 侧(位置断言 + 口径留档) ----
+        // ---- (C) 轮预算字段真源在 harness 报告,不在 mod 侧(位置断言 + 双字段口径留档) ----
+        // 2026-09-26 task-13:harness 侧改名为 roundBudgetCapSec(上限) + 新增 roundBudgetElapsedSec
+        // (实际已用墙钟秒 = roundWallSeconds);旧键 roundBudgetUsedSec 保留但 deprecated。
+        // 两条都必须"mod 主源码(剥注释后)零命中":名字写进 mod 源码本身就说明有人在 mod 侧伪造该量。
         List<String> hits = mainSourcesMentioning("roundBudgetUsedSec");
         check(hits.isEmpty(),
                 "mod 主源码(剥注释后)零命中 roundBudgetUsedSec" + hits
-                        + " ⇒ 该字段真源在 harness 报告:值 = 驱动配置的**预算上限**(默认 1500;"
-                        + "-RoundBudgetSec 10 的干跑写 10),不是用量;要“已用秒”须驱动另行计时");
+                        + " ⇒ 旧键 deprecated、真源在 harness 报告(与 roundBudgetCapSec 同值,仅供旧 JSON 兼容)");
+        List<String> hitsCap = mainSourcesMentioning("roundBudgetCapSec");
+        check(hitsCap.isEmpty(),
+                "mod 主源码(剥注释后)零命中 roundBudgetCapSec" + hitsCap
+                        + " ⇒ 该字段=驱动配置的**预算上限**(默认 1500;-RoundBudgetSec 10 的干跑写 10),"
+                        + "mod 侧无此量、也不得引用");
+        List<String> hitsElapsed = mainSourcesMentioning("roundBudgetElapsedSec");
+        check(hitsElapsed.isEmpty(),
+                "mod 主源码(剥注释后)零命中 roundBudgetElapsedSec" + hitsElapsed
+                        + " ⇒ 该字段=本轮**实际已用墙钟秒**(= harness 的 roundWallSeconds);"
+                        + "要\"已用秒\"直接读它,不必由驱动另行计时");
+        // 口径说明必须真在源码里(读原文,不剥注释):三个字段名 + roundWallSeconds 等价 + 旧话已作废
+        String perfSrc = read("src/main/java/dev/taclight/channel/PerfStats.java");
+        // ⚠️ 用**带 {@code 花括号}的完整形态**匹配:第一版写成裸 "roundWallSeconds" ⇒ 变异成
+        // "roundWallSeconds_unsynced" 时**仍然包含**该子串 ⇒ 断言假绿(实测,红对照 t13b 抓到)。
+        check(perfSrc.contains("{@code roundBudgetCapSec}") && perfSrc.contains("{@code roundBudgetElapsedSec}")
+                        && perfSrc.contains("{@code roundWallSeconds}") && perfSrc.contains("deprecated"),
+                "PerfStats 口径 javadoc 已同步双字段(上限 / 已用墙钟秒=roundWallSeconds / 旧键 deprecated)");
+        int legacy = countOf(perfSrc, "须由驱动另行计时");
+        check(perfSrc.contains("作废") && legacy == 1,
+                "[旧口径必红] 旧句\"须由驱动另行计时\"只作为**作废说明**出现一次(实际 " + legacy + " 次)");
+    }
+
+    private static int countOf(String src, String needle) {
+        int n = 0, i = 0;
+        while ((i = src.indexOf(needle, i)) >= 0) {
+            n++;
+            i += needle.length();
+        }
+        return n;
     }
 
     /** 读工程内相对路径的文本(缺失即红;口径断言必须"读得到"才有意义)。 */
