@@ -23,6 +23,24 @@ import java.util.Locale;
  *       由既有 {@code !voxel status} 给,本类不重复(零耦合)。</li>
  * </ol>
  *
+ * <p><b>测量口径(2026-09-25 待办 ⑰:三类数字不许混用,历史上已误判两次)</b>:</p>
+ * <ol>
+ *   <li>{@code PERF ... lights avg/max} = 本帧<b>世界推导</b>灯数(自灯 handheld/gun + 远端灯),
+ *       <b>不含</b> {@code !synth} 合成灯 —— 合成灯只在 {@code LightBuffer.upload} 内部由 dev mixin
+ *       替换<b>形参</b>、不回写调用方列表,而本数取的是 {@code ClientSpotlightUploader} 里调用方的
+ *       {@code lights.size()}。⇒ 它<b>不是</b> SSBO 槽数,<b>不得</b>与 {@code ssbo count} 互校
+ *       ({@code !synth 6} 时 PERF 报 1..2 而 {@code !diag} 报 7..8 是<b>预期</b>);</li>
+ *   <li>{@code !diag} 的 {@code ssbo count=N} = {@code LightBuffer.dumpLight0()} 的 {@code count=}
+ *       (从 GPU 头第 0 字回读)= 实际上传槽数 = {@code min(列表长度, MAX_LIGHTS=8)},
+ *       <b>含</b>合成灯,并等于 GLSL 每像素遍历的灯槽数(见 {@code LightBuffer.upload} 的口径段);</li>
+ *   <li>{@code roundBudgetUsedSec}(harness 报告字段,<b>mod 侧无此量</b>)= 驱动配置的
+ *       <b>预算上限</b>,不是用量(证据:同一生成器在 {@code -RoundBudgetSec 10} 的干跑里写 10、
+ *       默认轮写 1500)⇒ 引用时必须写"预算上限";要"已用秒"须由驱动另行计时。</li>
+ * </ol>
+ * <p><b>臂标识</b>只认配置/开关字段本身({@code !voxel classcache=on|off}、{@code !synth N} 回显、
+ * {@code cone=}/{@code lagmax=}),<b>不要</b>用 {@code lights=}/{@code cat=} 这类会被上述口径差异
+ * 影响的读数当"这一轮跑的是哪个臂"的依据({@code !voxel profile reset} 还会把 {@code cat=} 清零)。</p>
+ *
  * <p><b>为什么放在 channel 而不是 debug</b>:发布包会剔除 {@code dev.taclight.debug.**}
  * 与 {@code DebugCommandRelay},生产代码若直引 debug 类则 release 编译即断
  * (先例:合成灯经 {@code mixin/debug} 混入,生产类零改)。本类沿
@@ -130,7 +148,11 @@ public final class PerfStats {
      * @param postMs    钳制 + 时间复用置信度 ms
      * @param uploadMs  LightBuffer.upload ms(含 GPU  stalls,见类注释)
      * @param totalMs   四段总和外加 temporal/开关杂项(FrameRecorder/lookTrace 布防时除外)
-     * @param lights    本帧上传灯数
+     * @param lights    本帧<b>世界推导</b>灯数(自灯 + 远端灯):取的是 {@code ClientSpotlightUploader}
+     *                  调用方的 {@code lights.size()} ⇒ <b>不含</b> {@code !synth} 合成灯
+     *                  (合成灯只在 {@code LightBuffer.upload} 体内替换形参,不回写调用方列表)。
+     *                  <b>不得</b>与 {@code !diag} 的 {@code ssbo count}(实际上传槽数,含合成灯)
+     *                  互校 —— 详见类注释"测量口径"。
      */
     public static synchronized void notePhases(double collectMs, double voxelMs, double postMs,
                                                double uploadMs, double totalMs, int lights) {

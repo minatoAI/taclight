@@ -34,8 +34,18 @@ public final class LightBuffer {
     }
 
     /**
+     * @param lights 上传灯列表;<b>注意</b>:dev 变体里 {@code SynthLightMixin} 会在本方法
+     *               {@code HEAD} 用 {@code @ModifyVariable(argsOnly=true)} 把该<b>形参</b>替换成
+     *               "{@code !synth} 追加后的列表"(调用方那份列表不受影响)。
      * @param grid 体素遮挡栅格快照(v0.12 DDA 遮挡;null = 无效位,GLSL 回退 SSO)。
      *             数据区仅在其 version 变化时重传(0.5MB/tick 上限,20Hz 节流在 VoxelGrid)。
+     *
+     * <p><b>{@code count} 口径(2026-09-25 待办 ⑰)</b>:{@code count = min(形参列表长度, MAX_LIGHTS=8)}
+     * = <b>实际上传槽数</b> —— <b>含</b> {@code !synth} 合成灯,写进 SSBO 头第 0 个字,并等于 GLSL
+     * 每像素遍历的灯槽数(超过 8 的灯被丢弃)。与之对照:{@code PerfStats} 的 {@code lights}=
+     * 调用方列表长度 = <b>世界推导</b>灯数,<b>不含</b>合成灯 ⇒ 两者在 {@code !synth N} 下天然不等
+     * ({@code ssbo count} 比 {@code lights} 大 N,直到钳到 8),<b>不得互相校验</b>。
+     * 日志里的 {@code !diag ... ssbo count=} 就是这个数(由 {@link #dumpLight0()} 从 GPU 头字回读)。</p>
      */
     public static synchronized void upload(List<SpotlightData> lights, int extraFlags,
                                            VoxelField.Snapshot grid) {
@@ -128,7 +138,12 @@ public final class LightBuffer {
         }
     }
 
-    /** 诊断:直读 GPU 缓冲 light0 与 cookie(GLSL 写回),验证 Java 上传 vs GLSL 布局。 */
+    /**
+     * 诊断:直读 GPU 缓冲 light0 与 cookie(GLSL 写回),验证 Java 上传 vs GLSL 布局。
+     * 返回串里的 {@code count=} = {@link #upload} 写进头字的<b>实际上传槽数</b>(含 {@code !synth}
+     * 合成灯、钳 {@code MAX_LIGHTS=8};口径见 {@code upload} 的口径段)⇒ 它就是日志里
+     * {@code !diag ... ssbo count=} 的来源,<b>不要</b>拿它与 {@code PerfStats} 的 {@code lights=} 互校。
+     */
     public static synchronized String dumpLight0() {
         try {
             if (ssboId == -1 || !isGpuUsable()) return "ssbo-not-created";

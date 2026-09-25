@@ -140,6 +140,22 @@ public class VoxelGridWiringContract {
         check(!legacy.contains("CODE_SOLID") && !legacy.contains("默认实心"),
                 "旧路径同样不出现 CODE_SOLID / \"默认实心\"兜底(off 不是回到更旧的雪地方格阵列版本)");
 
+        // ---------------- 2d. `!voxel profile reset` 的边界(2026-09-25 待办 ⑰) ----------------
+        // BLOCK_CAT 是**稳态缓存**(按方块身份,内容与轮次无关):profile reset 只清"这一轮"的诊断
+        // 计数,**刻意不清**它 —— 清了只会让下一帧白重算一遍、把 A/B 第一帧污染成"未命中风暴"。
+        // 这条必须钉住,否则下一个人会当 bug"修"掉(运行期那一半在 VoxelRealRegistryContract)。
+        int prAt = grid.indexOf("a.equals(\"profile reset\")");
+        int prEnd = prAt < 0 ? -1 : grid.indexOf("return \"voxel profile reset\";", prAt);
+        String prBranch = (prAt < 0 || prEnd < 0) ? "" : grid.substring(prAt, prEnd);
+        check(prBranch.contains("catHits = catMisses = 0;") && prBranch.contains("刻意不清")
+                        && !prBranch.contains("BLOCK_CAT.clear()"),
+                "profile reset 分支:清 cat 计数 + 注释写明 BLOCK_CAT 刻意不清 + **不调用** BLOCK_CAT.clear()");
+        int hookAt = grid.indexOf("static void resetBlockCategoryCache()");
+        String hook = hookAt < 0 ? "" : balancedBlock(grid, grid.indexOf('{', hookAt));
+        check(hook.contains("BLOCK_CAT.clear()") && occurrences(grid, "BLOCK_CAT.clear()") == 1,
+                "BLOCK_CAT.clear() 全类只出现一次,且在契约钩子 resetBlockCategoryCache() 里"
+                        + "(生产旋钮 !voxel profile reset 不碰它)");
+
         // ---------------- 3. 镜像一致性:2001/2002 与 Java ID 表同源 ----------------
         Set<String> veg = javaIds(grid, "VEG_IDS");
         Set<String> leaf = javaIds(grid, "LEAF_IDS");
@@ -184,6 +200,13 @@ public class VoxelGridWiringContract {
         check(adapter.contains("0.0 薄片档"), "adapter 遮挡系数注释登记 0.0 薄片档(跨包移植面必须看到新档位)");
 
         System.out.println("VoxelGridWiringContract: ALL PASS (" + checks + " checks)");
+    }
+
+    /** 子串出现次数(用于"全类只此一处"这类断言)。 */
+    private static int occurrences(String s, String needle) {
+        int n = 0;
+        for (int i = s.indexOf(needle); i >= 0; i = s.indexOf(needle, i + needle.length())) n++;
+        return n;
     }
 
     /** 逐行 trim 后比对(用于"两份代码是否同文"的断言;忽略缩进层级差异,但逐行内容必须一致)。 */

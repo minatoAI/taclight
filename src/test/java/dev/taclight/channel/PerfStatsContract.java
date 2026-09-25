@@ -1,5 +1,7 @@
 package dev.taclight.channel;
 
+import java.util.List;
+
 /**
  * !perf 计时器契约(2026-09-25 性能 ⑨):状态机 + 相位均值 + 百分位数学,纯 JVM。
  *
@@ -59,7 +61,123 @@ public final class PerfStatsContract {
         check(Math.abs(PerfStats.percentileFps(s4, 0.5) - 2 / 0.07) < 1e-9, "p50 = 2/最慢两帧之和");
         check(Math.abs(PerfStats.percentileFps(s4, 0.01) - 25.0) < 1e-9, "不足1%时至少取1帧");
 
+        measurementSemantics();
         System.out.println("PerfStatsContract: ALL PASS (" + passed + " checks)");
+    }
+
+    /**
+     * <b>测量口径钉死(2026-09-25 待办 ⑰:三类数字不许混用)</b>。
+     *
+     * <p>为什么需要:历史上两次误判都源于"把一个读数当成另一个量" —— ① {@code !synth 6} 时
+     * RELAY 自报 {@code total ssbo count = 2+6 = 8},而同一轮的 PERF 行报 {@code lights avg=1.00}
+     * (实测:{@code docs/evidence/2026-09-25-voxel-heavy/relay-log-full.txt} L154 与 L160);
+     * ② 拿 {@code ssbo count} 与 {@code lights} 做"一致性校验"。根因是**口径没写下来**。</p>
+     *
+     * <p>本节做的是<b>文本级(接线级)断言</b>:这几条语义由"谁在哪个调用点取哪个数"决定,
+     * 离线没有 GL/世界,驱动不了运行期 ⇒ 只能钉源码文本 + 生产调用点。运行期可判定的那部分
+     * ({@code profile reset} 不清 BLOCK_CAT)在 {@code VoxelRealRegistryContract} 里钉。</p>
+     */
+    private static void measurementSemantics() {
+        String uploader = read("src/main/java/dev/taclight/channel/ClientSpotlightUploader.java");
+        String perf = read("src/main/java/dev/taclight/channel/PerfStats.java");
+        String lightbuf = read("src/main/java/dev/taclight/channel/LightBuffer.java");
+        String mixin = read("src/main/java/dev/taclight/mixin/debug/SynthLightMixin.java");
+        String events = read("src/main/java/dev/taclight/client/ClientEvents.java");
+
+        // ---- (A) PERF `lights` = 世界推导灯数(自灯+远端),不含 !synth 合成灯 ----
+        int uploadCall = uploader.indexOf("LightBuffer.upload(lights, extraFlags, voxelGrid);");
+        int noteCall = uploader.indexOf("PerfStats.notePhases(");
+        check(uploadCall > 0 && noteCall > uploadCall,
+                "PerfStats.notePhases 的测量点在 LightBuffer.upload 调用之后(量的是同一帧的上传)");
+        check(uploader.contains("(tP4 - tP0) / 1e6, lights.size());"),
+                "lights 实参 = 调用方列表的 lights.size()(合成灯不在这个数里)");
+        check(mixin.contains("@ModifyVariable(") && mixin.contains("argsOnly = true")
+                        && mixin.contains("@At(\"HEAD\")") && mixin.contains("index = 0")
+                        && mixin.contains("upload(Ljava/util/List;ILdev/taclight/channel/VoxelField$Snapshot;)V"),
+                "合成灯注入点 = @ModifyVariable(argsOnly=true, HEAD, index=0) ⇒ 只换 upload 的形参,不回写调用方列表");
+        check(perf.contains("不含") && perf.contains("合成灯"),
+                "PerfStats 源码写明 lights 口径 = 不含合成灯(下一个人不会当 bug 改掉)");
+
+        // ---- (B) `!diag` 的 `ssbo count` = 实际上传槽数(含合成灯,钳 MAX_LIGHTS) ----
+        check(lightbuf.contains("int count = Math.min(lights.size(), SpotlightBufferLayout.MAX_LIGHTS);"),
+                "count = min(形参列表长度, MAX_LIGHTS) ⇒ 它是槽数(含合成灯)");
+        check(lightbuf.contains("SpotlightBufferLayout.writeHeader(buf, count, 1.0f, flags);")
+                        && lightbuf.contains("for (int i = 0; i < count; i++)")
+                        && lightbuf.contains("SpotlightBufferLayout.writeLight(buf, i, lights.get(i));"),
+                "同一个 count 既写 SSBO 头字、又决定 writeLight 循环 ⇒ 就是 GLSL 遍历的槽数");
+        check(lightbuf.contains("int count = buf.getInt();") && lightbuf.contains("\"count=%d"),
+                "dumpLight0 的 count= 从 GPU 头第 0 字回读,与上传写进去的是同一个数");
+        check(lightbuf.contains("含") && lightbuf.contains("合成灯") && lightbuf.contains("不得互相校验"),
+                "LightBuffer 源码写明 count 口径 = 含合成灯、不得与 PERF lights 互校");
+        check(events.contains("| ssbo {} |") && events.contains("LightBuffer.dumpLight0()"),
+                "日志字段 `ssbo count=` 与生产者 dumpLight0 绑定(驱动 grep 的目标有定义)");
+
+        // ---- (C) `roundBudgetUsedSec` 真源在 harness 报告,不在 mod 侧(位置断言 + 口径留档) ----
+        List<String> hits = mainSourcesMentioning("roundBudgetUsedSec");
+        check(hits.isEmpty(),
+                "mod 主源码(剥注释后)零命中 roundBudgetUsedSec" + hits
+                        + " ⇒ 该字段真源在 harness 报告:值 = 驱动配置的**预算上限**(默认 1500;"
+                        + "-RoundBudgetSec 10 的干跑写 10),不是用量;要“已用秒”须驱动另行计时");
+    }
+
+    /** 读工程内相对路径的文本(缺失即红;口径断言必须"读得到"才有意义)。 */
+    private static String read(String rel) {
+        try {
+            return new String(java.nio.file.Files.readAllBytes(java.nio.file.Path.of(rel)),
+                    java.nio.charset.StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            throw new AssertionError("FAIL: 读不到 " + rel + " : " + e);
+        }
+    }
+
+    /**
+     * {@code src/main} 下(剥注释后)含指定标识符的 .java 文件。
+     * 剥注释很重要:口径**说明**写在 javadoc 里是允许的,不许出现的是**代码**(字段/引用)。
+     */
+    private static List<String> mainSourcesMentioning(String needle) {
+        List<String> hits = new java.util.ArrayList<>();
+        try (var s = java.nio.file.Files.walk(java.nio.file.Path.of("src/main"))) {
+            for (java.nio.file.Path p : s.filter(java.nio.file.Files::isRegularFile)
+                    .filter(p -> p.toString().endsWith(".java")).toList()) {
+                if (stripComments(read(p.toString().replace('\\', '/'))).contains(needle)) {
+                    hits.add(p.toString());
+                }
+            }
+        } catch (Exception e) {
+            throw new AssertionError("FAIL: 扫 src/main 失败: " + e);
+        }
+        return hits;
+    }
+
+    /** 剥掉 C 风格行注释与块注释(含字符串/字符字面量保护;只为上面的位置断言用)。 */
+    private static String stripComments(String s) {
+        StringBuilder out = new StringBuilder(s.length());
+        boolean line = false, block = false, inStr = false, inChr = false;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            char n = i + 1 < s.length() ? s.charAt(i + 1) : '\0';
+            if (line) {
+                if (c == '\n') { line = false; out.append(c); }
+                continue;
+            }
+            if (block) {
+                if (c == '*' && n == '/') { block = false; i++; }
+                continue;
+            }
+            if (inStr || inChr) {
+                out.append(c);
+                if (c == '\\' && n != '\0') { out.append(n); i++; }
+                else if (inStr && c == '"') inStr = false;
+                else if (inChr && c == '\'') inChr = false;
+                continue;
+            }
+            if (c == '/' && n == '/') { line = true; i++; continue; }
+            if (c == '/' && n == '*') { block = true; i++; continue; }
+            if (c == '"') inStr = true;
+            if (c == '\'') inChr = true;
+            out.append(c);
+        }
+        return out.toString();
     }
 
     private static String firstLine(String s) {

@@ -416,6 +416,29 @@ public class VoxelRealRegistryContract {
                 "!voxel profile 行回报 classcache=off(off 时 cat=0/0)");
         VoxelGrid.configure("classcache on"); // 还原默认,避免影响后续契约
 
+        // ---- 4b. `!voxel profile reset` 的边界:清计数、**刻意不清** BLOCK_CAT(待办 ⑰) ----
+        // 为什么钉:BLOCK_CAT 是**稳态缓存**(按方块身份,内容与轮次无关)。若"顺手"在 profile reset
+        // 里清它,下一帧就会把所有方块重新算一遍(未命中风暴),把 A/B 的第一帧污染掉。
+        // ⇒ 识臂请只看 profile 行尾的 classcache= 字段,不要用 cat= 计数当臂标识。
+        VoxelGrid.configure("classcache on");
+        VoxelGrid.resetBlockCategoryCache();
+        sweep(states, p);                                        // 灌满类别缓存 + 累计计数
+        int sizeBeforeReset = VoxelGrid.blockCategoryCacheSize();
+        long hitsBeforeReset = VoxelGrid.categoryCacheHits();
+        String resetMsg = VoxelGrid.configure("profile reset");
+        check(VoxelGrid.categoryCacheHits() == 0 && VoxelGrid.categoryCacheMisses() == 0,
+                "\"!voxel profile reset\" 清零 cat 计数(这一轮的诊断量归零;" + resetMsg + ")");
+        check(VoxelGrid.blockCategoryCacheSize() == sizeBeforeReset && sizeBeforeReset > 0,
+                "但 BLOCK_CAT **刻意不清**(size 保持 " + sizeBeforeReset + ",reset 前命中 " + hitsBeforeReset
+                        + ")⇒ 稳态缓存不是 profile reset 的清理对象");
+        check(VoxelGrid.profile().contains("classcache=on"),
+                "profile 行尾 classcache=on ⇒ 这一轮跑的是哪条路径只由该字段判定(不是 cat= 计数)");
+        sweep(states, p);                                        // reset 后继续跑一遍
+        check(VoxelGrid.categoryCacheHits() > 0 && VoxelGrid.categoryCacheMisses() == 0,
+                "reset 后继续跑:全部命中(命中 " + VoxelGrid.categoryCacheHits() + " / 未命中 "
+                        + VoxelGrid.categoryCacheMisses() + ")⇒ 缓存条目仍在、清零的只是计数"
+                        + "(若有人把 BLOCK_CAT.clear() 塞进 profile reset,本条必红)");
+
         // ---- 5. 离线微基准(仅参考,不是判据) ----
         classCacheMicroBench();
     }
