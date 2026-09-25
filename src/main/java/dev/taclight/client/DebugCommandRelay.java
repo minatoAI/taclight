@@ -333,6 +333,16 @@ public final class DebugCommandRelay {
             ClientEvents.startBench();
             return;
         }
+        if (line.equals("!perf") || line.startsWith("!perf ")) {
+            // CPU 侧性能计时(2026-09-25 ⑨):!perf start [秒] | stop | status | reset。
+            // 多行回显(与 !voxray 同规逐行打)。体素盒/builds 数由 !voxel status 给,不在此重复。
+            String arg = line.length() > 5 ? line.substring(5).trim() : "";
+            String res = dev.taclight.channel.PerfStats.configure(arg);
+            for (String l : res.split("\n")) {
+                TacLightMod.LOGGER.info("[TacLight] RELAY perf | {}", l);
+            }
+            return;
+        }
         if (line.equals("!back") || line.startsWith("!back ")) {
             // 程序化关界面:ESC/聊天/容器等任意 Screen 直接关(与手点“回到游戏”同入口
             // setScreen(null);单人未发布存档的暂停态随 PauseScreen 关闭自动解除)。

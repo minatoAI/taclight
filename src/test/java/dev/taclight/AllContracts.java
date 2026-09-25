@@ -11,6 +11,7 @@ import dev.taclight.channel.OcclTableContract;
 import dev.taclight.channel.TemporalReuseContract;
 import dev.taclight.channel.RemoteBaseSnapContract;
 import dev.taclight.channel.RemotePosSnapContract;
+import dev.taclight.channel.PerfStatsContract;
 import dev.taclight.channel.RemoteLookPredictorContract;
 import dev.taclight.channel.SpotlightBufferLayoutContract;
 import dev.taclight.channel.UploaderSemanticContract;
@@ -129,6 +130,8 @@ public class AllContracts {
         MultiLightCollectorContract.main(args);
         System.out.println("== RemoteLookPredictorContract ==");
         RemoteLookPredictorContract.main(args);
+        System.out.println("== PerfStatsContract ==");
+        PerfStatsContract.main(args);
         System.out.println("== RemoteBaseSnapContract ==");
         RemoteBaseSnapContract.main(args);
         System.out.println("== RemotePosSnapContract ==");

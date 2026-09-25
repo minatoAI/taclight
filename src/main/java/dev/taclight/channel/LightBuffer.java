@@ -68,8 +68,10 @@ public final class LightBuffer {
                 lastGridVersion = -1;   // 重分配后内容未定义,栅格数据必须重传
             }
             GL15.glBufferSubData(GL43.GL_SHADER_STORAGE_BUFFER, 0L, buf);
+            long tailB = 0;
             if (grid != null && grid.version() != lastGridVersion) {
                 int used = Math.min(grid.usedUints(), SpotlightBufferLayout.VOX_MAX_UINTS);
+                tailB = (long) used * 4;
                 if (gridStage == null || gridStage.capacity() < used) {
                     gridStage = java.nio.ByteBuffer
                             .allocateDirect(SpotlightBufferLayout.VOX_MAX_UINTS * 4)
@@ -82,6 +84,8 @@ public final class LightBuffer {
                         (long) SpotlightBufferLayout.OFF_VOX_DATA, gridStage);
                 lastGridVersion = grid.version();
             }
+            // !perf 上传量(2026-09-25 ⑨):头 816B/帧恒传,尾仅 version 变化时。关着时零开销。
+            if (PerfStats.active()) PerfStats.noteUpload(SpotlightBufferLayout.OFF_VOX_DATA, tailB);
             if (!uploadLogged) { uploadLogged = true; LOGGER.info("[TacLight] upload {} light(s), flags={}", count, flags); }
             GL30.glBindBufferBase(GL43.GL_SHADER_STORAGE_BUFFER, SpotlightBufferLayout.BINDING, ssboId);
             // v0.9.0:路线 P 时代的 SLOT PROBE(binding 0/1/8 冗余绑定)已删除,

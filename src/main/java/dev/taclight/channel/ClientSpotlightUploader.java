@@ -71,6 +71,9 @@ public final class ClientSpotlightUploader {
             LightMotionConf.endFrame();   // 世界卸载:逐出全部灯键(重进=首帧语义)
             return;
         }
+        // !perf 相位计时(2026-09-25 ⑨):关着时 = 一次 volatile 读 + 零 nanoTime,生产零开销。
+        boolean perf = PerfStats.active();
+        long tP0 = perf ? System.nanoTime() : 0;
         dev.taclight.client.CameraSweep.tick(mc.player);
         LightParams cfg = LightParams.load();
         List<SpotlightData> lights = new ArrayList<>(2);
@@ -134,7 +137,9 @@ public final class ClientSpotlightUploader {
         if (LightTuneOverride.beamOnly()) extraFlags |= SpotlightBufferLayout.FLAG_BEAM_ONLY;
         // 体素遮挡栅格(09-01 深夜④ DDA):墙后漏光立项,与灯数据同缓冲上传;
         // 禁用/无灯 → null,GLSL 逐光线回退屏幕空间 SSO。
+        long tP1 = perf ? System.nanoTime() : 0;
         var voxelGrid = dev.taclight.client.VoxelGrid.update(mc, lights);
+        long tP2 = perf ? System.nanoTime() : 0;
         clampLightsOutOfSolid(lights, voxelGrid);
         // 遮挡距离表(2026-09-06 方案二,!occl 默认开):仅栅格有效时置位——
         // 栅格无效时 GLSL 走原逐采样 DDA(-1→可见)回退,语义与旧行为逐位一致。
@@ -153,7 +158,13 @@ public final class ClientSpotlightUploader {
         // 帧内数值探针(P2,2026-09-25):仅在调试中继布防时置位;未置位 ⇒ GLSL 短路,
         // 不访问 binding=8(生产零风险)。
         if (LightTuneOverride.numProbe()) extraFlags |= SpotlightBufferLayout.FLAG_NUM_PROBE;
+        long tP3 = perf ? System.nanoTime() : 0;
         LightBuffer.upload(lights, extraFlags, voxelGrid);
+        if (perf) {
+            long tP4 = System.nanoTime();
+            PerfStats.notePhases((tP1 - tP0) / 1e6, (tP2 - tP1) / 1e6, (tP3 - tP2) / 1e6,
+                    (tP4 - tP3) / 1e6, (tP4 - tP0) / 1e6, lights.size());
+        }
         if (FrameRecorder.active()) {
             long t = System.nanoTime() / 1_000_000L;
             // C 行明确区分相机眼/玩家眼位，并记录 vanilla bobView 的真实驱动字段。

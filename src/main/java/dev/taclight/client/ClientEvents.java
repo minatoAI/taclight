@@ -316,6 +316,7 @@ public class ClientEvents {
         // 本帧终值,且先于 Iris composite 执行;社区同型案例共识 = 每帧更新数据。
         dev.taclight.channel.ClientSpotlightUploader.onFrame();
         dev.taclight.channel.LightBuffer.rebindBase();
+        dev.taclight.channel.PerfStats.tickFrame();
         benchTickFrame();
     }
 
