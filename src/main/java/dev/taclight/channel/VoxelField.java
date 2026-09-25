@@ -176,22 +176,39 @@ public final class VoxelField {
             double dx = l.dirX(), dy = l.dirY(), dz = l.dirZ();
             double len = Math.sqrt(dx * dx + dy * dy + dz * dz);
             double c = l.cosOuter();
+            double r = l.radius();
+            // 该灯的"球盒"(灯的有效影响 = 锥 ∩ 半径球:衰减在 r 处恰好归零)
+            double sx0 = l.posX() - r, sx1 = l.posX() + r;
+            double sy0 = l.posY() - r, sy1 = l.posY() + r;
+            double sz0 = l.posZ() - r, sz1 = l.posZ() + r;
+            double c0x, c1x, c0y, c1y, c0z, c1z;
             if (len < 1e-6 || !(c > CONE_MIN_COS_OUTER) || c > 1.0) {
-                double r = l.radius() + margin;
-                minX = Math.min(minX, l.posX() - r); maxX = Math.max(maxX, l.posX() + r);
-                minY = Math.min(minY, l.posY() - r); maxY = Math.max(maxY, l.posY() + r);
-                minZ = Math.min(minZ, l.posZ() - r); maxZ = Math.max(maxZ, l.posZ() + r);
-                continue;
+                // 退化/过宽:该灯直接用球盒
+                c0x = sx0; c1x = sx1; c0y = sy0; c1y = sy1; c0z = sz0; c1z = sz1;
+            } else {
+                double tan = Math.sqrt(Math.max(0.0, 1.0 - c * c)) / c;
+                double L = r;
+                double nx = dx / len, ny = dy / len, nz = dz / len;
+                c0x = l.posX() + L * Math.min(0.0, nx - tan) - margin;
+                c1x = l.posX() + L * Math.max(0.0, nx + tan) + margin;
+                c0y = l.posY() + L * Math.min(0.0, ny - tan) - margin;
+                c1y = l.posY() + L * Math.max(0.0, ny + tan) + margin;
+                c0z = l.posZ() + L * Math.min(0.0, nz - tan) - margin;
+                c1z = l.posZ() + L * Math.max(0.0, nz + tan) + margin;
             }
-            double tan = Math.sqrt(Math.max(0.0, 1.0 - c * c)) / c;
-            double L = l.radius();
-            double nx = dx / len, ny = dy / len, nz = dz / len;
-            minX = Math.min(minX, l.posX() + L * Math.min(0.0, nx - tan) - margin);
-            maxX = Math.max(maxX, l.posX() + L * Math.max(0.0, nx + tan) + margin);
-            minY = Math.min(minY, l.posY() + L * Math.min(0.0, ny - tan) - margin);
-            maxY = Math.max(maxY, l.posY() + L * Math.max(0.0, ny + tan) + margin);
-            minZ = Math.min(minZ, l.posZ() + L * Math.min(0.0, nz - tan) - margin);
-            maxZ = Math.max(maxZ, l.posZ() + L * Math.max(0.0, nz + tan) + margin);
+            // 2026-09-25 晚(重场景轮实测):锥的 AABB 在宽锥下会比球盒还大(45° 实测 82³ vs 球盒 76³,
+            // 重建 10.4ms vs 7.3ms ⇒ 反而比优化前更差)。与球盒求交:
+            //   - 包含性不变:有效区 = 锥 ∩ 球 ⊂ 锥 ⊂ 锥AABB,且 ⊂ 球 ⊂ 球盒 ⇒ ⊂ 交集;
+            //   - 且**永不比球盒更大**(最坏退化为优化前的行为,不会倒退)。
+            double ix0 = Math.max(c0x, sx0), ix1 = Math.min(c1x, sx1);
+            double iy0 = Math.max(c0y, sy0), iy1 = Math.min(c1y, sy1);
+            double iz0 = Math.max(c0z, sz0), iz1 = Math.min(c1z, sz1);
+            if (ix0 > ix1) { ix0 = sx0; ix1 = sx1; }   // 退化保护:回该灯球盒
+            if (iy0 > iy1) { iy0 = sy0; iy1 = sy1; }
+            if (iz0 > iz1) { iz0 = sz0; iz1 = sz1; }
+            minX = Math.min(minX, ix0); maxX = Math.max(maxX, ix1);
+            minY = Math.min(minY, iy0); maxY = Math.max(maxY, iy1);
+            minZ = Math.min(minZ, iz0); maxZ = Math.max(maxZ, iz1);
         }
         if (minX > maxX || minY > maxY || minZ > maxZ) return new Box(0, 0, 0, 1, 1, 1);
         int ox = floorI(minX), oy = floorI(minY), oz = floorI(minZ);

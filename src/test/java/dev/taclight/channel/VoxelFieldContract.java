@@ -146,7 +146,23 @@ public class VoxelFieldContract {
                 "两盏反向灯 ⇒ 盒同时含两灯且更宽");
         check(VoxelField.DEFAULT_CONE_BOX, "锥形盒为默认(2026-09-25 性能轮定案,见证据 README)");
 
-        System.out.println("VoxelFieldContract: ALL PASS (45 checks)");
+        // ---- 9. 宽锥不得倒退(2026-09-25 晚,重场景轮实测:45° 锥的 AABB 比球盒还大) ----
+        double cos45 = Math.cos(Math.toRadians(45));
+        double sin45 = Math.sin(Math.toRadians(45));
+        SpotlightData wide45 = SpotlightData.spot(10.6f, 64.4f, 20.3f, 18f,
+                1f, 0.96f, 0.88f, 6f, 1f, 0f, 0f, (float) cos45, (float) cos45);
+        VoxelField.Box w45 = VoxelField.boxForCones(List.of(wide45), VoxelField.CONE_BOX_MARGIN);
+        VoxelField.Box w45sphere = VoxelField.boxFor(List.of(wide45));
+        // 红对照:若不与"该灯的球盒"求交,45° 锥 AABB 为 43³ > 球盒 37³ ⇒ 本条必红。
+        check(w45.dx <= w45sphere.dx && w45.dy <= w45sphere.dy && w45.dz <= w45sphere.dz
+                        && w45.dx * w45.dy * w45.dz <= w45sphere.dx * w45sphere.dy * w45sphere.dz,
+                "45° 宽锥盒不超过球盒(求交;否则宽锥会比重建优化前更差)");
+        double hex = 10.6 + 18.0 * cos45;              // 锥面沿轴 L·cosθ
+        double hey = 64.4 + 18.0 * sin45;              // 垂直向 L·sinθ(该点距灯恰为 r)
+        check(w45.ox <= hex && hex < w45.ox + w45.dx && w45.oy <= hey && hey < w45.oy + w45.dy,
+                "有效区极值点(锥面上距离恰=r)在盒内");
+
+        System.out.println("VoxelFieldContract: ALL PASS (47 checks)");
     }
 
     private static void check(boolean cond, String what) {
