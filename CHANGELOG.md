@@ -1,5 +1,20 @@
 > 本文所述 commit id 为 2026-09-17 历史重写前的旧 id；映射见 `docs/COMMIT-ID-REMAP-2026-09-17.md`
 
+## 09-25 上午(续 3) · `!glmsg` 通道 C:编译失败路径 = 负结果(未 push)
+
+- **新增通道 C(补验上一条的边界)**:故意编译一个坏 shader,并**分开报告**两件事——
+  "编译是否失败"(`GL_COMPILE_STATUS`)与"失败是否被驱动报告"(调试消息数)。
+  - **实测 `C=COMPILE-SILENT`**:`compileStatus=FAIL(expected)`、`glErrors=0`、**`messages=0`**;
+    错误文本只出现在 `glGetShaderInfoLog` 里
+    (`0(2) : error C0000: syntax error, unexpected reserved word "this" at token "this"`)。
+  - ⇒ **修正上一轮的乐观外推**:`gl.messages` 是 **API 错误**的有效判据;
+    **着色器编译/链接失败不走这条通道**。编译期错误的主判据是**离线 glslang 门禁**
+    (`modtest-mcp/tools/glslang-check.ps1`,159/159);若要在游戏内抓编译错误,
+    正确做法是**挂钩 Iris 的编译点读 info log**,而不是等调试回调。
+  - **这个负结果的价值**:只跑通道 B 就外推"编译错误也会报",会写出一个**永远为真的假断言**
+    ("没有 HIGH 消息"——因为编译错误根本不产生消息)。两条独立通道的设计正是为了防这个。
+- 详见 `docs/evidence/2026-09-25-round-gates/`。
+
 ## 09-25 上午(续 2) · GL 调试消息可用性实验 + 激光束长归零 + `!quit`(未 push)
 
 - **`!glmsg`(Step2 前置可用性实验,`dev.taclight.debug.GlDebugCapture`)**:

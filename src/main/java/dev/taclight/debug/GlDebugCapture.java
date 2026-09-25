@@ -4,6 +4,7 @@ import dev.taclight.TacLightMod;
 import net.minecraftforge.fml.loading.FMLPaths;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL20;
 import org.lwjgl.opengl.GL43;
 import org.lwjgl.opengl.GLDebugMessageCallback;
 
@@ -28,6 +29,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  *       "回调已装好、消息能到达 Java"。这一条与驱动行为无关。</li>
  *   <li><b>通道 B(驱动行为)</b>:故意制造 3 个真实 GL 错误(非法 enum / 非法 value) ⇒
  *       收到即证明"驱动在非 debug context 下确实为错误产生消息"。</li>
+ *   <li><b>通道 C(编译失败路径,2026-09-25 补验)</b>:故意编译一个坏 shader ⇒
+ *       分别报告"编译确实失败"(`GL_COMPILE_STATUS`)与"失败是否被驱动报告"(消息数),
+ *       因为这两件事必须分开——B 只覆盖了 API 错误这一条产生路径。</li>
  * </ol>
  * 只有 A 绿 B 红,才说明"回调没问题但驱动不吐"——那才是必须换退路的判据。</p>
  *
@@ -139,10 +143,45 @@ public final class GlDebugCapture {
         errs += drainErrors(16);
         int bGot = total.get() - bBefore;
 
-        String verdict = (aGot > 0 ? "A=WIRED" : "A=DEAD") + "/" + (bGot > 0 ? "B=DRIVER-EMITS" : "B=DRIVER-SILENT");
+        // ---- 通道 C:着色器**编译失败**是否也走这条通道(2026-09-25 补验边界) ----
+        // 通道 B 只证了"API 错误"这一条产生路径;编译/链接失败是另一条
+        // (Iris 的编译点可能自行记录并吞掉)。用 GL_COMPILE_STATUS 与调试消息**分开**报告,
+        // 这样"编译确实失败了"与"失败是否被驱动报告"不会混为一谈。
+        int cBefore = total.get();
+        boolean compileOk = true;
+        String infoLog = "";
+        int shader = 0;
+        try {
+            shader = GL20.glCreateShader(GL20.GL_FRAGMENT_SHADER);
+            GL20.glShaderSource(shader, "#version 410 core\nvoid main() { this is not glsl }\n");
+            GL20.glCompileShader(shader);
+            compileOk = GL20.glGetShaderi(shader, GL20.GL_COMPILE_STATUS) != GL11.GL_FALSE;
+            infoLog = GL20.glGetShaderInfoLog(shader);
+        } catch (Throwable t) {
+            infoLog = "exception: " + t;
+        } finally {
+            if (shader != 0) {
+                try {
+                    GL20.glDeleteShader(shader);
+                } catch (Throwable ignored) {
+                }
+            }
+        }
+        int cErr = drainErrors(16);
+        int cGot = total.get() - cBefore;
+        String flat = infoLog == null ? "" : infoLog.replace('\n', ' ').replace('\r', ' ').trim();
+        if (flat.length() > 220) {
+            flat = flat.substring(0, 220) + "...";
+        }
+
+        String verdict = (aGot > 0 ? "A=WIRED" : "A=DEAD") + "/"
+                + (bGot > 0 ? "B=DRIVER-EMITS" : "B=DRIVER-SILENT") + "/"
+                + (cGot > 0 ? "C=COMPILE-EMITS" : "C=COMPILE-SILENT");
         return "selfTest " + verdict + " | channelA: inserted=1 received=" + aGot
                 + " fromApplication=" + aAppGot
                 + " | channelB: glErrors=" + errs + " messages=" + bGot
+                + " | channelC: compileStatus=" + (compileOk ? "PASS(unexpected!)" : "FAIL(expected)")
+                + " glErrors=" + cErr + " messages=" + cGot + " infoLog=\"" + flat + "\""
                 + " | totals: " + counts();
     }
 
