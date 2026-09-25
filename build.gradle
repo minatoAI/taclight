@@ -238,6 +238,10 @@ tasks.named('jar', Jar).configure {
     // 空目录条目兜底:exclude 'x/**' 是否连带排掉目录条目在 Ant 语义下无一手依据(R1 §3.3),
     // 这里显式不写空目录,并让验收按"文件条目"计数。
     includeEmptyDirs = false
+    // B8 可复现构建(2026-09-26):默认 preserveFileTimestamps=true 会把每个 jar 条目的时间戳写成
+    // 源文件 mtime ⇒ 同源码两次构建字节不同。关掉时间戳 + 固定条目顺序 ⇒ sha256 一致。
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
     manifest {
         attributes([
                 'Specification-Title': mod_id,
