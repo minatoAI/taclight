@@ -420,6 +420,25 @@ public final class DebugCommandRelay {
                     dev.taclight.channel.LightCommand.describe(act, before, after));
             return;
         }
+        if (line.startsWith("!hud")) {
+            // 语义(2026-09-26 task-51,用户直接指令):off/on = **幂等置位** mc.options.hideGui;
+            // status = **只读回显**;无参/未知参数 ⇒ 报 usage 且**不改任何状态**。
+            // **本命令不提供 toggle** —— !light 的教训:无参=翻转 + on|off=置位混在一起会让因果链错位。
+            // 用途:A3 截图判据被聊天框/命令回执这类固定覆盖层污染 ⇒ 提供可判定的"藏 UI"手段(dev-only)。
+            String arg = line.length() > 4 ? line.substring(4).trim() : "";
+            int act = HudCommand.action(arg);
+            if (act == HudCommand.ACTION_NONE) {
+                TacLightMod.LOGGER.info("[TacLight] RELAY hud -> bad arg '{}'; {}", arg, HudCommand.usage());
+                return;
+            }
+            if (act == HudCommand.ACTION_STATUS) {
+                TacLightMod.LOGGER.info("[TacLight] RELAY {}", HudCommand.describe(mc.options.hideGui));
+                return;
+            }
+            mc.options.hideGui = HudCommand.targetHideGui(act);
+            TacLightMod.LOGGER.info("[TacLight] RELAY {}", HudCommand.describe(mc.options.hideGui));
+            return;
+        }
         if (line.startsWith("!neon")) {
             // 说明:!neon(K 键的等价通道)仍是**纯切换**(无参数)；要置位请用两次或先 !diag 看状态。
             ClientLightState.toggleDebug();
