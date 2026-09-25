@@ -150,6 +150,9 @@ public final class ClientSpotlightUploader {
             applyTemporalConfidence(lights, slotKeys);
         }
         LightMotionConf.endFrame();
+        // 帧内数值探针(P2,2026-09-25):仅在调试中继布防时置位;未置位 ⇒ GLSL 短路,
+        // 不访问 binding=8(生产零风险)。
+        if (LightTuneOverride.numProbe()) extraFlags |= SpotlightBufferLayout.FLAG_NUM_PROBE;
         LightBuffer.upload(lights, extraFlags, voxelGrid);
         if (FrameRecorder.active()) {
             long t = System.nanoTime() / 1_000_000L;

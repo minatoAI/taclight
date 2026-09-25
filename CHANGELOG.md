@@ -1,5 +1,29 @@
 > 本文所述 commit id 为 2026-09-17 历史重写前的旧 id；映射见 `docs/COMMIT-ID-REMAP-2026-09-17.md`
 
+## 09-25 上午(续 4) · P2 帧内数值探针 + ★"生效路径"陷阱(未 push)
+
+- **帧内数值探针(P2)**:把光照**项**的数值(`vis`/`atten`/`spot`/`ndl`)导出,而不是只看像素色。
+  - 独立 `binding=8` 小缓冲(80B;不动 binding=7 的 `voxData[]` 布局);
+    请求放缓冲里而**不用 uniform**(内联文本"零 uniform 行"是硬约束,宿主 composite 已声明 Iris 附件);
+    **访问闸门 = binding=7 头部 flags 的 bit6(`FLAG_NUM_PROBE`)** ⇒ 未布防时 `&&` 短路、
+    探针缓冲**完全不被访问**(生产零风险);**代数回显**防陈旧;写点在 `vis<=0.003` 门**之前**。
+  - 调试中继 `!numprobe <x> <y> [灯]` / `read` / `off` / `status`;`NumericProbeBuffer`(debug 包)。
+  - **真机结果**:某像素在锥内(`spot=0.7052`)且朝向灯(`ndl=0.8011`),但 **`vis=0.0000`**;
+    同一条射线 CPU 侧 `!voxray` 给出 **`liveT=gridT=0.000`** ⇒ **GPU 与 CPU 一致**。
+    负对照(未受光角落)`hits=0`。⇒ "被遮挡处 vis 必须为 0"成为**项级断言**。
+- **★ 陷阱(本轮最大产出)**:**只改 `pack/shaders/lib/taclight_core.glsl` 会静默失效** ——
+  Complementary 走的是**前向精简路径**(`TemplateLibrary.inlineCoreTextForward()`):
+  `slimForwardCore` 只白名单保留 `binding = 7` 块(新声明被丢弃)、surface 被 `FORWARD_SURFACE`
+  整函数重写。第一版探针因此**真机 21 像素全 hits=0**,dump 里 `binding = 8` 命中 **0** 个文件,
+  而三个 jar 的 inline core 都带探针。
+  - **判定**:dump 里 `taclight_vox_fetch`(前向独有)30 文件、`taclight_sso(`/`taclight_ggx`/
+    `taclight_occlusion_at`(完整版独有)**0** 文件。
+  - **修法**:新增 `FORWARD_PROBE_BLOCK` + 前向 prelude 的 `TACLIGHT_FLAG_NUM_PROBE`
+    + `FORWARD_SURFACE` 内写入(并把 `cosAng`/`fragWorld` 提出复用)。
+  - **防复发**:`InlineCoreContract` 加 2 条"完整路径与前向路径都必须带探针"断言(**44 → 46 checks**)。
+  - ⇒ **纪律**:真源 ≠ 唯一生效路径;改 surface 光照必须**同时**落到 `FORWARD_SURFACE`。
+- 详见 `docs/evidence/2026-09-25-numeric-probe/`。
+
 ## 09-25 上午(续 3) · `!glmsg` 通道 C:编译失败路径 = 负结果(未 push)
 
 - **新增通道 C(补验上一条的边界)**:故意编译一个坏 shader,并**分开报告**两件事——

@@ -44,6 +44,10 @@
                                        // 每帧预建均向 D 表,composite1 查表代替逐采样灯侧 DDA)
 #define TACLIGHT_FLAG_TEMPORAL   32u   // bit5 !tm 体积光时间复用(2026-09-06:composite1 步数
                                        // 64→32 + 抖动逐帧旋转 + 上一帧历史重投影混合)
+#define TACLIGHT_FLAG_NUM_PROBE  64u   // bit6 帧内数值探针(P2,2026-09-25,默认恒 0)
+                                       // **它是"是否访问 binding=8 探针缓冲"的唯一闸门**:
+                                       // 未置位 ⇒ 下方 `&&` 短路 ⇒ 探针缓冲完全不被访问
+                                       // ⇒ 生产包里 binding=8 无需绑定、零风险。
 
 // ---- 每灯 96B · 6×vec4(std430,与 Java writeLight 写序一致)----
 struct TacLightSpot {
@@ -67,8 +71,29 @@ layout(std430, binding = 7) buffer TacLightSSBO {
     TacLightSpot lights[8];   // 16..783(定长;Java 侧 clamp 8 同源)
     vec4  voxOrigin;      // 784: xyz=栅格角点 world(方块格对齐) w>0=有效/w<=0=无效
     ivec4 voxMeta;        // 800: xyz=各轴格数;w 保留
-    uint  voxData[];      // 816..: 2bit/体素,idx=x+y*dx+z*dx*dy,word=idx>>4,bit=(idx&15)*2
+    uint  voxData[];      // 816..: 4bit/体素,idx=x+y*dx+z*dx*dy,word=idx>>3,slot=(idx&7)*4
 };
+
+// ---- 帧内数值探针(P2,2026-09-25)----
+// 目的:把光照**项**的数值(vis/atten/spot/ndl…)导出,而不是只看像素色 ⇒
+// "被遮挡处 vis 必须为 0"这类断言从"看图像"变成"读数字"(=渲染单元测试)。
+// 设计约束与取舍:
+//   · **单独一个 binding=8 的小缓冲**,不动 binding=7 的布局 —— voxData[] 是运行时
+//     长度数组,在它后面加字段会挪动其偏移 = 动到 SpotlightBufferLayout 真源;
+//   · **不能用 uniform 传请求**:内联文本"零 uniform 行"是硬约束(InlineCoreContract;
+//     宿主 composite 已声明 Iris 附件,重复声明 = C1038);
+//   · 请求与结果都放本缓冲,Java 侧 glBufferSubData 写请求 / glGetBufferSubData 读结果;
+//   · **访问闸门 = binding=7 头部 flags 的 bit6(TACLIGHT_FLAG_NUM_PROBE)**;
+//   · probeReq.z = 代数(generation):0=未布防。Java 每次布防自增,用来确认"读到的
+//     结果就是本次请求"(防读到上一帧的陈旧值)。
+// 注意:与 binding=7 同理,不要在 shaders.properties 里声明 bufferObject.8。
+layout(std430, binding = 8) buffer TacLightProbe {
+    ivec4 probeReq;    // x,y = gl_FragCoord 像素(左下原点);z = generation(0=未布防);w = 灯序号(-1=任意)
+    vec4  probeTerms;  // x=vis y=atten z=spot w=ndl
+    vec4  probeExtra;  // x=dist y=灯类型 z=cosAng w=半径
+    vec4  probeFrag;   // xyz=片元 **world** 坐标(供与 CPU 侧 !voxray 走同一条射线对账)
+    ivec4 probeMeta;   // x=命中次数 y=命中的灯序号 z=generation 回显 w=保留
+} taclightProbe;
 
 // ---- 各阶段矩阵约定(doc06 §2.2 表)----
 // 2026-09-02 更正:gbufferModelView = R·T **含 bob 平移**(bobView 写进渲染
@@ -580,7 +605,8 @@ vec3 taclight_surface_lighting(vec3 fragView, vec3 albedo, vec3 n,
         float ndl = max(dot(n, l), 0.0);
         if (ndl <= 0.0) continue;                 // 廉价门:背面
         float vis;
-        float vt = taclight_vox_transmit(L.posRadius.xyz, taclight_view_to_world(fragView));
+        vec3 fragWorld = taclight_view_to_world(fragView);
+        float vt = taclight_vox_transmit(L.posRadius.xyz, fragWorld);
         if (vt >= 0.0) {
             vis = vt;
         } else if (dot(lightScene, lightScene) < 0.25) {
@@ -588,10 +614,22 @@ vec3 taclight_surface_lighting(vec3 fragView, vec3 albedo, vec3 n,
         } else {
             vis = taclight_sso(fragView, lightView, L);
         }
+        float atten = taclight_attenuation(dist, radius, L.cone.z);
+        // ---- 帧内数值探针(P2):必须在 `vis <= 0.003` 的门**之前**写 ----
+        // 否则"被完全遮挡"这个最该观测的情形恰好被 continue 掉,永远读不到 vis=0。
+        // 闸门顺序刻意如此:先测 binding=7 的 flags(总是有效),短路通过后才碰 binding=8。
+        if ((flags & TACLIGHT_FLAG_NUM_PROBE) != 0u
+            && taclightProbe.probeReq.z > 0
+            && ivec2(gl_FragCoord.xy) == taclightProbe.probeReq.xy
+            && (taclightProbe.probeReq.w < 0 || taclightProbe.probeReq.w == int(i))) {
+            taclightProbe.probeTerms = vec4(vis, atten, spot, ndl);
+            taclightProbe.probeExtra = vec4(dist, L.dirType.w, cosAng, radius);
+            taclightProbe.probeFrag  = vec4(fragWorld, 1.0);
+            taclightProbe.probeMeta  = ivec4(1, int(i), taclightProbe.probeReq.z, 0);
+        }
         if (vis <= 0.003) continue;
 
         vec3 lc = L.colorIntensity.rgb * L.colorIntensity.a;
-        float atten = taclight_attenuation(dist, radius, L.cone.z);
         vec3 diffuse = albedo * (ndl * (1.0 - metal));
         vec3 spec = taclight_ggx(n, -normalize(fragView), l, roughness, f0) * (ndl * TACLIGHT_SPEC_DAMP);
         // 近场软膝(2026-09-05,用户第四旋钮 !knee):默认 cone.w=0 恒等(旧行为);

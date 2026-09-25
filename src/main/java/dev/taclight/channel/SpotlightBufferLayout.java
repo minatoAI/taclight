@@ -61,6 +61,11 @@ public final class SpotlightBufferLayout {
      *  步数 64→32 + 抖动逐帧旋转 + 上一帧历史(colortex9)重投影混合;逐灯置信度
      *  经 vlParams.w 透传(Java LightMotionConf 位姿差分),off=64 步全新鲜。 */
     public static final int FLAG_TEMPORAL = 1 << 5;
+    /** bit6: 帧内数值探针(P2,2026-09-25)——GLSL 把光照**项**的数值(vis/atten/spot/ndl…)
+     *  写进 binding=8 的独立探针缓冲,由调试中继 `!numprobe` 布防/回读。
+     *  **默认恒为 0**:置位是"是否访问 binding=8"的唯一闸门 —— 未布防时 GLSL 因 `&&`
+     *  短路**完全不碰**该缓冲,所以生产包里 binding=8 无需绑定、零风险(见 core 内注释)。 */
+    public static final int FLAG_NUM_PROBE = 1 << 6;
 
     private SpotlightBufferLayout() {}
 

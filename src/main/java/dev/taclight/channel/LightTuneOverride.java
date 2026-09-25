@@ -356,4 +356,17 @@ public final class LightTuneOverride {
     public static boolean temporal() {
         return temporalActive;
     }
+
+    /** 帧内数值探针(P2)是否布防。**生产路径永远为 false** —— 只有调试中继 `!numprobe`
+     *  会置位;它是 GLSL 访问 binding=8 的唯一闸门,故未布防时探针缓冲根本不需要绑定。 */
+    private static volatile boolean numProbe;
+
+    public static boolean numProbe() {
+        return numProbe;
+    }
+
+    /** 由调试中继 `!numprobe` 调用(dev 变体才有入口)。 */
+    public static void setNumProbe(boolean on) {
+        numProbe = on;
+    }
 }

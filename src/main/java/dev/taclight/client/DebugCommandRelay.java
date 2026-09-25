@@ -249,6 +249,32 @@ public final class DebugCommandRelay {
             TacLightMod.LOGGER.info("[TacLight] RELAY glmsg -> {}", res);
             return;
         }
+        if (line.equals("!numprobe") || line.startsWith("!numprobe ")) {
+            // P2 帧内数值探针(2026-09-25):把光照**项**的数值读回来,而不是只看像素色。
+            // 布防时同时置 binding=7 头部 flags 的 bit6(访问闸门);撤销即关闸门。
+            // 用法: !numprobe <x> <y> [灯序号] 布防 | !numprobe read 回读 | !numprobe off 撤销 | status
+            String arg = line.length() > 9 ? line.substring(9).trim() : "";
+            String res;
+            if (arg.equals("read")) {
+                res = dev.taclight.debug.NumericProbeBuffer.read();
+            } else if (arg.equals("off") || arg.equals("disarm")) {
+                res = dev.taclight.debug.NumericProbeBuffer.disarm();
+            } else if (arg.isEmpty() || arg.equals("status")) {
+                res = dev.taclight.debug.NumericProbeBuffer.status();
+            } else {
+                String[] p = arg.split("\\s+");
+                try {
+                    int px = Integer.parseInt(p[0]);
+                    int py = Integer.parseInt(p[1]);
+                    int li = p.length > 2 ? Integer.parseInt(p[2]) : -1;
+                    res = dev.taclight.debug.NumericProbeBuffer.arm(px, py, li);
+                } catch (Exception e) {
+                    res = "usage: !numprobe <x> <y> [lightIndex] | read | off | status";
+                }
+            }
+            TacLightMod.LOGGER.info("[TacLight] RELAY numprobe -> {}", res);
+            return;
+        }
         if (line.equals("!quit")) {
             // 让受控轮**干净收尾**(2026-09-25 B7):此前没有任何命令能让客户端主动退出,
             // 每轮只能等 harness 的 150s 上限被杀 ⇒ 判 VERDICT=FAIL:instance-timeout,判据被噪声淹没。

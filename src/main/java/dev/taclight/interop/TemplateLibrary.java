@@ -238,7 +238,8 @@ public final class TemplateLibrary {
                 + "const float TACLIGHT_LIGHT_GAIN = 2.2;\n"
                 + "const float TACLIGHT_ATTEN_K = 20.0; // 2026-09-06 用户扫参冻结(主包同值收敛)\n"
                 + "const float TACLIGHT_KNEE_GAIN = 2.0;\n"
-                + "const float TACLIGHT_VOX_FUZZ = 0.35;\n";
+                + "const float TACLIGHT_VOX_FUZZ = 0.35;\n"
+                + "const uint TACLIGHT_FLAG_NUM_PROBE = 64u;\n";
         r = "/* " + PatchExecutor.MARKER + " inline-core-forward (injected by TacLight interop) */\n"
                 + prelude + slim + "\n";
         inlineCoreForwardCache = r;
@@ -330,7 +331,7 @@ public final class TemplateLibrary {
         }
         // 体素 DDA 不进前向(ivec3/bvec3/位运算 AST 高危):上方白名单循环已整体跳过,
         // 此处只需追加单行恒可见桩(遮挡由宿主 DoLighting 主管)。
-        return joined + "\n" + FORWARD_VOX_STUB + FORWARD_SURFACE;
+        return joined + "\n" + FORWARD_VOX_STUB + FORWARD_PROBE_BLOCK + FORWARD_SURFACE;
     }
 
     /** 前向 surface:漫反射单项 + 锥判定 + 距离衰减 + 标量体素 DDA 遮挡。
@@ -425,6 +426,25 @@ public final class TemplateLibrary {
             + "    }\n"
             + "    return T;\n"
             + "}\n";
+    /** 帧内数值探针(P2)的**前向侧声明** —— 必须与 pack/shaders/lib/taclight_core.glsl 的
+     *  binding=8 块镜像。
+     *
+     *  <p><b>2026-09-25 实机踩坑(值得记住)</b>:探针先只加在完整 core 里,而 Complementary 走的
+     *  是**前向精简路径** —— {@link #slimForwardCore} 只白名单保留 `binding = 7` 块(新声明被丢弃),
+     *  且 surface 被 {@link #FORWARD_SURFACE} 整函数重写 ⇒ 探针**静默失效**
+     *  (真机 21 个像素全 hits=0,而 `patched_shaders` 里连 `TACLIGHT_FLAG_NUM_PROBE` 都没有)。
+     *  这正是"测量的路径≠生产的路径":改对了文件,但改的不是生效的那份。</p>
+     *
+     *  <p>防复发:{@code InlineCoreContract} 已加断言"**两条路径都必须在场**"。</p> */
+    private static final String FORWARD_PROBE_BLOCK =
+            "layout(std430, binding = 8) buffer TacLightProbe {\n"
+            + "    ivec4 probeReq;\n"
+            + "    vec4  probeTerms;\n"
+            + "    vec4  probeExtra;\n"
+            + "    vec4  probeFrag;\n"
+            + "    ivec4 probeMeta;\n"
+            + "} taclightProbe;\n";
+
     private static final String FORWARD_SURFACE =
             "vec3 taclight_surface_lighting(vec3 fragView, vec3 albedo, vec3 n,\n"
             + "                               float roughness, float metal, vec3 f0) {\n"
@@ -440,14 +460,25 @@ public final class TemplateLibrary {
             + "        if (dist < radius && radius > 0.001) {\n"
             + "            vec3 lf = toFrag / max(dist, 0.0001);\n"
             + "            vec3 dirView = mat3(gbufferModelView) * (L.dirType.xyz / max(length(L.dirType.xyz), 0.0001));\n"
-            + "            float spot = smoothstep(L.cone.x, L.cone.y, dot(lf, dirView));\n"
+            + "            float cosAng = dot(lf, dirView);\n"
+            + "            float spot = smoothstep(L.cone.x, L.cone.y, cosAng);\n"
             + "            float ndl = dot(n, (vec3(0.0) - lf));\n"
             + "            if (spot > 0.001 && ndl > 0.0) {\n"
-            + "                float vt = taclight_vox_transmit(L.posRadius.xyz, taclight_view_to_world(fragView));\n"
+            + "                vec3 fragWorld = taclight_view_to_world(fragView);\n"
+            + "                float vt = taclight_vox_transmit(L.posRadius.xyz, fragWorld);\n"
             + "                float vis = vt >= 0.0 ? vt : 1.0;\n"
             + "                vec3 lc = L.colorIntensity.rgb * L.colorIntensity.a;\n"
             + "                float attenK = L.cone.z > 0.0 ? L.cone.z : TACLIGHT_ATTEN_K;\n"
             + "                float atten = taclight_attenuation(dist, radius, attenK);\n"
+            + "                if ((flags & TACLIGHT_FLAG_NUM_PROBE) != 0u\n"
+            + "                    && taclightProbe.probeReq.z > 0\n"
+            + "                    && ivec2(gl_FragCoord.xy) == taclightProbe.probeReq.xy\n"
+            + "                    && (taclightProbe.probeReq.w < 0 || taclightProbe.probeReq.w == i)) {\n"
+            + "                    taclightProbe.probeTerms = vec4(vis, atten, spot, ndl);\n"
+            + "                    taclightProbe.probeExtra = vec4(dist, L.dirType.w, cosAng, radius);\n"
+            + "                    taclightProbe.probeFrag  = vec4(fragWorld, 1.0);\n"
+            + "                    taclightProbe.probeMeta  = ivec4(1, i, taclightProbe.probeReq.z, 0);\n"
+            + "                }\n"
             + "                vec3 contrib = ((albedo * (ndl * (1.0 - metal))) * lc) * (spot * atten * vis);\n"
             + "                radiance = radiance + taclight_soft_knee3(contrib, L.cone.w);\n"
             + "            }\n"

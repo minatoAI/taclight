@@ -56,6 +56,12 @@ public class InlineCoreContract {
                         && inline.contains("const float TACLIGHT_ATTEN_K = 20.0;"),
                 "对象式宏 → const 常量(uint/float 类型推断;ATTEN_K=20.0 用户扫参冻结 2026-09-06(原 5.0 真实感调参 2026-09-03))");
         check(inline.contains("vec3 taclight_surface_lighting"), "照明主入口定义在");
+        // 2026-09-25 防复发:帧内数值探针(P2)必须**同时**在完整路径与后面前向路径在场。
+        // 起因:探针先只加在完整 core,而 Complementary 走前向精简路径 ⇒ 真机 21 像素全
+        // hits=0、patched_shaders 里连常量都没有("测量的路径≠生产的路径")。
+        check(inline.contains("layout(std430, binding = 8)")
+                        && inline.contains("probeTerms") && inline.contains("TACLIGHT_FLAG_NUM_PROBE"),
+                "完整路径带帧内数值探针(binding=8 声明 + probeTerms 写入 + 访问闸门常量)");
         long open = inline.chars().filter(c -> c == '{').count();
         long close = inline.chars().filter(c -> c == '}').count();
         check(open == close && open > 0, "花括号平衡(防注入后 Iris 静默禁包): " + open + "/" + close);
@@ -85,6 +91,10 @@ public class InlineCoreContract {
                 "前向精简块含 marker(幂等锚)");
         check(fwd.contains("const float TACLIGHT_ATTEN_K = 20.0;"),
                 "前向精简 prelude K=20.0(2026-09-06 冻结;!atten 逐灯经 cone.z,0=回退默认)");
+        // 2026-09-25:探针必须镜像到前向路径 —— 这是本轮真机踩坑的回归断言。
+        check(fwd.contains("layout(std430, binding = 8)")
+                        && fwd.contains("probeTerms") && fwd.contains("TACLIGHT_FLAG_NUM_PROBE"),
+                "前向精简也带帧内数值探针(两条路径必须镜像,否则对 Complementary 静默失效)");
         for (String anchor : new String[]{
                 "layout(std430, binding = 7)", "vec3 taclight_world_to_scene(",
                 "vec3 taclight_scene_to_view(", "vec3 taclight_view_to_world(",
