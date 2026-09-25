@@ -143,6 +143,11 @@ public final class KeyPersistContract {
         check(ev.contains("keybind persist:") && ev.contains("saved=") && ev.contains("before=")
                         && ev.contains("after="),
                 "应用日志保留 saved=/before=/after=(供 task-34 判定机制)");
+        // 参数级断言:日志第 4 个占位符必须吃 **changed**(不是 saved.size())——
+        // 否则"把注册路径的功劳记到兜底路径头上"无人拦(红对照 t32v2c_changed冒领)。
+        check(codeLine(ev, "file, exists, saved.size(), changed, already, before, describeKeys(ours)"),
+                "[冒领必红] 日志按 saved= / changed= / already= / before= / after= 顺序传参"
+                        + "(changed 不得写成 saved.size())");
         check(!ev.contains("字节码被证明"),
                 "措辞纪律:不声称\"字节码被证明是死代码\"(只说该处理器没有产生可观测副作用)");
         check(ev.contains("保持代码默认"),
