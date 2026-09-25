@@ -230,6 +230,35 @@ public final class DebugCommandRelay {
                     vendor, renderer, version, glsl, numExt, ctxFlags, debugCtx, profile, present.toString().trim());
             return;
         }
+        if (line.equals("!glmsg") || line.startsWith("!glmsg ")) {
+            // Step2 可用性实验(2026-09-25):GL 调试消息(KHR_debug / GL43)到底吐不吐。
+            // 前置事实:上下文**不是** debug context(context_flags=0x1,缺 DEBUG_BIT),规范上非 debug
+            // context 不必须产生消息 ⇒ 必须先实测,不许先承诺。
+            // 无参/其它 = 幂等安装 + 报计数;test = 双通道自检(通道A 自己 insert / 通道B 真实 GL 错误);
+            // clear = 清零计数与 JSONL。实验设计与"必须重开 glDebugMessageControl"的坑见该类 javadoc。
+            String arg = line.length() > 6 ? line.substring(6).trim() : "";
+            String res;
+            if (arg.equals("test")) {
+                res = dev.taclight.debug.GlDebugCapture.selfTest();
+            } else if (arg.equals("clear")) {
+                res = dev.taclight.debug.GlDebugCapture.clear();
+            } else {
+                res = dev.taclight.debug.GlDebugCapture.install() + " | "
+                        + dev.taclight.debug.GlDebugCapture.status();
+            }
+            TacLightMod.LOGGER.info("[TacLight] RELAY glmsg -> {}", res);
+            return;
+        }
+        if (line.equals("!quit")) {
+            // 让受控轮**干净收尾**(2026-09-25 B7):此前没有任何命令能让客户端主动退出,
+            // 每轮只能等 harness 的 150s 上限被杀 ⇒ 判 VERDICT=FAIL:instance-timeout,判据被噪声淹没。
+            // 用 mc.stop() 而不是自己翻字段:字节码实锤它只做两件事 ——
+            // post(GameShuttingDownEvent) + running=false(无重入、无 teardown);
+            // 真正的收尾由主循环 while(running) 退出后走正常关闭路径。
+            TacLightMod.LOGGER.info("[TacLight] RELAY quit -> mc.stop()");
+            mc.stop();
+            return;
+        }
         if (line.startsWith("!diag")) {
             ClientEvents.dumpDiag();
             return;

@@ -1,5 +1,34 @@
 > 本文所述 commit id 为 2026-09-17 历史重写前的旧 id；映射见 `docs/COMMIT-ID-REMAP-2026-09-17.md`
 
+## 09-25 上午(续 2) · GL 调试消息可用性实验 + 激光束长归零 + `!quit`(未 push)
+
+- **`!glmsg`(Step2 前置可用性实验,`dev.taclight.debug.GlDebugCapture`)**:
+  上下文**不是 debug context**(`context_flags=0x1`)⇒ 规范上非 debug context **不必须**产生消息
+  ⇒ 先实验后承诺。实验分**两条独立通道**:
+  - **通道 A(管线自证)**:`glDebugMessageInsert` 自己插一条 ⇒ 只证"回调+通道通";
+  - **通道 B(驱动行为)**:故意制造 3 个真实 GL 错误 ⇒ 才证"驱动确实吐"。
+  - **实测 `A=WIRED/B=DRIVER-EMITS`**:`inserted=1 received=1` / `glErrors=3 messages=3`;
+    结构化消息落 `<gameDir>/taclight-gl-messages.jsonl`(source/type/id/severity/message)。
+  - **★ 最易做错的一步**:MC 自己的 `glDebugVerbosity`(本机 1)会经 `glDebugMessageControl` 按严重级过滤;
+    我们替换了它的**回调**但**过滤器仍在** ⇒ 不显式重开全部消息,就会把"驱动不吐"和"被自己滤掉"混为一谈。
+  - **边界(未验证不写成已验证)**:API 错误已证;**着色器编译/链接失败**与**着色器运行时未定义行为**
+    是否会经该通道到达**尚未验证**(下一步在自检里加"故意编译坏 shader")。离线 glslang 门禁已覆盖编译期语法/类型错误。
+- **激光束长 18 → 0**(用户选定 "A+B" 的 B;A = 给 TaCZ 提 issue,草稿见 `docs/28-laser-triage.md` §5):
+  `gun_light_display.json` 的 `laser.length` / `third_person_length` 归零。
+  - **安全性依据(字节码)**:`renderLaserBeam` 的**调用点没有长度守卫**
+    (`BedrockGunModel`: `if (laserBeamPaths != null) …`;`BedrockAttachmentModel`: 遍历 `laserBeamPaths`),
+    长度只在 `BeamRenderer` 内部从 `LaserConfig` 读出 ⇒ 归零**不取消调用** ⇒ 枪口姿态捕获不受影响。
+  - **但 `laser` 块不能删**(`laserBeamPaths` 由模型激光节点决定,删块可能连调用一起删掉,那才会真打断捕获)。
+  - **真机双证**:`BEAM-HEAD … att=true pathSize=1`(第一/第三人称均命中)+ `!diag` 仍报出捕获姿态
+    (`L0 pos=(-3640.89,151.13,-1334.66) r=37.8 dir=(0.816,-0.161,-0.555)`)。
+- **`!quit`(修 B7)**:此前没有任何命令能让客户端主动退出 ⇒ 每轮只能等 harness 150s 上限被杀,
+  判 `FAIL:instance-timeout`,判据被噪声淹没。实现依据是 `Minecraft.stop()` 的字节码实锤:
+  它只做 `post(GameShuttingDownEvent)` + `running=false`(**无 teardown、无重入**),
+  真正收尾由主循环退出后走正常关闭路径。
+  - **实测**:`RELAY quit -> mc.stop()` → `Stopping!` → `Saving worlds/chunks` → 进程 **2s 内消失**;
+    harness 判定从上一轮的 `FAIL:instance-timeout`(wall 150.67s) 变为 **`VERDICT=PASS`**(wall **33.73s**,`kill=False`)。
+- 详见 `docs/evidence/2026-09-25-glmsg-probe/`。
+
 ## 09-25 上午(续) · `!gl` 扩展面探测(KHR_debug 前置) + 离线 GLSL 门禁取基线(未 push)
 
 - **`!gl` 扩展**(Step2 前置探测,避免"先承诺后验证"):除 vendor/renderer/version 外,新增
