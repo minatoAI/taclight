@@ -79,6 +79,10 @@ public class AllContracts {
         // 赋值落在 !hud 分支片段内 / STATUS 块只读 / describe 逐字 / dev-only 命令串。
         System.out.println("== HudCommandContract ==");
         dev.taclight.client.HudCommandContract.main(args);
+        // 事件订阅作用域 + 可观测性(2026-09-26 task-54):禁"嵌套类携带 @Mod.EventBusSubscriber";
+        // 有副作用的站点必须有"确实跑过"的标记;类内无日志者查两条边界标记(调用方字面量 + 打印侧日志行)。
+        System.out.println("== SubscriberScopeContract ==");
+        dev.taclight.SubscriberScopeContract.main(args);
         System.out.println("== BoundedIdentityCacheContract ==");
         BoundedIdentityCacheContract.main(args);
         System.out.println("== VoxelGridWiringContract ==");
