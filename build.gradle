@@ -215,6 +215,37 @@ tasks.named('processResources', ProcessResources).configure {
     ]
     inputs.properties replaceProperties
     filesMatching(['META-INF/mods.toml', 'pack.mcmeta']) { expand replaceProperties + [project: project] }
+    // ==== 2026-09-26 task-22:文本资源行尾归一(CRLF→LF),使产物与"检出 eol"无关 ====
+    // 动机(reviewer R3 否证):主树资源是 LF、而"干净 worktree"检出是 CRLF(core.autocrlf=true
+    // 且这些路径 text=auto 未钉 eol)⇒ 同一个 commit 两次构建的 sha 不同(357,027 vs 357,259,
+    // 65 个文本条目只差换行符)⇒ "可跨机复现"当时是过度声称。
+    // 做法(选 A:构建侧归一,不动仓库行尾):打包前把**文本类**资源统一成 LF;
+    // 逐**字节**处理(不解码),只把 CRLF 对里的 CR 丢掉 ⇒ 不会碰坏任何编码/二进制。
+    // 幂等:只在真的含 CR 时重写并计数;非文本扩展名(如 .png/.class)一律不动。
+    doLast {
+        def textExt = ['json', 'toml', 'mcmeta', 'glsl', 'vsh', 'fsh', 'frag', 'vert', 'patch',
+                       'txt', 'properties', 'cfg', 'lang', 'xml', 'md']
+        def converted = 0
+        fileTree(destinationDir).matching { include textExt.collect { "**/*.${it}" } }.each { f ->
+            byte[] b = f.bytes
+            int n = 0
+            boolean hasCr = false
+            for (int i = 0; i < b.length; i++) {
+                if (b[i] == (byte) 0x0D && i + 1 < b.length && b[i + 1] == (byte) 0x0A) {
+                    hasCr = true
+                    continue
+                }
+                b[n++] = b[i]
+            }
+            if (hasCr) {
+                f.bytes = java.util.Arrays.copyOf(b, n)
+                converted++
+            }
+        }
+        if (converted > 0) {
+            logger.lifecycle("[taclight] processResources: 行尾归一 CRLF->LF 文件数 = ${converted}(保证与检出 eol 无关)")
+        }
+    }
 }
 
 tasks.named('jar', Jar).configure {

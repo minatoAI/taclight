@@ -2,7 +2,17 @@
 *.bat text eol=crlf
 *.cmd text eol=crlf
 *.ps1 text eol=crlf
-# ==== 二进制必须显式钉死(否则 `* text=auto` 会按"文本"清理它们)====
+# ==== 会打进 jar 的文本资源钉 LF(2026-09-26 task-22)====
+# 审核 R3 否证"可跨机复现":core.autocrlf=true + 上面 `* text=auto`(未钉 eol)⇒
+# **干净 worktree 检出是 CRLF**,而主树资源是 LF ⇒ 同 commit 两次构建 sha 不同
+# (357,027 vs 357,259,65 个文本条目只差换行符)。这里给"会随资源进 jar 的路径"钉 eol=lf,
+# 使**任何 git 检出**(不论 autocrlf 如何)都得到 LF ⇒ 与 checkout 状态无关。
+# 注:blob 本来就已被 text=auto 归一成 LF ⇒ `git add --renormalize .` 只动了本文件与 build.gradle
+# (实测 diff 统计 = 2 files changed, +49),没有"只改行尾"的批量改动。
+src/main/resources/** text eol=lf
+pack/** text eol=lf
+# ↑ 这两条必须在 binary 规则**之前**:同一文件里"后匹配的规则赢",
+# 否则 pack/**.png 会被 eol=lf 当文本清理(第二轮实测复现了掉字节)。# ==== 二进制必须显式钉死(否则 `* text=auto` 会按"文本"清理它们)====
 # 实测事故:`git add --renormalize .` 把 4 个 PNG 当文本做 CRLF→LF 清理,**各掉 1 字节 ⇒ 图片损坏**
 # (pack.png 39928→39925、gun_light_slot.png 188→187、gun_light.png 219→218、flashlight.png 176→175)。
 # 根因:这些小 PNG 前 8000 字节内没有 NUL,git 的 text=auto 启发式把它们判成文本。
