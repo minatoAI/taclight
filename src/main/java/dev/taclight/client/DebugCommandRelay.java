@@ -2,6 +2,7 @@ package dev.taclight.client;
 
 import dev.taclight.TacLightMod;
 import dev.taclight.channel.KeyInject;
+import dev.taclight.debug.HudCommand;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraftforge.api.distmarker.Dist;

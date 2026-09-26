@@ -1,4 +1,4 @@
-package dev.taclight.client;
+package dev.taclight.debug;
 
 /**
  * {@code !hud off|on|status} 的**纯语义核心**(零 MC 依赖;2026-09-26 task-51,dev-only 中继命令)。
@@ -18,6 +18,13 @@ package dev.taclight.client;
  *
  * <p><b>回执唯一真源</b>:{@link #describe(boolean)} —— 逐字可判,形如
  * {@code hud=off(hideGui=true)} / {@code hud=on(hideGui=false)}。</p>
+ *
+ * <p><b>2026-09-26 task-62(结构性修)</b>:从 {@code dev.taclight.client} 移入
+ * {@code dev.taclight.debug} 命名空间 —— 该类 {@link #usage()} 的字符串字面量
+ * {@code "usage: !hud off|on|status"} 会随 {@code HudCommand.class} 进发布件;
+ * 发布件排除表按命名空间覆盖 {@code dev/taclight/debug/**} ⇒ 移入后发布件条目集
+ * 天然不含该 dev-only 命令串字节(枚举式排除表必然过期,R9 字节扫描已证)。
+ * API 逐字不变(仅换包);唯一解析/派发点仍是 {@code DebugCommandRelay}。</p>
  */
 public final class HudCommand {
     /** 无参 / 未知参数:给用法,**不改状态**。 */

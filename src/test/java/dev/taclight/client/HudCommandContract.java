@@ -1,30 +1,46 @@
 package dev.taclight.client;
 
+import dev.taclight.debug.HudCommand;
+
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Enumeration;
 import java.util.List;
 import java.util.stream.Stream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 /**
- * {@code !hud off|on|status} 契约(2026-09-26 task-51 第 2 步)。
+ * {@code !hud off|on|status} 契约(2026-09-26 task-51 第 2 步;task-62 重写 ⑤/⑥)。
  *
- * <p><b>五条</b>:① 三分支真值表;② {@code !mutates(ACTION_NONE)} 且 {@code !mutates(ACTION_STATUS)}
+ * <p><b>六条</b>:① 三分支真值表;② {@code !mutates(ACTION_NONE)} 且 {@code !mutates(ACTION_STATUS)}
  * (把"无参/未知参不改状态"写成机器判据 —— 这正是 {@code !light} 曾经出错的地方);
  * ③ {@code off} 的赋值必须落在 <b>{@code !hud} 分支片段内</b>(位置无关的 contains 不算,沿用 task-24/32 教训);
  * ④ STATUS 块内<b>不得出现</b> {@code mc.options.hideGui =}(只读)+ {@code describe} 逐字;
- * ⑤ <b>dev-only</b>:{@code !hud} 串在 {@code src/main} 只出现在 relay,且 release 件不含 relay 类。</p>
+ * ⑤ <b>dev-only · 源码层</b>:{@code !hud} 串在 {@code src/main} 恰好 2 个文件
+ * (relay + 纯核心 {@code debug/HudCommand},无第三处);
+ * ⑥ <b>dev-only · 构件层(2026-09-26 task-62)</b>:release 件**条目集**断言 ——
+ * 枚举 jar 后断言 (a) 无 {@code dev/taclight/client/HudCommand.class} 条目、
+ * (b) 无任何 {@code DebugCommandRelay*} 条目、(c) 无任何 {@code .class} 条目含
+ * {@code !hud} ASCII 字节。**禁止**再"grep 构建脚本后推论发布件内容"
+ * (R9 已证那种推论会静默失效)。</p>
  */
 public final class HudCommandContract {
     private static int checks;
     private static final List<String> FAILURES = new ArrayList<>();
     private static final String RELAY = "src/main/java/dev/taclight/client/DebugCommandRelay.java";
-    private static final String PURE = "src/main/java/dev/taclight/client/HudCommand.java";
+    private static final String PURE = "src/main/java/dev/taclight/debug/HudCommand.java";
+    private static final String PROP_RELEASE_JAR = "taclight.releaseJar";
+    private static final Path LIBS = Path.of("build", "libs");
+    private static final Path GRADLE_PROPS = Path.of("gradle.properties");
 
     public static void main(String[] args) throws Exception {
         contentLayer();
         wiringLayer();
+        releaseJarEntrySetLayer();
         if (!FAILURES.isEmpty()) throw new AssertionError("FAIL " + FAILURES.size() + " 条: " + FAILURES);
         System.out.println("HudCommandContract: ALL PASS (" + checks + " checks)");
     }
@@ -55,6 +71,8 @@ public final class HudCommandContract {
         check(HudCommand.usage().contains("off") && HudCommand.usage().contains("on")
                         && HudCommand.usage().contains("status"),
                 "usage 里三个分支都点名");
+        check(HudCommand.usage().contains("!hud"),
+                "usage 含 '!hud' 命令串(task-62:该串只随 debug/HudCommand 存在,构件层由 ⑥ 拦)");
         // 纯核心不得提供 toggle 语义(代码行,去注释)
         try {
             String pure = Files.readString(Path.of(PURE), StandardCharsets.UTF_8);
@@ -70,7 +88,7 @@ public final class HudCommandContract {
         }
     }
 
-    /** ③④⑤ 接线与 dev-only(源码文本级 + release 件名断言)。 */
+    /** ③④⑤ 接线与 dev-only(源码文本级)。 */
     private static void wiringLayer() throws Exception {
         String relay = Files.readString(Path.of(RELAY), StandardCharsets.UTF_8);
         int start = relay.indexOf("line.startsWith(\"!hud\")");
@@ -93,10 +111,7 @@ public final class HudCommandContract {
                 "STATUS 回执经 describe(mc.options.hideGui) 读当前值");
         check(frag != null && frag.contains("HudCommand.ACTION_NONE") && frag.contains("HudCommand.usage()"),
                 "无参/未知参数 ⇒ 报 usage 且 return(不改状态)");
-        // ⑤ dev-only:命令串只出现在"relay + 其纯核心"这两个文件里(没有第三处)
-        // ⚠️ 口径(第一版断言写错、被绿跑抓到):**不能**声称"release jar 不含 '!hud' 串" ——
-        // HudCommand.usage() 的字符串会随 HudCommand.class 进包(与 R3 指出"发布包其实含 KeyInject.class"同源)。
-        // 能诚实主张的是:**发布件里该命令不可达**(唯一解析/派发点 DebugCommandRelay 被 exclude)。
+        // ⑤ dev-only 源码层:命令串恰好 2 个文件(relay + debug 命名空间的纯核心),没有第三处
         List<String> hits = new ArrayList<>();
         try (Stream<Path> s = Files.walk(Path.of("src/main"))) {
             s.filter(p -> p.toString().endsWith(".java")).forEach(p -> {
@@ -109,15 +124,94 @@ public final class HudCommandContract {
         boolean onlyExpected = hits.size() == 2;
         for (String h : hits) {
             String n = h.replace('\\', '/');
-            if (!n.endsWith("client/DebugCommandRelay.java") && !n.endsWith("client/HudCommand.java")) {
+            if (!n.endsWith("client/DebugCommandRelay.java") && !n.endsWith("debug/HudCommand.java")) {
                 onlyExpected = false;
             }
         }
-        check(onlyExpected, "[dev-only] '!hud' 串在 src/main 只出现在 relay 与其纯核心 HudCommand(实际 " + hits + ")");
-        String gradle = Files.readString(Path.of("build.gradle"), StandardCharsets.UTF_8);
-        check(gradle.contains("DebugCommandRelay*.class"),
-                "[dev-only] build.gradle 仍把 DebugCommandRelay* 排除在发布件外 ⇒ **发布件里该命令不可达**"
-                        + "(唯一解析/派发点不在包里;不声称'包内不含该字符串')");
+        check(onlyExpected, "[dev-only·源码] '!hud' 串在 src/main 恰好 2 个文件"
+                + "(relay + debug/HudCommand;实际 " + hits + ")");
+    }
+
+    /**
+     * ⑥ dev-only 构件层(2026-09-26 task-62):release 件**条目集**断言。
+     * jar 选取规则与 {@code InteropPackagingContract} 一致:
+     * 显式 {@code -PreleaseJar=<path>} ⇒ 否则 {@code build/libs/taclight-<mod_version>.jar};拿不到 ⇒ 红。
+     */
+    private static void releaseJarEntrySetLayer() throws Exception {
+        Path jar = pickReleaseJar();
+        check(jar != null, "[构件层] 拿到 release jar(拿不到 ⇒ 拒绝自证;原因见上)");
+        if (jar == null) return;
+        List<String> badEntries = new ArrayList<>();
+        List<String> tokenHits = new ArrayList<>();
+        byte[] token = "!hud".getBytes(StandardCharsets.US_ASCII);
+        try (ZipFile z = new ZipFile(jar.toFile())) {
+            Enumeration<? extends ZipEntry> en = z.entries();
+            while (en.hasMoreElements()) {
+                ZipEntry e = en.nextElement();
+                String name = e.getName();
+                if (name.equals("dev/taclight/client/HudCommand.class")) {
+                    badEntries.add("HudCommand 仍在 client 包: " + name);
+                }
+                if (name.contains("DebugCommandRelay")) {
+                    badEntries.add("relay 类泄漏: " + name);
+                }
+                if (name.endsWith(".class") && containsBytes(z, e, token)) {
+                    tokenHits.add(name);
+                }
+            }
+        }
+        check(badEntries.isEmpty(), "[★必红·构件] release 件无 client/HudCommand.class 且无 DebugCommandRelay* 条目"
+                + (badEntries.isEmpty() ? "" : " ⇒ " + badEntries));
+        check(tokenHits.isEmpty(), "[★必红·构件] release 件无任何 .class 条目含 '!hud' ASCII 字节"
+                + (tokenHits.isEmpty() ? "" : " ⇒ " + tokenHits));
+        System.out.println("[构件层] jar=" + jar + " entries 扫描完成(token='!hud')");
+    }
+
+    /** 朴素字节搜索(class 常量池为 modified-UTF8,ASCII 片段逐字节可比)。 */
+    private static boolean containsBytes(ZipFile z, ZipEntry e, byte[] token) throws IOException {
+        byte[] data;
+        try (var in = z.getInputStream(e)) {
+            data = in.readAllBytes();
+        }
+        for (int i = 0; i + token.length <= data.length; i++) {
+            boolean ok = true;
+            for (int j = 0; j < token.length; j++) {
+                if (data[i + j] != token[j]) { ok = false; break; }
+            }
+            if (ok) return true;
+        }
+        return false;
+    }
+
+    /** 与 InteropPackagingContract.pickReleaseJar 同规则(本契约不复用其私有类,规则逐字对齐)。 */
+    private static Path pickReleaseJar() {
+        String explicit = System.getProperty(PROP_RELEASE_JAR, "").trim();
+        if (!explicit.isEmpty()) {
+            Path p = Path.of(explicit);
+            if (Files.isRegularFile(p)) return p;
+            System.out.println("FAIL-CANDIDATE: 显式 -PreleaseJar=" + explicit + " 不存在或不是普通文件");
+            return null;
+        }
+        String version = modVersion();
+        if (version == null || version.isEmpty()) {
+            System.out.println("FAIL-CANDIDATE: 读不到 gradle.properties 里的 mod_version");
+            return null;
+        }
+        Path expected = LIBS.resolve("taclight-" + version + ".jar");
+        if (Files.isRegularFile(expected)) return expected;
+        System.out.println("FAIL-CANDIDATE: 期望 " + expected + " 不存在");
+        return null;
+    }
+
+    private static String modVersion() {
+        try {
+            for (String line : Files.readAllLines(GRADLE_PROPS, StandardCharsets.UTF_8)) {
+                String s = line.trim();
+                if (s.startsWith("mod_version=")) return s.substring("mod_version=".length()).trim();
+            }
+        } catch (IOException ignored) {
+        }
+        return null;
     }
 
     private static void check(boolean cond, String what) {
