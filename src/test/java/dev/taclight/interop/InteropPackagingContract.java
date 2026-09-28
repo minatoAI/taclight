@@ -116,6 +116,20 @@ public class InteropPackagingContract {
         check(relay.isEmpty(), "★ 发布 jar 不含 DebugCommandRelay*(实际: " + relay + ");选中 jar = " + jar);
         check(debug.isEmpty(), "★ 发布 jar 不含 dev/taclight/debug/**(实际 " + debug.size()
                 + " 条);选中 jar = " + jar);
+
+        // 2026-09-28 U-1b:gradle.properties 的 mod_version 与 jar 清单 Implementation-Version 必须同源。
+        //   为什么补这条:implVer 此前**只被打印、从未被 check**(全文件仅 :93 读、:96 打印),
+        //   而 modVersion() 早就在手上 —— 两边数据都在,就是没比。纯关系断言,**不钉任何字面量**
+        //   (AGENTS 五 第7条:它每轮都会合法变,所以只能断关系,不能断值)。
+        //   顺带价值:本条对"jar 是上一轮旧件、而 gradle.properties 的 mod_version 已推进"也敏感。
+        // ⚠️ 边界提醒(不得夸大):本条**抓不到** R11 的 B2 ——
+        //   B2 是 class 常量 `TacLightMod.VERSION="0.10.0"` 对 mods.toml 的 0.11.0,
+        //   要抓 B2 **必须解析 class 常量池**,那是**另一张票**,不在本条范围,也没塞进来。
+        // ⚠️ 任一侧为 null 一律判红,不按"相等"放过(AGENTS 一 4:空值 ≠ 否定结论)。
+        String modVer = modVersion();
+        check(modVer != null && implVer != null && modVer.equals(implVer),
+                "正控·构件: gradle.properties mod_version == 清单 Implementation-Version(实测 mod_version="
+                        + modVer + " / Implementation-Version=" + implVer + ")");
     }
 
     /** ② 构建树里必须有该类(剔除 ≠ 没编译)。 */

@@ -329,6 +329,12 @@ tasks.register('generateDevMixinsJson') {
 tasks.register('taclightContracts', JavaExec) {
     dependsOn tasks.named('testClasses')
     dependsOn 'taclightToolsSelftest'
+    // 2026-09-28 U-1a(R11-1):构件层闸门 ⑥ 会读 build/libs/taclight-<mod_version>.jar。
+    //   **必须** dependsOn jar —— 否则 build\libs 里躺着一份**旧** jar 时,
+    //   "改了配置但不重建"会静默拿旧 jar 跑 ⑥,读到的不是本次构建的产物。
+    //   注意:**不要**在这里钉 jar 的 sha256/字节数(合法重建字节会变,钉字面量必然恒红);
+    //   "不能是旧件"由这条 dependsOn 保证,"不能是空壳"由 ⑥ 自己的正控保证。
+    dependsOn tasks.named('jar')
     classpath = sourceSets.test.runtimeClasspath
     mainClass = 'dev.taclight.AllContracts'
     // release-jar 选取确定化(2026-09-25,BACKLOG ⑯):InteropPackagingContract 不再按 mtime 取

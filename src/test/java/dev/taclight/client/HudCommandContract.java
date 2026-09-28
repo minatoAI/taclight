@@ -26,7 +26,14 @@ import java.util.zip.ZipFile;
  * 枚举 jar 后断言 (a) 无 {@code dev/taclight/client/HudCommand.class} 条目、
  * (b) 无任何 {@code DebugCommandRelay*} 条目、(c) 无任何 {@code .class} 条目含
  * {@code !hud} ASCII 字节。**禁止**再"grep 构建脚本后推论发布件内容"
- * (R9 已证那种推论会静默失效)。</p>
+ * (R9 已证那种推论会静默失效)。<b>2026-09-28 U-1a 增补正控 (d)(e)(f)</b>:
+ * 原先 ⑥ 只有 (a)(b)(c) 三条**负断言** + 一条 {@code jar != null} ⇒
+ * <b>任意一个"结构上不是发布件"的 jar 都能 ALL GREEN</b>(0 条目 / 只含 3 个文件的 stub 均实测通过)；
+ * 外部审计 P1-1 早已指出该病。⇒ 增 (d) 条目总数下限、(e) class 数下限、
+ * (f) <b>核心条目必须存在</b>的正向清单。
+ * <p>⚠️ 正控只断言<b>结构/关系</b>,<b>不钉任何 sha256 或字节数</b>:
+ * 合法重建会让 jar 字节变(timestamp 等),钉字面量必然"永远红/下一轮假红"。
+ * 真正的"读旧 jar"风险由 {@code build.gradle} 的 {@code taclightContracts.dependsOn jar} 堵。</p>
  */
 public final class HudCommandContract {
     private static int checks;
@@ -36,6 +43,43 @@ public final class HudCommandContract {
     private static final String PROP_RELEASE_JAR = "taclight.releaseJar";
     private static final Path LIBS = Path.of("build", "libs");
     private static final Path GRADLE_PROPS = Path.of("gradle.properties");
+
+    // ==== ⑥ 正控阈值(2026-09-28 U-1a)====
+    // 定值依据(实件量得,见 docs/evidence/2026-09-28-u1-ship/00-measure-release-jar.txt):
+    //   真发布件 = 280 条目(226 文件 + 54 目录) / 145 个 .class / 102 个 assets 条目。
+    // 取 200 / 100 = 各留约 29~31% 余量:既能挡住"结构塌陷"(0 条目、3 文件 stub、
+    // 截断件 —— 与下限差 66~200 倍),又不会因将来合法瘦身(减资产/减类)误报。
+    // ⚠️ 只钉**下界与结构**,不钉 sha256/字节数 —— 合法重建会让 jar 字节变,钉字面量必然恒红。
+    //
+    // ⚠️⚠️ 【登记式守卫 · 2026-09-28 U-1b】REQUIRED_RELEASE_ENTRIES 是**设计不变量**,
+    //   它的任何维护动作**必须经过台账**,不能靠"顺手改个字符串":
+    //   若本清单某项因特性增删而消失,**必须**在 `docs\BACKLOG.md` 记一条,并写明
+    //   ① 这一项当初**保护的是什么** ② 为什么现在**不再**需要它。
+    //   **删一个字符串 ≠ 修好判据** —— 绕过本守卫最省事的做法恰恰就是删名字,
+    //   而那正是本守卫存在的理由;把它写成"可以改"等于把守卫自己拆掉。
+    //   已知跨轮耦合(须在台账登记):`VERDICT.md §3 B1` 修法②(结构上移出发布件)一旦采纳,
+    //   `dev/taclight/command/TacLightCommand.class` 与 `dev/taclight/tune/TuneService.class`
+    //   会随之消失,本清单**必须同步处理**,且台账里要写明它保护的是 B1 的哪一条。
+    //   (修法①默认关 dev 开关 / ③改权限等级 都不动这两项,本清单继续成立。)
+    private static final int MIN_RELEASE_ENTRIES = 200;
+    private static final int MIN_RELEASE_CLASSES = 100;
+
+    /** 核心条目正控清单:玩家真正要用到的东西 + 打包元数据,必须在发布件里。 */
+    private static final List<String> REQUIRED_RELEASE_ENTRIES = List.of(
+            "META-INF/mods.toml",
+            "META-INF/MANIFEST.MF",
+            "pack.mcmeta",
+            "taclight.mixins.json",
+            "taclight.refmap.json",
+            "dev/taclight/TacLightMod.class",
+            "dev/taclight/item/FlashlightItem.class",
+            "dev/taclight/registry/ModItems.class",
+            "dev/taclight/network/TacLightNetwork.class",
+            "dev/taclight/config/TacLightConfig.class",
+            "dev/taclight/interop/RuntimePackInjector.class",
+            "dev/taclight/client/ClientEvents.class",
+            "dev/taclight/command/TacLightCommand.class",
+            "dev/taclight/tune/TuneService.class");
 
     public static void main(String[] args) throws Exception {
         contentLayer();
@@ -143,12 +187,16 @@ public final class HudCommandContract {
         if (jar == null) return;
         List<String> badEntries = new ArrayList<>();
         List<String> tokenHits = new ArrayList<>();
+        List<String> names = new ArrayList<>();
+        int classCount = 0;
         byte[] token = "!hud".getBytes(StandardCharsets.US_ASCII);
         try (ZipFile z = new ZipFile(jar.toFile())) {
             Enumeration<? extends ZipEntry> en = z.entries();
             while (en.hasMoreElements()) {
                 ZipEntry e = en.nextElement();
                 String name = e.getName();
+                names.add(name);
+                if (name.endsWith(".class")) classCount++;
                 if (name.equals("dev/taclight/client/HudCommand.class")) {
                     badEntries.add("HudCommand 仍在 client 包: " + name);
                 }
@@ -164,7 +212,23 @@ public final class HudCommandContract {
                 + (badEntries.isEmpty() ? "" : " ⇒ " + badEntries));
         check(tokenHits.isEmpty(), "[★必红·构件] release 件无任何 .class 条目含 '!hud' ASCII 字节"
                 + (tokenHits.isEmpty() ? "" : " ⇒ " + tokenHits));
-        System.out.println("[构件层] jar=" + jar + " entries 扫描完成(token='!hud')");
+
+        // ---- ⑥ 正控(2026-09-28 U-1a):上面三条全是【负断言】,对"空/残/stub jar"恒绿。
+        //      下面三条是【正断言】:"该有的在不在",让非发布件露不出 ALL GREEN。----
+        System.out.println("[构件层] 实测 entries=" + names.size() + " classes=" + classCount);
+        check(names.size() >= MIN_RELEASE_ENTRIES,
+                "[正控·构件] 条目总数 >= " + MIN_RELEASE_ENTRIES + "(实测 " + names.size()
+                        + " ⇒ 低于下限的 jar 不是发布件;0 条目/3 文件 stub 会被这条拦下)");
+        check(classCount >= MIN_RELEASE_CLASSES,
+                "[正控·构件] .class 条目数 >= " + MIN_RELEASE_CLASSES + "(实测 " + classCount + ")");
+
+        List<String> missing = new ArrayList<>();
+        for (String req : REQUIRED_RELEASE_ENTRIES) {
+            if (!names.contains(req)) missing.add(req);
+        }
+        check(missing.isEmpty(),
+                "[正控·构件] 核心条目齐全(应存在 " + REQUIRED_RELEASE_ENTRIES.size() + " 项,缺 " + missing.size()
+                        + (missing.isEmpty() ? "" : " ⇒ " + missing) + ")");
     }
 
     /** 朴素字节搜索(class 常量池为 modified-UTF8,ASCII 片段逐字节可比)。 */
