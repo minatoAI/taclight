@@ -1,4 +1,4 @@
-package dev.taclight.sync;
+package dev.taclight.devonly;
 
 import dev.taclight.TacLightMod;
 import net.minecraftforge.event.server.ServerAboutToStartEvent;

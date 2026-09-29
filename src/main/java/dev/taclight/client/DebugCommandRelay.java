@@ -1,7 +1,7 @@
 package dev.taclight.client;
 
 import dev.taclight.TacLightMod;
-import dev.taclight.channel.KeyInject;
+import dev.taclight.devonly.KeyInject;
 import dev.taclight.debug.HudCommand;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
@@ -83,7 +83,7 @@ import java.nio.file.StandardCopyOption;
  *   <li>{@code !key} —— <b>合成按键注入</b>(2026-09-26 待办 A5,关闭 CAPABILITY-GAPS §1 缺口):
  *       {@code !key <name> <down|up|ms>} / {@code !key list} / {@code !key clear}。
  *       名字表(原版 5 键 + hotbar.1..9 + TacLight 的 L/M/K/N/B/F9)与两类消费路径见
- *       {@link dev.taclight.channel.KeyInject};窗口**不聚焦**也可用 —— 进程内直接走
+ *       {@link dev.taclight.devonly.KeyInject};窗口**不聚焦**也可用 —— 进程内直接走
  *       {@code KeyboardHandler.keyPress}(= 真实按键回调调用的同一个方法,首行只校验 window 句柄),
  *       因此 {@code consumeClick()} 型的 TacLight 开关(clickCount)与 tick 路径的原版键同时覆盖。</li>
  *  </ul></p>

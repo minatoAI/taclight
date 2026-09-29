@@ -1,5 +1,7 @@
 package dev.taclight.channel;
 
+import dev.taclight.devonly.KeyInject;
+
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -28,7 +30,7 @@ public final class KeyInjectContract {
     private static int checks;
     private static final List<String> FAILURES = new ArrayList<>();
     private static final String RELAY = "src/main/java/dev/taclight/client/DebugCommandRelay.java";
-    private static final String PURE = "src/main/java/dev/taclight/channel/KeyInject.java";
+    private static final String PURE = "src/main/java/dev/taclight/devonly/KeyInject.java";
 
     public static void main(String[] args) throws Exception {
         // ================= 1. 名字表(可注入集合 + 消费路径) =================

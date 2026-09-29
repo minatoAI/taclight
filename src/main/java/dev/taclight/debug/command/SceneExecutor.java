@@ -1,4 +1,4 @@
-package dev.taclight.command;
+package dev.taclight.debug.command;
 
 import dev.taclight.TacLightMod;
 import net.minecraft.commands.CommandSourceStack;

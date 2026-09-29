@@ -32,9 +32,9 @@ public final class SubscriberScopeContract {
     static {
         SIDE_EFFECT_MARKERS.put("client/ClientEvents.java", "TacLightMod.LOGGER");
         SIDE_EFFECT_MARKERS.put("client/KeyBindingsModBus.java", "keybind register:");
-        SIDE_EFFECT_MARKERS.put("command/TacLightCommand.java", "CMDS RegisterCommandsEvent firing");
+        SIDE_EFFECT_MARKERS.put("debug/command/TacLightCommand.java", "CMDS RegisterCommandsEvent firing");
         SIDE_EFFECT_MARKERS.put("debug/TicketBridge.java", "bridge armed in");
-        SIDE_EFFECT_MARKERS.put("sync/DevLanAuthHook.java", "DEV: integrated server LAN auth disabled");
+        SIDE_EFFECT_MARKERS.put("devonly/DevLanAuthHook.java", "DEV: integrated server LAN auth disabled");
     }
 
     /**

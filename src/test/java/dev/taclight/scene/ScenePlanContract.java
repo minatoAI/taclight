@@ -1,7 +1,7 @@
 package dev.taclight.scene;
 
-import dev.taclight.command.CamStore;
-import dev.taclight.command.ScenePresets;
+import dev.taclight.debug.command.CamStore;
+import dev.taclight.debug.command.ScenePresets;
 
 import java.util.List;
 import java.util.Map;

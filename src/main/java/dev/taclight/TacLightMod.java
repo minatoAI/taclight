@@ -13,7 +13,20 @@ import org.slf4j.Logger;
 @Mod(TacLightMod.MODID)
 public class TacLightMod {
     public static final String MODID = "taclight";
-    public static final String VERSION = "0.10.0";
+
+    /**
+     * 版本号 —— <b>单一真源</b> = {@code gradle.properties} 的 {@code mod_version}。
+     *
+     * <p>构建期由 {@code build.gradle} 的 {@code generateBuildInfo} 生成为
+     * {@link TacLightBuildInfo#VERSION}(生成物是**唯一**带版本字面量的地方)。</p>
+     *
+     * <p><b>2026-09-28 R12 修 B2</b>:此前这里是手写字面量(旧值为 0.10.0),而打包元数据走
+     * {@code mod_version} ⇒ 同一个 jar 自报两个版本(模组列表一个、日志横幅另一个),
+     * 玩家报 bug 时两边对不上。现在两边同源,并由
+     * {@code InteropPackagingContract.versionCoherence()} 钉成机器判据
+     * (发布件里本类的常量池必须含 {@code mod_version},而本文件的**代码**里不得再出现手写版本字面量)。</p>
+     */
+    public static final String VERSION = TacLightBuildInfo.VERSION;
     public static final Logger LOGGER = LogUtils.getLogger();
 
     public TacLightMod() {

@@ -142,7 +142,7 @@ public class DebugSnapshotContract {
         String relay = read("src/main/java/dev/taclight/client/DebugCommandRelay.java");
         check(relay.contains("!snap") && relay.contains("DebugSnapshotter.saveSnapshot"),
                 "relay 含 !snap 分支且调同一 saveSnapshot");
-        String cmd = read("src/main/java/dev/taclight/command/TacLightCommand.java");
+        String cmd = read("src/main/java/dev/taclight/debug/command/TacLightCommand.java");
         check(cmd.contains("literal(\"snap\")"), "命令树含 snap 分支(仿 light 分支写法)");
         check(cmd.contains("snapMpGuard") && cmd.contains("isDedicatedServer")
                         && cmd.contains("仅单人/客户端生效"),

@@ -21,16 +21,21 @@ import java.util.zip.ZipFile;
  * 无守卫写入口,与 modtest-mcp 令牌+审计取向冲突)⇒ 发布包实例里"零 RELAY 行"是<b>预期</b>。
  * 本契约把这条边界钉死,并钉死"路径口径"与"可操作文案"两处修正。</p>
  *
- * <p>四组断言(零真机可判定):</p>
+ * <p><b>五组断言(零真机可判定)</b>:</p>
  * <ol>
- *   <li><b>发布 jar 必须不含</b> {@code DebugCommandRelay*.class} 与 {@code dev/taclight/debug/**};
+ *   <li><b>发布 jar 必须不含</b> {@code DebugCommandRelay*.class} 与 {@code dev/taclight/debug/**},
+ *       以及 {@code dev/taclight/devonly/**}(2026-09-28 R12 新增:dev-only 边界的第二命名空间)
+ *       与四种"已搬走的旧路径"幽灵守卫(B1 命令族 / B3 LAN 钩子 / N1 按键注入 / N2 构建期工具);
  *       若<b>选不到</b> release jar(未构建 / 只有 dev 变体 / 显式路径不存在)会<b>大声失败</b>
  *       (2026-09-25 起不再"静默跳过";选取规则见下)——否则这条边界断言会假装通过;</li>
- *   <li><b>{@code build/classes} 必须含</b> {@code DebugCommandRelay.class}(证明是"被剔除"
- *       而不是"没编译"——两者对排障含义完全不同);</li>
- *   <li>{@code build.gradle} 的 5 条 exclude 必须在(防误删);</li>
+ *   <li><b>{@code build/classes} 必须含</b> {@code DebugCommandRelay.class} 与 8 个**已搬进 dev-only
+ *       命名空间**的类(证明是"被剔除"而不是"没编译"——两者对排障含义完全不同);</li>
+ *   <li>{@code build.gradle} 的 6 条 exclude 必须在(防误删);</li>
  *   <li>监听路径表达式必须是 {@code FMLPaths.GAMEDIR.get().resolve("taclight-cmds.txt")};
- *       文案里不得再出现"游戏内 !interop"(不存在客户端命令路径,曾误导验收人)。</li>
+ *       文案里不得再出现"游戏内 !interop"(不存在客户端命令路径,曾误导验收人);</li>
+ *   <li><b>版本一致性(B2 机器闸门,2026-09-28 R12)</b>:{@code mods.toml version} ==
+ *       {@code gradle.properties mod_version} == 清单 {@code Implementation-Version},
+ *       且 {@code TacLightMod.class} 常量池含该版本串、源码无手写版本字面量。</li>
  * </ol>
  *
  * <p><b>release jar 的选取(2026-09-25 确定化;BACKLOG §2.18⑦ / 待办 ⑯)</b>:旧实现按
@@ -67,10 +72,37 @@ public class InteropPackagingContract {
             "exclude 'dev/taclight/client/DebugCommandRelay*.class'",
             "exclude 'taclight.debug.mixins.json'",
             "exclude 'taclight.dev.mixins.json'",
+            "exclude 'dev/taclight/devonly/**'",
+    };
+
+    /**
+     * 2026-09-28 R12:dev-only 面的**禁止前缀/前缀守卫**(B1 命令族 / B3 LAN 钩子 / N1 按键注入 / N2 构建期工具)。
+     * 前三项是**当前**命名空间,后四项是**已搬走的旧路径** —— 留着当幽灵守卫,防有人"搬回去"或少搬一个类。
+     */
+    private static final String[] DEV_ONLY_PREFIXES = {
+            "dev/taclight/devonly/",
+            "dev/taclight/command/",
+            "dev/taclight/sync/DevLanAuthHook",
+            "dev/taclight/channel/KeyInject",
+            "dev/taclight/tools/PackPatcherTool",
+            "dev/taclight/tune/TuneService",
+    };
+
+    /** ② 的正控清单:R12 搬进 dev-only 命名空间的 8 个类必须在构建树里(剔除 ≠ 没编译)。 */
+    private static final String[] MOVED_DEV_ONLY_CLASSES = {
+            "dev/taclight/debug/command/TacLightCommand.class",
+            "dev/taclight/debug/command/SceneExecutor.class",
+            "dev/taclight/debug/command/ScenePresets.class",
+            "dev/taclight/debug/command/CamStore.class",
+            "dev/taclight/debug/tune/TuneService.class",
+            "dev/taclight/devonly/KeyInject.class",
+            "dev/taclight/devonly/DevLanAuthHook.class",
+            "dev/taclight/devonly/tools/PackPatcherTool.class",
     };
 
     public static void main(String[] args) throws Exception {
         releaseJarBoundary();
+        versionCoherence();
         buildClassesPresent();
         gradleExcludes();
         listenPathAndWording();
@@ -102,6 +134,7 @@ public class InteropPackagingContract {
                         + ",实际 " + mixin + ")⇒ 选中的是 " + jar);
         List<String> relay = new ArrayList<>();
         List<String> debug = new ArrayList<>();
+        List<String> devOnly = new ArrayList<>();
         boolean hasInterop = false;
         try (ZipFile z = new ZipFile(jar.toFile())) {
             Enumeration<? extends ZipEntry> en = z.entries();
@@ -109,6 +142,7 @@ public class InteropPackagingContract {
                 String n = en.nextElement().getName();
                 if (n.startsWith("dev/taclight/client/DebugCommandRelay")) relay.add(n);
                 if (n.startsWith("dev/taclight/debug/")) debug.add(n);
+                if (isDevOnlyEntry(n)) devOnly.add(n);
                 if (n.equals("dev/taclight/interop/RuntimePackInjector.class")) hasInterop = true;
             }
         }
@@ -116,20 +150,71 @@ public class InteropPackagingContract {
         check(relay.isEmpty(), "★ 发布 jar 不含 DebugCommandRelay*(实际: " + relay + ");选中 jar = " + jar);
         check(debug.isEmpty(), "★ 发布 jar 不含 dev/taclight/debug/**(实际 " + debug.size()
                 + " 条);选中 jar = " + jar);
+        // 2026-09-28 R12[B1/B3/N1/N2·构件]:这是"结构剔除"口径的机器闸门。
+        //   红态自证用的是**归档的旧发布件**(1498EAD7…):在它上面本条必红并逐条点名,不是推演。
+        check(devOnly.isEmpty(), "★ R12[B1/B3/N1/N2·构件] 发布 jar 不含 dev-only 面(devonly/** + 已搬走的旧路径)"
+                + "(实际 " + devOnly.size() + " 条" + (devOnly.isEmpty() ? "" : " ⇒ " + devOnly)
+                + ");选中 jar = " + jar);
 
         // 2026-09-28 U-1b:gradle.properties 的 mod_version 与 jar 清单 Implementation-Version 必须同源。
         //   为什么补这条:implVer 此前**只被打印、从未被 check**(全文件仅 :93 读、:96 打印),
         //   而 modVersion() 早就在手上 —— 两边数据都在,就是没比。纯关系断言,**不钉任何字面量**
         //   (AGENTS 五 第7条:它每轮都会合法变,所以只能断关系,不能断值)。
         //   顺带价值:本条对"jar 是上一轮旧件、而 gradle.properties 的 mod_version 已推进"也敏感。
-        // ⚠️ 边界提醒(不得夸大):本条**抓不到** R11 的 B2 ——
-        //   B2 是 class 常量 `TacLightMod.VERSION="0.10.0"` 对 mods.toml 的 0.11.0,
-        //   要抓 B2 **必须解析 class 常量池**,那是**另一张票**,不在本条范围,也没塞进来。
+        // ✅ 2026-09-28 R12:B2 的**另一半**(class 常量对 mods.toml)已由 versionCoherence() 承接 ——
+        //   它解析 TacLightMod.class 的常量子节 + 读 jar 内 mods.toml,并附"源码不得写字面量"的复发守卫。
+        //   旧注释所说"那是另一张票"现已出票并落地。
         // ⚠️ 任一侧为 null 一律判红,不按"相等"放过(AGENTS 一 4:空值 ≠ 否定结论)。
         String modVer = modVersion();
         check(modVer != null && implVer != null && modVer.equals(implVer),
                 "正控·构件: gradle.properties mod_version == 清单 Implementation-Version(实测 mod_version="
                         + modVer + " / Implementation-Version=" + implVer + ")");
+    }
+
+    /**
+     * ⑤ 版本一致性(B2 的机器闸门,2026-09-28 R12)。**关系断言,不钉任何字面量**
+     * ({@code AGENTS §五} 第 7 条:版本每轮都会合法变 ⇒ 只能断关系,不能断值):
+     * <ul>
+     *   <li>(a) 发布 jar 的 {@code META-INF/mods.toml} version == {@code gradle.properties mod_version}
+     *       == 清单 {@code Implementation-Version}(三方同源);</li>
+     *   <li>(b) {@code dev/taclight/TacLightMod.class} 常量池含 mod_version 的 ASCII 字节
+     *       ⇒ <b>旧码必红</b>:R12 前该常量是手写的 {@code "0.10.0"} 而 {@code mod_version=0.11.0},
+     *       本条在**归档的旧发布件**上就是红的(红态自证用的是旧 jar,不是推演);</li>
+     *   <li>(c) 源码 {@code TacLightMod.java} 不得再出现带引号的语义化版本字面量
+     *       ⇒ 防"下次升版本原样复发"。</li>
+     * </ul>
+     * ⚠️ 任一侧读不到(null)一律判红,不按"相等"放过({@code AGENTS §一 4}:空值 ≠ 否定结论)。
+     */
+    private static void versionCoherence() throws IOException {
+        Path jar = pickReleaseJar().path();
+        check(jar != null, "[B2·构件] 拿到 release jar");
+        if (jar == null) return;
+        String modVer = modVersion();
+        String implVer = manifestAttr(jar, "Implementation-Version");
+        String tomlVer = modsTomlVersion(jar);
+        check(modVer != null && !modVer.isEmpty(), "读到 gradle.properties mod_version(" + modVer + ")");
+        check(modVer != null && modVer.equals(tomlVer),
+                "[B2·构件] 发布 jar 的 mods.toml version == mod_version(mods.toml=" + tomlVer
+                        + " / mod_version=" + modVer + ")");
+        check(modVer != null && modVer.equals(implVer),
+                "[B2·构件] 发布 jar 清单 Implementation-Version == mod_version(实际 " + implVer
+                        + " / " + modVer + ")");
+        boolean inClass = modVer != null && !modVer.isEmpty()
+                && zipEntryContainsAscii(jar, "dev/taclight/TacLightMod.class", modVer);
+        check(inClass, "[B2·构件·真关系] TacLightMod.class 内含 mod_version 版本串 '" + modVer
+                + "'(旧码硬编码 0.10.0 时本条红 —— 这就是 B2 的机器判据)");
+        Path src = Path.of("src/main/java/dev/taclight/TacLightMod.java");
+        boolean srcThere = Files.isRegularFile(src);
+        // ⚠️ 必须**先剥注释再判**:本类与 TacLightMod 的 javadoc 里会引用历史字面量(如 "0.10.0")
+        //   ⇒ 不剥注释就会"文档文字满足失败检测器"(AGENTS §五 M1 那条教训的镜像形态)。
+        String text = srcThere
+                ? InteropStatusContract.stripComments(Files.readString(src, StandardCharsets.UTF_8))
+                : null;
+        String hard = text == null ? null : findHardCodedVersion(text);
+        check(srcThere && hard == null,
+                "[B2·源码] TacLightMod.java 的**代码**里无手写语义化版本字面量(单一真源 = gradle.properties mod_version)"
+                        + (srcThere ? "" : " ⇒ 源文件读不到: " + src)
+                        + (hard == null ? "" : " ⇒ 命中 " + hard));
     }
 
     /** ② 构建树里必须有该类(剔除 ≠ 没编译)。 */
@@ -140,6 +225,15 @@ public class InteropPackagingContract {
         Path debugDir = Path.of("build/classes/java/main/dev/taclight/debug");
         check(Files.isDirectory(debugDir),
                 "★ build/classes 含 dev/taclight/debug/ 目录(调试类确实编译了): " + debugDir);
+        // 2026-09-28 R12:8 个搬进 dev-only 命名空间的类同样必须编译出来 —— 否则"发布件里没有"
+        //   会被"源码被删了"冒充(两种事实对排障含义完全不同)。
+        List<String> notCompiled = new ArrayList<>();
+        for (String rel : MOVED_DEV_ONLY_CLASSES) {
+            if (!Files.isRegularFile(Path.of("build/classes/java/main", rel))) notCompiled.add(rel);
+        }
+        check(notCompiled.isEmpty(), "★ build/classes 含 R12 搬走的 8 个 dev-only 类(应 " 
+                + MOVED_DEV_ONLY_CLASSES.length + " 个,缺 " + notCompiled.size()
+                + (notCompiled.isEmpty() ? "" : " ⇒ " + notCompiled) + ")");
     }
 
     /** ③ build.gradle 的剔除规则必须在。 */
@@ -236,6 +330,58 @@ public class InteropPackagingContract {
                     .sorted()
                     .toList();
         }
+    }
+
+    /** R12:jar 条目是否落在 dev-only 禁止清单(大小写敏感;jar 条目名恒为小写路径)。 */
+    private static boolean isDevOnlyEntry(String name) {
+        for (String p : DEV_ONLY_PREFIXES) {
+            if (name.startsWith(p)) return true;
+        }
+        return false;
+    }
+
+    /** R12:读 jar 内 {@code META-INF/mods.toml} 里本模组自身的 {@code version="…"}。 */
+    private static String modsTomlVersion(Path jar) throws IOException {
+        try (ZipFile z = new ZipFile(jar.toFile())) {
+            ZipEntry e = z.getEntry("META-INF/mods.toml");
+            if (e == null) return null;
+            String txt;
+            try (var in = z.getInputStream(e)) {
+                txt = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+            }
+            var m = java.util.regex.Pattern.compile("(?m)^\\s*version\\s*=\\s*\"([^\"]+)\"").matcher(txt);
+            return m.find() ? m.group(1) : null;
+        }
+    }
+
+    /**
+     * R12:jar 内某条目的**原始字节**是否含给定 ASCII 串(class 常量池为 modified-UTF8,
+     * ASCII 段逐字节可比)。条目不存在 ⇒ false(调用方按判红处理)。
+     */
+    private static boolean zipEntryContainsAscii(Path jar, String entry, String ascii) throws IOException {
+        byte[] token = ascii.getBytes(StandardCharsets.US_ASCII);
+        try (ZipFile z = new ZipFile(jar.toFile())) {
+            ZipEntry e = z.getEntry(entry);
+            if (e == null) return false;
+            byte[] data;
+            try (var in = z.getInputStream(e)) {
+                data = in.readAllBytes();
+            }
+            for (int i = 0; i + token.length <= data.length; i++) {
+                boolean ok = true;
+                for (int j = 0; j < token.length; j++) {
+                    if (data[i + j] != token[j]) { ok = false; break; }
+                }
+                if (ok) return true;
+            }
+        }
+        return false;
+    }
+
+    /** R12:源码里带引号的语义化版本字面量(如 {@code "0.10.0"});没有 ⇒ null。 */
+    private static String findHardCodedVersion(String src) {
+        var m = java.util.regex.Pattern.compile("\"\\d+\\.\\d+\\.\\d+\"").matcher(src);
+        return m.find() ? m.group() : null;
     }
 
     /** 读 jar 清单里的属性(没有清单或没有该键 ⇒ null)。 */

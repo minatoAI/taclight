@@ -1,4 +1,4 @@
-package dev.taclight.channel;
+package dev.taclight.devonly;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;

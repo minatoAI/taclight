@@ -1,4 +1,7 @@
-package dev.taclight.tune;
+package dev.taclight.debug.tune;
+
+import dev.taclight.tune.TuneKnobs;
+import dev.taclight.tune.TunePersist;
 
 /**
  * {@code /taclight tune <name> [<value>|status|off]} 编排(2026-09-19)。

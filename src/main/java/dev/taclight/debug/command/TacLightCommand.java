@@ -1,4 +1,4 @@
-package dev.taclight.command;
+package dev.taclight.debug.command;
 
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
@@ -268,7 +268,7 @@ public class TacLightCommand {
     private static int tuneAll(CommandSourceStack source) {
         if (tuneMpGuard(source)) return 0;
         // 专用服已提前返回,到这里必是集成服:客户端门类加载安全。
-        dev.taclight.tune.TuneService.Result r = dev.taclight.tune.TuneService.statusAll(
+        dev.taclight.debug.tune.TuneService.Result r = dev.taclight.debug.tune.TuneService.statusAll(
                 dev.taclight.client.TuneClientGate.GATE, TUNE_APPLIER);
         String msg = r.message() + "\n(专用服/联机客机不生效:仅单人/主机本机)";
         source.sendSuccess(() -> Component.literal(msg), false);
@@ -279,7 +279,7 @@ public class TacLightCommand {
     /** /taclight tune &lt;name&gt; [&lt;value&gt;|status|off]。 */
     private static int tuneRun(CommandSourceStack source, String name, String value) {
         if (tuneMpGuard(source)) return 0;
-        dev.taclight.tune.TuneService.Result r = dev.taclight.tune.TuneService.tune(
+        dev.taclight.debug.tune.TuneService.Result r = dev.taclight.debug.tune.TuneService.tune(
                 name, value,
                 dev.taclight.tune.TunePersist.forgeSink(),
                 dev.taclight.client.TuneClientGate.GATE, TUNE_APPLIER);

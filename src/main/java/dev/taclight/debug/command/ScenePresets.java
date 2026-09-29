@@ -1,4 +1,4 @@
-package dev.taclight.command;
+package dev.taclight.debug.command;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;

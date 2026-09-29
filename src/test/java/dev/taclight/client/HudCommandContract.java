@@ -62,10 +62,18 @@ public final class HudCommandContract {
     //   ① 这一项当初**保护的是什么** ② 为什么现在**不再**需要它。
     //   **删一个字符串 ≠ 修好判据** —— 绕过本守卫最省事的做法恰恰就是删名字,
     //   而那正是本守卫存在的理由;把它写成"可以改"等于把守卫自己拆掉。
-    //   已知跨轮耦合(须在台账登记):`VERDICT.md §3 B1` 修法②(结构上移出发布件)一旦采纳,
-    //   `dev/taclight/command/TacLightCommand.class` 与 `dev/taclight/tune/TuneService.class`
-    //   会随之消失,本清单**必须同步处理**,且台账里要写明它保护的是 B1 的哪一条。
-    //   (修法①默认关 dev 开关 / ③改权限等级 都不动这两项,本清单继续成立。)
+    //   ✅ **2026-09-28 R12 已按本守卫的要求执行**(不是"顺手删"):
+    //      `VERDICT.md §3 B1` 采纳**修法②(结构上移出发布件)**⇒ 整族 `/taclight` 调试命令
+    //      物理移入 `dev/taclight/debug/command/**`, `TuneService` 移入 `dev/taclight/debug/tune/**`,
+    //      两者随既有 `exclude 'dev/taclight/debug/**'` 一起离开发布件。
+    //      ① 这两项当初保护的 = "B1 那条假设的历史形态"(调试命令族曾经**在**发布件里);
+    //      ② 现在不再需要 = B1 的裁决从"默认关开关/提权限"改成"结构剔除",
+    //         而"它们必须不在发布件里"这一条已由 `InteropPackagingContract` 的
+    //         **dev-only 条目集闸门**(前缀 `dev/taclight/debug/`)承接 ⇒ 从**必需清单**移出、
+    //         改为**禁止清单**,判据强度是升不是降。
+    //      台账留痕:`docs\BACKLOG.md §2.107`(本轮)。
+    //   (修法①默认关 dev 开关 / ③改权限等级 都会让这两项继续留在发布件 ⇒ 本清单才需要它们;
+    //    两种修法本轮都未被采纳。)
     private static final int MIN_RELEASE_ENTRIES = 200;
     private static final int MIN_RELEASE_CLASSES = 100;
 
@@ -82,9 +90,7 @@ public final class HudCommandContract {
             "dev/taclight/network/TacLightNetwork.class",
             "dev/taclight/config/TacLightConfig.class",
             "dev/taclight/interop/RuntimePackInjector.class",
-            "dev/taclight/client/ClientEvents.class",
-            "dev/taclight/command/TacLightCommand.class",
-            "dev/taclight/tune/TuneService.class");
+            "dev/taclight/client/ClientEvents.class");
 
     public static void main(String[] args) throws Exception {
         contentLayer();

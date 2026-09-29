@@ -89,6 +89,36 @@ minecraft {
 
 sourceSets.main.resources { srcDir 'src/generated/resources' }
 
+// B2 修复(2026-09-28 R12):版本号**单一真源** = gradle.properties 的 mod_version。
+//   背景:发布件元数据 `0.11.0` 而运行时横幅打印 `v0.10.0`(`TacLightMod.VERSION` 是手写字面量,
+//   javac 常量内联扩散到 2 个 class)⇒ 模组列表与日志自报两个版本,支持链路第一手就分叉。
+//   做法:构建期把 mod_version 生成为一个 Java 常量类 —— **带版本字面量的唯一地方是生成物**,
+//   源码里(含 TacLightMod.java)不再有任何手写版本字面量。
+//   生成物保持**纯 ASCII**(规避 javac 编码口径),且内容只随 mod_version 变 ⇒ 不破坏可复现构建。
+//   ⚠️ 契约侧只许断**关系**(mods.toml == mod_version == 清单 == 该类常量),不许钉本文件的 sha/字节数
+//   (mod_version 每轮都会合法变 —— AGENTS 五 第7条)。
+tasks.register('generateBuildInfo') {
+    def outDir = file("$buildDir/generated/buildinfo")
+    def outFile = file("$outDir/dev/taclight/TacLightBuildInfo.java")
+    inputs.property('modVersion', mod_version)
+    outputs.dir outDir
+    doLast {
+        outFile.parentFile.mkdirs()
+        // 用三引号 GString(单引号之间的**行首 `+`** 在 Groovy 里会被解析成一元正号 ⇒ 构建直接炸)
+        outFile.text = """package dev.taclight;
+
+/** Generated at build time. Single source of truth = gradle.properties mod_version. Do not edit. */
+public final class TacLightBuildInfo {
+    public static final String VERSION = "${mod_version}";
+
+    private TacLightBuildInfo() {}
+}
+"""
+    }
+}
+sourceSets.main.java.srcDir "$buildDir/generated/buildinfo"
+tasks.named('compileJava') { dependsOn 'generateBuildInfo' }
+
 repositories { flatDir { dirs 'libs' } }
 
 dependencies {
@@ -253,9 +283,15 @@ tasks.named('jar', Jar).configure {
     from("$buildDir/generated/refmap") { include 'taclight.refmap.json' }
     // D3b(2026-09-17,用户拍板):发布变体剔除调试面。
     //  - dev 变体:= -PdevHarness=true,或本次调用任务名含 runClient(日常 build 不误带调试面);
-    //  - 发布包:debug/ + mixin/debug/ 类、DebugCommandRelay(含 $1 内部类)、两份调试 config
+    //  - 发布包:debug/ + mixin/debug/ 类、**dev/taclight/devonly/**(2026-09-28 R12:dev-only 面的
+    //    第二命名空间 —— B3 `DevLanAuthHook` + N1 `KeyInject` + N2 `PackPatcherTool`)、
+    //    DebugCommandRelay(含 $1 内部类)、两份调试 config
     //    全部剔除;manifest 只登记核心 config —— 而核心 config 已不含任何 debug. 条目,
     //    故"required:true + 缺类 ⇒ MixinApplyError"的充分条件不成立(R1 一手源码口径)。
+    //  - B1 的 `/taclight` 命令族(2026-09-28 R12)走的是**既有** `dev/taclight/debug/**` 那条:
+    //    整族搬进 `dev/taclight/debug/command/**` 与 `dev/taclight/debug/tune/**`,不新增机制。
+    //    ⚠️ relayonly 变体(由 devharness jar 派生)继承全部 debug 类 ⇒ 真机 harness 的
+    //    `/taclight` 与 relay 通道**不受影响**(这是选"结构剔除"而非"默认关开关"的前提)。
     def devHarness = findProperty('devHarness') != null
             ? findProperty('devHarness').toString().toBoolean()
             : gradle.startParameter.taskNames.any { it.toLowerCase().contains('runclient') }
@@ -272,6 +308,7 @@ tasks.named('jar', Jar).configure {
         exclude 'dev/taclight/debug/**'
         exclude 'dev/taclight/mixin/debug/**'
         exclude 'dev/taclight/client/DebugCommandRelay*.class'
+        exclude 'dev/taclight/devonly/**'
         exclude 'taclight.debug.mixins.json'
         exclude 'taclight.dev.mixins.json'
     }
@@ -357,7 +394,7 @@ tasks.register('taclightToolsSelftest', Exec) {
 tasks.register('patchIterationT', JavaExec) {
     dependsOn tasks.named('classes')
     classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'dev.taclight.tools.PackPatcherTool'
+    mainClass = 'dev.taclight.devonly.tools.PackPatcherTool'
     inputs.files(file('src/main/resources/shader_patches'))
     args = [
         file('../iterationT 3.2.0').absolutePath,

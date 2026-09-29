@@ -1,6 +1,7 @@
 package dev.taclight.tune;
 
 import dev.taclight.channel.LightTuneOverride;
+import dev.taclight.debug.tune.TuneService;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -251,7 +252,7 @@ public class TuneContract {
         }
 
         // ---- 接线(源码文本,旧码必红) ----
-        String cmd = read("src/main/java/dev/taclight/command/TacLightCommand.java");
+        String cmd = read("src/main/java/dev/taclight/debug/command/TacLightCommand.java");
         check(cmd.contains(".literal(\"tune\")"), "命令树含 tune 分支(删分支即红)");
         check(cmd.contains("isDedicatedServer"), "MP 守卫在位(删守卫即红)");
         check(cmd.contains("仅单人/客户端生效"), "MP 回显文案在位");

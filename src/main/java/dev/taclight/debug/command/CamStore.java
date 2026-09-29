@@ -1,4 +1,4 @@
-package dev.taclight.command;
+package dev.taclight.debug.command;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
