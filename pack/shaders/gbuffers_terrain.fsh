@@ -6,8 +6,11 @@
  *   2 = 原始 albedo + LabPBR smoothness  3 = 视图空间位置 + 遮挡系数
  *   5 = 材质(F0 介电值 / 金属标志)——阶段二起由 LabPBR _s 贴图解码,
  *       无 _s 数据回落旧默认(粗糙度 0.7 / F0 0.04,观感与阶段一一致)。
- * 遮挡系数(colortex3.a,SSO/体积光消费):实心=1.0 树叶=0.6 软植被=0.25,
+ * 遮挡系数(colortex3.a,SSO/体积光消费):实心=1.0 树叶=0.6 中低档=0.25 薄片档=0.0,
  * 分类表 = 同目录 block.properties(Iris 官方机制,mc_Entity.x 匹配)。
+ * 2026-09-18 雪地方格阵列根因轮新增 block.2003(薄片/无碰撞 → 0.0):与 Java 体素路径
+ * 的 CODE_EMPTY 对齐(雪 1-2 层、地毯、绊线、铁轨、压力板、活板门下半、红石元件等);
+ * 2001 同时兼收"部分高度"方块(半砖 bottom / 楼梯 bottom / 雪 3-7 层)对齐 CODE_VEG。
  * doc06 §2.7 "smoothness 差异化"由 LabPBR 解码落地(取代按方块 ID 方案)。
  */
 /* DRAWBUFFERS:01235 */
@@ -30,12 +33,15 @@ void main() {
     // 双面法线(M1 实机调优):草/树叶交叉面片双面渲染,背面片元翻转法线才能正确受光
     vec3 nrm = normalize(tnormal);
     if (!gl_FrontFacing) nrm = -nrm;
-    // 植被遮挡系数(M1 收尾):软植被 0.25 / 树叶 0.6 / 其余实心 1.0
+    // 植被/分档遮挡系数:中低档 0.25 / 树叶 0.6 / 薄片档 0.0 / 其余实心 1.0
     float occl = 1.0;
     if (vblockId > 2000.5 && vblockId < 2001.5) {
         occl = 0.25;
     } else if (vblockId > 2001.5 && vblockId < 2002.5) {
         occl = 0.6;
+    } else if (vblockId > 2002.5 && vblockId < 2003.5) {
+        // 薄片档(2026-09-18):碰撞形顶高 ≤ 0.25 格 / 无碰撞 ⇒ 透光,与体素 CODE_EMPTY 同档
+        occl = 0.0;
     }
     vec4 mat = taclight_decode_specular(texture2D(specular, texcoord));
     gl_FragData[0] = vec4(albedo.rgb * texture2D(lightmap, lmcoord).rgb, albedo.a);

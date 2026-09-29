@@ -13,7 +13,7 @@ import java.util.function.Supplier;
 
 /**
  * M5 多人灯状态网络通道(taclight:main):
- * - SetLightC2S:客户端把自己的开关上报纸服务端(L 键 / 枪灯探针状态变化);
+ * - SetLightC2S:客户端把自己的开关上报纸服务端(开灯键 / 枪灯探针状态变化);
  * - SyncLightS2C:服务端改完实体数据后回发受影响玩家,令其本地 ClientLightState
  *   跟随服务端真源(命令改状态时本地渲染同步,避免"命令关了灯本地还亮")。
  * 实体数据本身由原版同步给其他玩家;这两个包只服务"本人客户端的本地状态一致"。

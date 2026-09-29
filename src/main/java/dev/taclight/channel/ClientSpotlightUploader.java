@@ -71,6 +71,9 @@ public final class ClientSpotlightUploader {
             LightMotionConf.endFrame();   // 世界卸载:逐出全部灯键(重进=首帧语义)
             return;
         }
+        // !perf 相位计时(2026-09-25 ⑨):关着时 = 一次 volatile 读 + 零 nanoTime,生产零开销。
+        boolean perf = PerfStats.active();
+        long tP0 = perf ? System.nanoTime() : 0;
         dev.taclight.client.CameraSweep.tick(mc.player);
         LightParams cfg = LightParams.load();
         List<SpotlightData> lights = new ArrayList<>(2);
@@ -90,7 +93,9 @@ public final class ClientSpotlightUploader {
         // 自身灯总闸(2026-09-03 用户需求:枪灯测试单变量观察):SELF_LIGHT_ENABLED=false
         // 时本客户端不上传自身两盏灯(手持+枪),远程灯照常收集上传。
         boolean selfOn = ClientLightState.selfLightEnabled();
-        if (selfOn && ClientLightState.isOn()) {
+        // 手持灯过持物门(2026-09-25 用户报的 bug:手里拿枪时手持灯也亮,两盏灯同时开)。
+        // 与枪灯同构:开关偏好 × 持物门;未持 taclight:flashlight 一律不上传(霓虹调试豁免见 ClientLightState)。
+        if (selfOn && ClientLightState.handheldEffective()) {
             // 世界空间锚定:手持灯锚取玩家眼位，视线仍取实际观察相机(所见即所照)；
             // 这保证第一/第三人称与 Freecam 的灯源归属语义一致。vanilla view-bob 位于
             // projection，不写 Java Camera.position；不能把本锚点规则解释成 bob 根治。
@@ -132,7 +137,9 @@ public final class ClientSpotlightUploader {
         if (LightTuneOverride.beamOnly()) extraFlags |= SpotlightBufferLayout.FLAG_BEAM_ONLY;
         // 体素遮挡栅格(09-01 深夜④ DDA):墙后漏光立项,与灯数据同缓冲上传;
         // 禁用/无灯 → null,GLSL 逐光线回退屏幕空间 SSO。
+        long tP1 = perf ? System.nanoTime() : 0;
         var voxelGrid = dev.taclight.client.VoxelGrid.update(mc, lights);
+        long tP2 = perf ? System.nanoTime() : 0;
         clampLightsOutOfSolid(lights, voxelGrid);
         // 遮挡距离表(2026-09-06 方案二,!occl 默认开):仅栅格有效时置位——
         // 栅格无效时 GLSL 走原逐采样 DDA(-1→可见)回退,语义与旧行为逐位一致。
@@ -148,7 +155,16 @@ public final class ClientSpotlightUploader {
             applyTemporalConfidence(lights, slotKeys);
         }
         LightMotionConf.endFrame();
+        // 帧内数值探针(P2,2026-09-25):仅在调试中继布防时置位;未置位 ⇒ GLSL 短路,
+        // 不访问 binding=8(生产零风险)。
+        if (LightTuneOverride.numProbe()) extraFlags |= SpotlightBufferLayout.FLAG_NUM_PROBE;
+        long tP3 = perf ? System.nanoTime() : 0;
         LightBuffer.upload(lights, extraFlags, voxelGrid);
+        if (perf) {
+            long tP4 = System.nanoTime();
+            PerfStats.notePhases((tP1 - tP0) / 1e6, (tP2 - tP1) / 1e6, (tP3 - tP2) / 1e6,
+                    (tP4 - tP3) / 1e6, (tP4 - tP0) / 1e6, lights.size());
+        }
         if (FrameRecorder.active()) {
             long t = System.nanoTime() / 1_000_000L;
             // C 行明确区分相机眼/玩家眼位，并记录 vanilla bobView 的真实驱动字段。

@@ -171,16 +171,75 @@ tasks.named('processResources', ProcessResources).configure {
     ]
     inputs.properties replaceProperties
     filesMatching(['META-INF/mods.toml', 'pack.mcmeta']) { expand replaceProperties + [project: project] }
+    // ==== 文本资源行尾归一(CRLF→LF),使产物与"检出 eol"无关(2026-09-26 task-22;v0.11.0 同步进本仓)====
+    // 动机:主树资源是 LF、而"干净 worktree"检出是 CRLF(core.autocrlf=true 且这些路径 text=auto 未钉 eol)
+    // ⇒ 同一个 commit 两次构建的 sha 不同(65 个文本条目只差换行符)⇒ "可跨机复现"当时是过度声称。
+    // 做法:打包前把**文本类**资源统一成 LF;逐**字节**处理(不解码),只把 CRLF 对里的 CR 丢掉。
+    // 幂等:只在真的含 CR 时重写并计数;非文本扩展名(如 .png/.class)一律不动。
+    doLast {
+        def textExt = ['json', 'toml', 'mcmeta', 'glsl', 'vsh', 'fsh', 'frag', 'vert', 'patch',
+                       'txt', 'properties', 'cfg', 'lang', 'xml', 'md']
+        def converted = 0
+        fileTree(destinationDir).matching { include textExt.collect { "**/*.${it}" } }.each { f ->
+            byte[] b = f.bytes
+            int n = 0
+            boolean hasCr = false
+            for (int i = 0; i < b.length; i++) {
+                if (b[i] == (byte) 0x0D && i + 1 < b.length && b[i + 1] == (byte) 0x0A) {
+                    hasCr = true
+                    continue
+                }
+                b[n++] = b[i]
+            }
+            if (hasCr) {
+                f.bytes = java.util.Arrays.copyOf(b, n)
+                converted++
+            }
+        }
+        if (converted > 0) {
+            logger.lifecycle("[taclight] processResources: 行尾归一 CRLF->LF 文件数 = ${converted}(保证与检出 eol 无关)")
+        }
+    }
 }
 
 tasks.named('compileJava', JavaCompile).configure {
     dependsOn 'checkLocalDeps'
+    dependsOn 'generateBuildInfo'
 }
+
+// 版本号**单一真源**(v0.11.0):构建期由 gradle.properties 的 mod_version 生成一个 Java 常量类。
+// 背景:此前 TacLightMod.VERSION 是手写字面量,与打包元数据 mods.toml 各自为政 ⇒ 同一个 jar
+// 自报两个版本号(模组列表一个、日志横幅另一个),玩家报 bug 时两边对不上。
+// 生成物保持纯 ASCII,内容只随 mod_version 变 ⇒ 不破坏可复现构建。
+tasks.register('generateBuildInfo') {
+    def outDir = file("$buildDir/generated/buildinfo")
+    def outFile = file("$outDir/dev/taclight/TacLightBuildInfo.java")
+    inputs.property('modVersion', mod_version)
+    outputs.dir outDir
+    doLast {
+        outFile.parentFile.mkdirs()
+        // 用三引号 GString(单引号串之间的**行首 `+`** 在 Groovy 里会被解析成一元正号 ⇒ 构建直接炸)
+        outFile.text = """package dev.taclight;
+
+/** Generated at build time. Single source of truth = gradle.properties mod_version. Do not edit. */
+public final class TacLightBuildInfo {
+    public static final String VERSION = "${mod_version}";
+
+    private TacLightBuildInfo() {}
+}
+"""
+    }
+}
+sourceSets.main.java.srcDir "$buildDir/generated/buildinfo"
 
 tasks.named('jar', Jar).configure {
     dependsOn 'generateRefmap'
     from("$buildDir/generated/refmap") { include 'taclight.refmap.json' }
     includeEmptyDirs = false
+    // 可复现构建(2026-09-26 B8;v0.11.0 同步进本仓):默认 preserveFileTimestamps=true 会把每个 jar
+    // 条目时间戳写成源文件 mtime ⇒ 同源码两次构建字节不同。关掉时间戳 + 固定条目顺序 ⇒ sha256 一致。
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
     manifest {
         attributes([
                 'Specification-Title': mod_id,
@@ -195,24 +254,11 @@ tasks.named('jar', Jar).configure {
     finalizedBy 'reobfJar'
 }
 
-// 光影包补丁工具:输入原包目录,输出派生包目录,原包不动。
-// 用法:gradlew patchIterationT -PtaclightPackDir=<原光影包目录>
-tasks.register('patchIterationT', JavaExec) {
-    dependsOn tasks.named('classes')
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'dev.taclight.tools.PackPatcherTool'
-    inputs.files(file('src/main/resources/shader_patches'))
-    doFirst {
-        if (!project.hasProperty('taclightPackDir')) {
-            throw new GradleException("[TacLight] 需要 -PtaclightPackDir=<原光影包目录>(默认目标 'iterationT 3.2.0' 不在本仓内)")
-        }
-    }
-    args = [
-        project.findProperty('taclightPackDir') ?: '',
-        file('src/main/resources/shader_patches/iterationT-3.2.0-v3.patch.json').absolutePath,
-        file('run/shaderpacks/iterationT 3.2.0 (taclight)').absolutePath
-    ]
-}
+// 光影包补丁工具 `patchIterationT` **自 v0.11.0 起不在本仓**:
+// 它的实现类 `dev.taclight.tools.PackPatcherTool`(v0.11.0 起改为 `dev.taclight.devonly.tools.PackPatcherTool`)
+// 属于**构建期 dev-only 工具**,已随 dev-only 面一起从公开发布件与公开源码树中移出
+// ⇒ 在公开仓保留一个指向不存在类的 Gradle 任务是"看起来能用其实必炸",故整段移除。
+// 需要它的开发者从开发树使用;本仓的发布物不依赖它(补丁模板仍在 src/main/resources/shader_patches/)。
 
 // 光影包自检:Iris 的 #include 取整行作路径,行尾任何附加内容(如注释)会炸整包
 // (InvalidPathException)—— 同步/打包前强制检查。
@@ -247,6 +293,11 @@ tasks.register('packShaderZip', Zip) {
     dependsOn tasks.named('checkShaderIncludes')
     archiveFileName = "taclight-shaders-${project.mod_version}.zip"
     destinationDirectory = layout.buildDirectory.dir('distributions')
+    // 可复现(2026-09-29 v0.11.0 发布途中发现并修):Zip 任务默认 preserveFileTimestamps=true 会把
+    // 每个条目时间戳写成源文件 mtime ⇒ **同源码两次构建同尺寸同条目但 sha 不同**
+    // (实测 100,777 B / 44 条目 / 两个不同 sha)。关掉时间戳 + 固定条目顺序 ⇒ 与 jar 一样可复现。
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
     from('pack/shaders') { into 'shaders' }
     from('pack/pack.png')
 }

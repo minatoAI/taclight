@@ -2,3 +2,8 @@
 *.bat text eol=crlf
 *.cmd text eol=crlf
 *.ps1 text eol=crlf
+# ==== 会打进 jar 的文本资源钉 LF(2026-09-26 task-22,于 2026-09-29 v0.11.0 同步进本仓)====
+# 动机:core.autocrlf=true + 上面 `* text=auto`(未钉 eol)⇒ **干净 worktree 检出是 CRLF**,
+# 而主树资源是 LF ⇒ 同一个 commit 两次构建 sha 不同(65 个文本条目只差换行符)⇒ "可跨机复现"不成立。
+# 给"会随资源进 jar 的路径"钉 eol=lf ⇒ **任何 git 检出**都得到 LF,与 autocrlf 无关。
+src/main/resources/** text eol=lf

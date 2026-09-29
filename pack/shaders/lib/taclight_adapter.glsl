@@ -18,8 +18,12 @@
 // ---- colortex3 布局(M1 热修 9b,本包私有契约;布局说明见 taclight_gbuffer.glsl)----
 //   rgb = 视图空间位置(gbuffers vsh 以 gl_ModelViewMatrix*gl_Vertex 写入,RGBA32F)
 //   a   = 遮挡者材质消光系数(分类表 pack/shaders/block.properties):
-//         1.0 实心 / 0.6 树叶 / 0.25 软植被(草/花/作物)——镂空植被按全挡
-//         处理会把满草场景的地面消成死黑、只剩草叶亮(实机实锤),半透折中。
+//         1.0 实心 / 0.6 树叶 / 0.25 中低档(草/花/作物等镂空植被 + 半砖 bottom /
+//         楼梯 bottom / 雪 3-7 层等"部分高度"方块,= Java 体素侧 CODE_VEG) /
+//         0.0 薄片档(雪 1-2 层/地毯/绊线/铁轨/压力板/活板门下半/红石元件/蛛网,
+//         = Java 体素侧 CODE_EMPTY;2026-09-18 雪地方格阵列根因轮新增 block.2003)。
+//         镂空植被按全挡处理会把满草场景的地面消成死黑、只剩草叶亮(实机实锤),
+//         半透折中。
 uniform sampler2D colortex3;
 
 // SSO 遮挡系数注入点的本包实现(core 默认回退 1.0 = 保守全挡)。

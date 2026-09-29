@@ -22,7 +22,7 @@ package dev.taclight.channel;
  * {@link #DEFAULT_KNEE_G}(默认即开)、coneDeg 回 0(直通 config 8/4)。
  * 衰减 K 经 SSBO cone.z、软肩 G 经 cone.w 逐灯透传(保留槽)——半径 r 仍走原通道,零布局变化。
  * <p>范围:bright 0.5..30(同 INTENSITY 域)/dist 4..96(同 RADIUS 域)/
- * atten 0.2..20(0.5r 处约 44%..2% 亮度,5.0=当前主包标定)/
+ * atten 0.2..20(0.5r 处约 44%..2% 亮度,20.0=当前主包标定,2026-09-06 扫参冻结,旧 5.0 作古)/
  * knee 0.2..8(近场压暗强度,2.0=当前主包标定;0.2≈趋平/压缩最弱,越大近场压得越狠)/
  * beam 0..1(体积密度 = 丁达尔效果强度,0=完全关光束做开关对比,off=回 config 默认 0.05;
  * 与 atten/knee 的 0 哨兵语义不同——密度是消费值本身,显式 0 就是关,不回退)/
@@ -92,12 +92,12 @@ public final class LightTuneOverride {
     /** relay 入口:返回状态串(供日志)。 */
     public static String configureAtten(String arg) {
         if (arg.isEmpty() || arg.equals("status")) {
-            return attenActive ? ("attenK=" + attenValue) : "off(GLSL 默认 K=5.0)";
+            return attenActive ? ("attenK=" + attenValue) : "off(GLSL 默认 K=20.0)";
         }
         if (arg.equals("off")) {
             attenActive = false;
             attenValue = 0.0f;
-            return "off(GLSL 默认 K=5.0)";
+            return "off(GLSL 默认 K=20.0)";
         }
         try {
             float v = Float.parseFloat(arg);
@@ -355,5 +355,18 @@ public final class LightTuneOverride {
     /** onFrame 调用:true → 头部 flags 置 FLAG_TEMPORAL(GLSL composite1 时间复用)。 */
     public static boolean temporal() {
         return temporalActive;
+    }
+
+    /** 帧内数值探针(P2)是否布防。**生产路径永远为 false** —— 只有调试中继 `!numprobe`
+     *  会置位;它是 GLSL 访问 binding=8 的唯一闸门,故未布防时探针缓冲根本不需要绑定。 */
+    private static volatile boolean numProbe;
+
+    public static boolean numProbe() {
+        return numProbe;
+    }
+
+    /** 由调试中继 `!numprobe` 调用(dev 变体才有入口)。 */
+    public static void setNumProbe(boolean on) {
+        numProbe = on;
     }
 }

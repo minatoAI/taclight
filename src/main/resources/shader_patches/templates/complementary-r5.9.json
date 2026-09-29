@@ -6,6 +6,8 @@
     "shaders/program/gbuffers_entities.glsl": "0e153338ca269d25",
     "shaders/program/gbuffers_hand.glsl": "ce008e0543a81a5d"
   },
+  "requiredSymbols": ["taclight_surface_lighting(", "taclight_shoulder3("],
+  "knownGoodPacks": ["ComplementaryReimagined_r5.9.3.zip"],
   "files": [
     {
       "file": "shaders/program/gbuffers_terrain.glsl",
@@ -20,6 +22,7 @@
         {
           "op": "insertAfterLine",
           "anchor": "#version  130",
+          "anchors": ["#version  130", "#version 130"],
           "content": "#extension GL_ARB_shader_storage_buffer_object : enable"
         },
         {
@@ -47,6 +50,7 @@
         {
           "op": "insertAfterLine",
           "anchor": "#version  130",
+          "anchors": ["#version  130", "#version 130"],
           "content": "#extension GL_ARB_shader_storage_buffer_object : enable"
         },
         {
@@ -74,6 +78,7 @@
         {
           "op": "insertAfterLine",
           "anchor": "#version  130",
+          "anchors": ["#version  130", "#version 130"],
           "content": "#extension GL_ARB_shader_storage_buffer_object : enable"
         },
         {

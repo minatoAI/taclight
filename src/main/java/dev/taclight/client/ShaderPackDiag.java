@@ -1,5 +1,7 @@
 package dev.taclight.client;
 
+import dev.taclight.interop.PackFingerprint;
+import dev.taclight.interop.RuntimePackInjector;
 import net.minecraft.client.Minecraft;
 
 import java.nio.charset.StandardCharsets;
@@ -8,13 +10,17 @@ import java.nio.file.Path;
 import java.util.zip.ZipFile;
 
 /**
- * 活动光影包自检:读 oculus.properties 的 shaderPack 项,
- * 并从包内容(目录或 zip)中查找我们的注入标记 TACLIGHT_PATCH_BEGIN。
- * 目的:让用户一眼看到"90% 的问题 = 选错包(选了原包而不是派生包)"。
+ * 活动光影包自检:读 oculus.properties 的 shaderPack 项,并判定"这个包到底有没有 TacLight 照明"。
+ *
+ * <p><b>判定与文案在 {@link ShaderPackDiagLogic}(纯类,离线契约覆盖)</b>;本类只负责取输入:
+ * ① Iris 是否在用包;② 选中包名;③ 磁盘包内是否含物理标记;④ <b>运行时 interop 注入结果</b>
+ * ({@link RuntimePackInjector#lastOutcome()})。</p>
+ *
+ * <p><b>2026-09-25 修复(结构性误报)</b>:旧实现只看 ③。interop 是运行时内存注入,
+ * 磁盘包永远不含标记 ⇒ 第三方包(如 Complementary)注入成功时也报 {@code ORIGINAL_PACK},
+ * 聊天栏打 ✘ "无 TacLight 注入"并劝用户换包。现在 ④ 命中同包即判 {@code INTEROP_INJECTED}。</p>
  */
 public final class ShaderPackDiag {
-    public enum Status { NO_PACK, ORIGINAL_PACK, TACLIGHT_PACK, UNKNOWN }
-
     private static final String MARKER = "TACLIGHT_PATCH_BEGIN";
     /** 自研配套包的标记所在文件(shaders.properties 第 2 行)。
      *  历史注记:路线 P 时代检查派生包注入文件 shaders/Lib/taclight_lights.glsl,
@@ -38,31 +44,69 @@ public final class ShaderPackDiag {
         return null;
     }
 
-    /** 活动包状态:未激活 / 原包(无注入) / 我们的派生包 / 无法判定。 */
-    public static Status activeStatus() {
+    /**
+     * 活动包状态:未激活 / 原包(无注入) / 我们的包(物理标记) /
+     * <b>第三方包但运行时已注入</b> / 命中模板但注入失败 / 无法判定。
+     */
+    public static ShaderPackDiagLogic.Status activeStatus() {
         try {
-            if (!net.irisshaders.iris.api.v0.IrisApi.getInstance().isShaderPackInUse()) {
-                return Status.NO_PACK;
-            }
+            boolean inUse = net.irisshaders.iris.api.v0.IrisApi.getInstance().isShaderPackInUse();
             String name = activePackName();
-            if (name == null) return Status.UNKNOWN;
+            Boolean diskMarker = inUse ? diskMarker(name) : null;
+            // 注入判定必须用"粘性成功":同包内个别文件失败不得把整包翻回失败(详见 RuntimePackInjector)。
+            RuntimePackInjector.Outcome injectedOutcome = RuntimePackInjector.stickyInjectedOutcome();
+            RuntimePackInjector.Outcome lastOutcome = RuntimePackInjector.lastOutcome();
+            boolean injected = false;
+            boolean matched = false;
+            // 只在"同一包"时采信运行时结果,避免切包后串用上一个包的成功结果(假绿)。
+            if (inUse && name != null) {
+                if (injectedOutcome != null && samePack(name, injectedOutcome.rawName())) {
+                    injected = true;
+                    matched = injectedOutcome.templateMatched();
+                }
+                if (lastOutcome != null && samePack(name, lastOutcome.rawName())) {
+                    matched = matched || lastOutcome.templateMatched();
+                }
+            }
+            return ShaderPackDiagLogic.decide(inUse, name, diskMarker, injected, matched);
+        } catch (Throwable t) {
+            return ShaderPackDiagLogic.Status.UNKNOWN; // 未装 Oculus 或无 IrisApi 实现
+        }
+    }
+
+    /** 原始名与运行时记录名是否同一个包:原始名相等,或归一化匹配键相等。 */
+    private static boolean samePack(String active, String recorded) {
+        if (active == null || recorded == null) return false;
+        if (active.equals(recorded)) return true;
+        try {
+            return PackFingerprint.packMatchKey(active).equals(PackFingerprint.packMatchKey(recorded));
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    /** 磁盘包内是否含我们的标记。TRUE/FALSE=有/无;null=无法判定(包不可读)。 */
+    private static Boolean diskMarker(String name) {
+        if (name == null) return null;
+        try {
             Path p = Minecraft.getInstance().gameDirectory.toPath().resolve("shaderpacks").resolve(name);
             if (Files.isDirectory(p)) {
                 Path markerFile = p.resolve(MARKER_ENTRY);
-                return Files.exists(markerFile) && readContains(markerFile) ? Status.TACLIGHT_PACK : Status.ORIGINAL_PACK;
+                if (!Files.exists(markerFile)) return Boolean.FALSE;
+                return readContains(markerFile) ? Boolean.TRUE : Boolean.FALSE;
             }
             if (Files.isRegularFile(p) && name.toLowerCase().endsWith(".zip")) {
                 try (ZipFile zf = new ZipFile(p.toFile())) {
                     var entry = zf.getEntry(MARKER_ENTRY);
-                    if (entry == null) return Status.ORIGINAL_PACK;
+                    if (entry == null) return Boolean.FALSE;
                     byte[] data = zf.getInputStream(entry).readAllBytes();
                     return new String(data, StandardCharsets.UTF_8).contains(MARKER)
-                            ? Status.TACLIGHT_PACK : Status.ORIGINAL_PACK;
+                            ? Boolean.TRUE : Boolean.FALSE;
                 }
             }
-            return Status.UNKNOWN;
+            return null;
         } catch (Throwable t) {
-            return Status.UNKNOWN; // 未装 Oculus 或无 IrisApi 实现
+            return null;
         }
     }
 

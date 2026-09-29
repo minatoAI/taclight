@@ -25,6 +25,8 @@ public final class TemplateLibrary {
         public String op;
         public String anchor;
         public String content;
+        /** 备选锚点(逐字;2026-09-19 新增:运行时/原始文件两种形态,见 PatchExecutor 类注释)。 */
+        public List<String> anchors;
     }
 
     public static final class FileRule {
@@ -39,6 +41,15 @@ public final class TemplateLibrary {
         public String packName;
         public Map<String, String> packHash;
         public List<FileRule> files;
+        /** 注入后必须出现的符号(注后自检;2026-09-19 新增)。空 = 只查 marker/括号。 */
+        public List<String> requiredSymbols = List.of();
+        /**
+         * 已知良好清单(2026-09-19 新增,Lead 硬裁定②):<b>锚点验证过</b>的包名原样
+         * (如 {@code ComplementaryReimagined_r5.9.3.zip}),按 {@link PackFingerprint#packMatchKey}
+         * 比较。语义 = "这版哈希虽与 packHash 不符,但锚点已离线/实机验证可注入" ⇒ 走锚点通道
+         * 并标 known-good。<b>故意不存整文件哈希</b>(F6:原始文件不是运行时 oracle)。
+         */
+        public List<String> knownGoodPacks = List.of();
     }
 
     private static volatile String inlineCoreCache;
@@ -92,6 +103,23 @@ public final class TemplateLibrary {
                     t.packHash.put(e.getKey(), e.getValue().getAsString());
                 }
             }
+            if (root.has("requiredSymbols") && root.get("requiredSymbols").isJsonArray()) {
+                List<String> syms = new ArrayList<>();
+                for (var se : root.getAsJsonArray("requiredSymbols")) {
+                    if (se.isJsonPrimitive()) syms.add(se.getAsString());
+                }
+                t.requiredSymbols = List.copyOf(syms);
+            }
+            if (root.has("knownGoodPacks") && root.get("knownGoodPacks").isJsonArray()) {
+                List<String> known = new ArrayList<>();
+                for (var ke : root.getAsJsonArray("knownGoodPacks")) {
+                    if (ke.isJsonPrimitive()) {
+                        String k = ke.getAsString();
+                        if (k != null && !k.isBlank()) known.add(k);
+                    }
+                }
+                t.knownGoodPacks = List.copyOf(known);
+            }
             t.files = new ArrayList<>();
             for (var fe : root.getAsJsonArray("files")) {
                 if (!fe.isJsonObject()) return Optional.empty();
@@ -115,6 +143,18 @@ public final class TemplateLibrary {
                     op.anchor = oo.has("anchor") && !oo.get("anchor").isJsonNull()
                             ? oo.get("anchor").getAsString() : null;
                     op.content = reqString(oo, "content");
+                    if (oo.has("anchors") && oo.get("anchors").isJsonArray()) {
+                        List<String> alts = new ArrayList<>();
+                        for (var ae : oo.getAsJsonArray("anchors")) {
+                            if (ae.isJsonPrimitive()) {
+                                String a = ae.getAsString();
+                                if (a != null && !a.isBlank() && !a.equals(op.anchor)) alts.add(a);
+                            }
+                        }
+                        op.anchors = List.copyOf(alts);
+                    } else {
+                        op.anchors = List.of();
+                    }
                     if ("insertAtEnd".equals(op.op)) {
                         if (op.content == null) return Optional.empty();
                     } else if (op.anchor == null || op.content == null) {
@@ -198,7 +238,8 @@ public final class TemplateLibrary {
                 + "const float TACLIGHT_LIGHT_GAIN = 2.2;\n"
                 + "const float TACLIGHT_ATTEN_K = 20.0; // 2026-09-06 用户扫参冻结(主包同值收敛)\n"
                 + "const float TACLIGHT_KNEE_GAIN = 2.0;\n"
-                + "const float TACLIGHT_VOX_FUZZ = 0.35;\n";
+                + "const float TACLIGHT_VOX_FUZZ = 0.35;\n"
+                + "const uint TACLIGHT_FLAG_NUM_PROBE = 64u;\n";
         r = "/* " + PatchExecutor.MARKER + " inline-core-forward (injected by TacLight interop) */\n"
                 + prelude + slim + "\n";
         inlineCoreForwardCache = r;
@@ -290,7 +331,7 @@ public final class TemplateLibrary {
         }
         // 体素 DDA 不进前向(ivec3/bvec3/位运算 AST 高危):上方白名单循环已整体跳过,
         // 此处只需追加单行恒可见桩(遮挡由宿主 DoLighting 主管)。
-        return joined + "\n" + FORWARD_VOX_STUB + FORWARD_SURFACE;
+        return joined + "\n" + FORWARD_VOX_STUB + FORWARD_PROBE_BLOCK + FORWARD_SURFACE;
     }
 
     /** 前向 surface:漫反射单项 + 锥判定 + 距离衰减 + 标量体素 DDA 遮挡。
@@ -309,11 +350,13 @@ public final class TemplateLibrary {
             + "    int iy = int(floor(cellCoords.y));\n"
             + "    int iz = int(floor(cellCoords.z));\n"
             + "    int idx = ix + iy * int(dim.x) + iz * int(dim.x) * int(dim.y);\n"
-            + "    int word = idx / 16;\n"
-            + "    int slot = idx - word * 16;\n"
+            + "    int word = idx / 8;\n"
+            + "    int slot = idx - word * 8;\n"
             + "    uint w = voxData[word];\n"
-            + "    for (int b = 0; b < 16; b++) { if (b >= slot) break; w = w / 4u; }\n"
-            + "    float code = float(w % 4u);\n"
+            // 2026-09-25 高度感知遮挡:4bit/体素(8 格/uint)。前向路径继续避开位运算(AST 高危),
+            // 用 / 与 %(除 16)逐格下移,语义等价于主核的 `>> ((idx&7)*4) & 15u`。
+            + "    for (int b = 0; b < 8; b++) { if (b >= slot) break; w = w / 16u; }\n"
+            + "    float code = float(w % 16u);\n"
             + "    return code;\n"
             + "}\n"
             + "float taclight_vox_transmit(vec3 worldA, vec3 worldB) {\n"
@@ -356,8 +399,8 @@ public final class TemplateLibrary {
             + "        if (cx >= dim.x || cy >= dim.y || cz >= dim.z) return T;\n"
             + "        if (cx == lx && cy == ly && cz == lz) return T;\n"
             + "        float code = taclight_vox_fetch(vec3(cx + 0.5, cy + 0.5, cz + 0.5), dim);\n"
-            + "        if (code >= 2.5) {\n"
-            + "            float tExit = min(tmx, min(tmy, tmz));\n"
+            + "        float tExit = min(tmx, min(tmy, tmz));\n"
+            + "        if (code == 3.0) {\n"
             + "            float penLen = min(tExit, len) - tNext;\n"
             + "            if (penLen < 0.0) penLen = 0.0;\n"
             + "            float f = penLen / 0.35;\n"
@@ -365,11 +408,43 @@ public final class TemplateLibrary {
             + "            if (f >= 1.0) return 0.0;\n"
             + "            T *= 1.0 - f;\n"
             + "        }\n"
-            + "        else if (code >= 1.5) T *= 0.40;\n"
-            + "        else if (code >= 0.5) T *= 0.75;\n"
+            // 薄板(4..15,2026-09-25 高度感知):射线在该格内的 y 区间与板区间相交 ⇒ 不透明全挡;
+            // 从板顶上方掠过 ⇒ 放行。底薄板 4..11(lo=0,hi=(code−3)/8)、顶薄板 12..15(lo=(code−8)/8,hi=1)。
+            + "        else if (code >= 4.0) {\n"
+            + "            float lo = code >= 12.0 ? (code - 8.0) / 8.0 : 0.0;\n"
+            + "            float hi = code >= 12.0 ? 1.0 : (code - 3.0) / 8.0;\n"
+            + "            float yA = a.y + dir.y * tNext - cy;\n"
+            + "            float yB = a.y + dir.y * tExit - cy;\n"
+            + "            float yLo = min(yA, yB);\n"
+            + "            float yHi = max(yA, yB);\n"
+            + "            bool hit = (yHi - yLo <= 0.000001) ? (yLo >= lo && yLo < hi)\n"
+            + "                                              : (min(yHi, hi) - max(yLo, lo) > 0.000001);\n"
+            + "            if (hit) return 0.0;\n"
+            + "        }\n"
+            + "        else if (code == 2.0) T *= 0.40;\n"
+            + "        else if (code == 1.0) T *= 0.75;\n"
             + "    }\n"
             + "    return T;\n"
             + "}\n";
+    /** 帧内数值探针(P2)的**前向侧声明** —— 必须与 pack/shaders/lib/taclight_core.glsl 的
+     *  binding=8 块镜像。
+     *
+     *  <p><b>2026-09-25 实机踩坑(值得记住)</b>:探针先只加在完整 core 里,而 Complementary 走的
+     *  是**前向精简路径** —— {@link #slimForwardCore} 只白名单保留 `binding = 7` 块(新声明被丢弃),
+     *  且 surface 被 {@link #FORWARD_SURFACE} 整函数重写 ⇒ 探针**静默失效**
+     *  (真机 21 个像素全 hits=0,而 `patched_shaders` 里连 `TACLIGHT_FLAG_NUM_PROBE` 都没有)。
+     *  这正是"测量的路径≠生产的路径":改对了文件,但改的不是生效的那份。</p>
+     *
+     *  <p>防复发:{@code InlineCoreContract} 已加断言"**两条路径都必须在场**"。</p> */
+    private static final String FORWARD_PROBE_BLOCK =
+            "layout(std430, binding = 8) buffer TacLightProbe {\n"
+            + "    ivec4 probeReq;\n"
+            + "    vec4  probeTerms;\n"
+            + "    vec4  probeExtra;\n"
+            + "    vec4  probeFrag;\n"
+            + "    ivec4 probeMeta;\n"
+            + "} taclightProbe;\n";
+
     private static final String FORWARD_SURFACE =
             "vec3 taclight_surface_lighting(vec3 fragView, vec3 albedo, vec3 n,\n"
             + "                               float roughness, float metal, vec3 f0) {\n"
@@ -385,14 +460,25 @@ public final class TemplateLibrary {
             + "        if (dist < radius && radius > 0.001) {\n"
             + "            vec3 lf = toFrag / max(dist, 0.0001);\n"
             + "            vec3 dirView = mat3(gbufferModelView) * (L.dirType.xyz / max(length(L.dirType.xyz), 0.0001));\n"
-            + "            float spot = smoothstep(L.cone.x, L.cone.y, dot(lf, dirView));\n"
+            + "            float cosAng = dot(lf, dirView);\n"
+            + "            float spot = smoothstep(L.cone.x, L.cone.y, cosAng);\n"
             + "            float ndl = dot(n, (vec3(0.0) - lf));\n"
             + "            if (spot > 0.001 && ndl > 0.0) {\n"
-            + "                float vt = taclight_vox_transmit(L.posRadius.xyz, taclight_view_to_world(fragView));\n"
+            + "                vec3 fragWorld = taclight_view_to_world(fragView);\n"
+            + "                float vt = taclight_vox_transmit(L.posRadius.xyz, fragWorld);\n"
             + "                float vis = vt >= 0.0 ? vt : 1.0;\n"
             + "                vec3 lc = L.colorIntensity.rgb * L.colorIntensity.a;\n"
             + "                float attenK = L.cone.z > 0.0 ? L.cone.z : TACLIGHT_ATTEN_K;\n"
             + "                float atten = taclight_attenuation(dist, radius, attenK);\n"
+            + "                if ((flags & TACLIGHT_FLAG_NUM_PROBE) != 0u\n"
+            + "                    && taclightProbe.probeReq.z > 0\n"
+            + "                    && ivec2(gl_FragCoord.xy) == taclightProbe.probeReq.xy\n"
+            + "                    && (taclightProbe.probeReq.w < 0 || taclightProbe.probeReq.w == i)) {\n"
+            + "                    taclightProbe.probeTerms = vec4(vis, atten, spot, ndl);\n"
+            + "                    taclightProbe.probeExtra = vec4(dist, L.dirType.w, cosAng, radius);\n"
+            + "                    taclightProbe.probeFrag  = vec4(fragWorld, 1.0);\n"
+            + "                    taclightProbe.probeMeta  = ivec4(1, i, taclightProbe.probeReq.z, 0);\n"
+            + "                }\n"
             + "                vec3 contrib = ((albedo * (ndl * (1.0 - metal))) * lc) * (spot * atten * vis);\n"
             + "                radiance = radiance + taclight_soft_knee3(contrib, L.cone.w);\n"
             + "            }\n"

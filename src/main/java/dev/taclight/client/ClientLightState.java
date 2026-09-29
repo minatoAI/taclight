@@ -8,19 +8,54 @@ public final class ClientLightState {
     private static volatile boolean gunManual = false;
     /** 主手探针(每 tick 覆写):true=正持带 taclight:gun_light 的枪;手动偏好须与之相乘。 */
     private static volatile boolean gunProbeOn = false;
+    /**
+     * 持物门探针(每 tick 覆写):true=主手或副手正持 {@code taclight:flashlight}。
+     *
+     * <p><b>2026-09-25 用户报的 bug</b>:手持灯此前只查开关、不查手里拿的是什么 ⇒
+     * 手里拿着枪时**枪灯与手持灯同时亮**,且把枪切走灯也不灭。
+     * 现在与枪灯同构:开关偏好 × 持物门,并且"离手"会**自动关**。</p>
+     */
+    private static volatile boolean handheldProbeOn = false;
     private static boolean debugMode = false;
     /** 自身灯运行时覆写(null=跟随配置 SELF_LIGHT_ENABLED;!selflight 可翻转)。 */
     private static volatile Boolean selfLightOverride = null;
 
     private ClientLightState() {}
 
-    /** 手持手电筒开关(IrisItemLightProvider 读取) */
+    /** 手持手电筒开关偏好(不含持物门;渲染/HUD 显示"开关"时用它)。 */
     public static boolean isOn() { return handheldOn; }
     /** 强制开启(调试模式自动开灯时用)。 */
     public static void forceHandheldOn() { handheldOn = true; }
     public static void toggle() { handheldOn = !handheldOn; }
     /** 服务端真源回写(S2C SyncLightS2C;命令改灯时本人客户端跟随)。 */
     public static void setHandheld(boolean on) { handheldOn = on; }
+
+    // ---------------- 手持灯持物门(2026-09-25) ----------------
+
+    /** 持物门探针写入(每 tick 无条件覆写)。 */
+    public static void setHandheldProbe(boolean on) { handheldProbeOn = on; }
+    public static boolean handheldProbeOn() { return handheldProbeOn; }
+
+    /**
+     * 有效手持灯 = 开关 × (持物门 ∪ 霓虹调试旁路)。
+     *
+     * <p>霓虹(K / {@code !neon})**故意豁免**持物门:它的用途是"证明 SSBO 通道可见",
+     * 与手里拿什么无关(否则调试模式会因未持手电筒而失效)。</p>
+     */
+    public static boolean handheldEffective() { return effective(handheldOn, handheldProbeOn, debugMode); }
+
+    /** 纯函数(离线契约钉死):开关 × (门 ∪ 调试旁路)。 */
+    public static boolean effective(boolean switchOn, boolean probeOn, boolean debugBypass) {
+        return switchOn && (probeOn || debugBypass);
+    }
+
+    /**
+     * 纯函数(离线契约钉死):**离手自动关** —— 原本持有且开关为开,现在不再持有 ⇒ 清开关。
+     * 调试旁路期间不清(否则一放手电筒霓虹就灭)。
+     */
+    public static boolean autoClear(boolean switchOn, boolean wasHolding, boolean nowHolding, boolean debugBypass) {
+        return switchOn && wasHolding && !nowHolding && !debugBypass;
+    }
 
     /** 枪挂灯状态(TaCZ 附件探针写入;手动 !gun 覆写后探针不再覆盖,见 setGunLightManual) */
     public static void setGunLight(boolean on) {
@@ -43,8 +78,8 @@ public final class ClientLightState {
     public static boolean gunManual() { return gunManual; }
     public static boolean gunLightOn() { return gunLightOn; }
 
-    /** 是否有任一设备激活供渲染层消费 */
-    public static boolean anyDeviceOn() { return handheldOn || gunLightOn; }
+    /** 是否有任一设备**有效**激活供渲染层消费(两盏灯都过各自的开关 × 门)。 */
+    public static boolean anyDeviceOn() { return handheldEffective() || gunLightEffective(); }
 
     /**
      * 自身灯是否允许上传(2026-09-03 用户需求:枪灯测试单变量观察)。

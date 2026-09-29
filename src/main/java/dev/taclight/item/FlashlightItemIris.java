@@ -21,7 +21,9 @@ public class FlashlightItemIris extends FlashlightItem implements IrisItemLightP
     public int getLightEmission(Player player, ItemStack stack) {
         // 2026-09-04 用户体感:15 级氛围光太强(火把感)→5 级暖底基本消失(1/81)→10 级折中
         // ((10/15)^4≈1/5,暖氛围保留但收敛);锥形主光走 SSBO 通道不受此值影响。
-        return ClientLightState.isOn() ? 10 : 0;
+        // 持物门生效值(2026-09-25):本接口虽由"手持该物品"的上下文调用,仍统一走同一个门,
+        // 避免两条路径对"灯到底亮不亮"给出不同答案。
+        return ClientLightState.handheldEffective() ? 10 : 0;
     }
 
     @Override

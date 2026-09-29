@@ -38,12 +38,12 @@ public final class SpotlightBufferLayout {
     public static final int OFF_VOX_ORIGIN = HEADER_BYTES + MAX_LIGHTS * LIGHT_STRIDE_BYTES; // 784
     /** voxMeta:xyz=各轴格数,w 保留。 */
     public static final int OFF_VOX_META = OFF_VOX_ORIGIN + 16;   // 800
-    /** 2bit 打包数据起点。 */
+    /** 4bit 打包数据起点。 */
     public static final int OFF_VOX_DATA = OFF_VOX_META + 16;     // 816
     /** 单轴最大格数(与 VoxelField.MAX_DIM 同值;不引用以防包间循环无谓耦合,契约钉等值)。 */
     public static final int VOX_MAX_DIM = 128;
-    /** 128³ × 2bit / 32bit。 */
-    public static final int VOX_MAX_UINTS = VOX_MAX_DIM * VOX_MAX_DIM * VOX_MAX_DIM / 16; // 131072
+    /** 128³ × 4bit / 32bit(2026-09-25 高度感知遮挡:2bit→4bit,512KB→1MB)。 */
+    public static final int VOX_MAX_UINTS = VOX_MAX_DIM * VOX_MAX_DIM * VOX_MAX_DIM / 8; // 262144
     /** SSBO 总长(定长)。 */
     private static final int FIXED_BYTES = OFF_VOX_DATA + VOX_MAX_UINTS * 4;
 
@@ -61,6 +61,11 @@ public final class SpotlightBufferLayout {
      *  步数 64→32 + 抖动逐帧旋转 + 上一帧历史(colortex9)重投影混合;逐灯置信度
      *  经 vlParams.w 透传(Java LightMotionConf 位姿差分),off=64 步全新鲜。 */
     public static final int FLAG_TEMPORAL = 1 << 5;
+    /** bit6: 帧内数值探针(P2,2026-09-25)——GLSL 把光照**项**的数值(vis/atten/spot/ndl…)
+     *  写进 binding=8 的独立探针缓冲,由调试中继 `!numprobe` 布防/回读。
+     *  **默认恒为 0**:置位是"是否访问 binding=8"的唯一闸门 —— 未布防时 GLSL 因 `&&`
+     *  短路**完全不碰**该缓冲,所以生产包里 binding=8 无需绑定、零风险(见 core 内注释)。 */
+    public static final int FLAG_NUM_PROBE = 1 << 6;
 
     private SpotlightBufferLayout() {}
 

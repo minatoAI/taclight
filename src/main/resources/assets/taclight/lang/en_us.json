@@ -6,5 +6,6 @@
   "key.taclight.debug_toggle": "Neon Debug Mode (K)",
   "key.taclight.diag_dump": "Dump Diagnostics to Log (N)",
   "key.taclight.bench": "3s FPS Benchmark (B)",
+  "key.taclight.snapshot": "Debug Snapshot (F9)",
   "key.categories.taclight": "TacLight"
 }
