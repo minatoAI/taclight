@@ -25,10 +25,11 @@ import java.util.zip.ZipFile;
  * <ol>
  *   <li><b>发布 jar 必须不含</b> {@code DebugCommandRelay*.class} 与 {@code dev/taclight/debug/**},
  *       以及 {@code dev/taclight/devonly/**}(2026-09-28 R12 新增:dev-only 边界的第二命名空间)
- *       与四种"已搬走的旧路径"幽灵守卫(B1 命令族 / B3 LAN 钩子 / N1 按键注入 / N2 构建期工具);
+ *       与四种"已搬走的旧路径"幽灵守卫(B1 命令族 / B3 LAN 钩子 / N1 按键注入 / N2 构建期工具),
+ *       以及 **R12c 新增的"方法级死代码"闸门**({@code GunControl.class} 不得含中继专用方法符号);
  *       若<b>选不到</b> release jar(未构建 / 只有 dev 变体 / 显式路径不存在)会<b>大声失败</b>
  *       (2026-09-25 起不再"静默跳过";选取规则见下)——否则这条边界断言会假装通过;</li>
- *   <li><b>{@code build/classes} 必须含</b> {@code DebugCommandRelay.class} 与 8 个**已搬进 dev-only
+ *   <li><b>{@code build/classes} 必须含</b> {@code DebugCommandRelay.class} 与 9 个**已搬进 dev-only
  *       命名空间**的类(证明是"被剔除"而不是"没编译"——两者对排障含义完全不同);</li>
  *   <li>{@code build.gradle} 的 6 条 exclude 必须在(防误删);</li>
  *   <li>监听路径表达式必须是 {@code FMLPaths.GAMEDIR.get().resolve("taclight-cmds.txt")};
@@ -88,7 +89,7 @@ public class InteropPackagingContract {
             "dev/taclight/tune/TuneService",
     };
 
-    /** ② 的正控清单:R12 搬进 dev-only 命名空间的 8 个类必须在构建树里(剔除 ≠ 没编译)。 */
+    /** ② 的正控清单:R12/R12c 搬进 dev-only 命名空间的 9 个类必须在构建树里(剔除 ≠ 没编译)。 */
     private static final String[] MOVED_DEV_ONLY_CLASSES = {
             "dev/taclight/debug/command/TacLightCommand.class",
             "dev/taclight/debug/command/SceneExecutor.class",
@@ -98,7 +99,15 @@ public class InteropPackagingContract {
             "dev/taclight/devonly/KeyInject.class",
             "dev/taclight/devonly/DevLanAuthHook.class",
             "dev/taclight/devonly/tools/PackPatcherTool.class",
+            "dev/taclight/devonly/GunRelay.class",
     };
+
+    /**
+     * 2026-09-29 R12c(N1 收尾):**发布侧类里"只被 dev-only 调用"的死方法** —— 按**字节码符号**判定。
+     * <p>为什么钉字节码而不是源码文本:字节码里**没有注释** ⇒ "javadoc 里提了一嘴方法名"不会污染判据
+     * (这是 {@code AGENTS §五} M1「逃生口被文档文字满足」的**镜像**教训:源码级负断言会被自己的注释打脸)。</p>
+     */
+    private static final String[] DEAD_METHOD_SYMBOLS = { "parseRelayArg", "applyAuto" };
 
     public static void main(String[] args) throws Exception {
         releaseJarBoundary();
@@ -155,6 +164,15 @@ public class InteropPackagingContract {
         check(devOnly.isEmpty(), "★ R12[B1/B3/N1/N2·构件] 发布 jar 不含 dev-only 面(devonly/** + 已搬走的旧路径)"
                 + "(实际 " + devOnly.size() + " 条" + (devOnly.isEmpty() ? "" : " ⇒ " + devOnly)
                 + ");选中 jar = " + jar);
+        // 2026-09-29 R12c(N1 收尾):**方法级**死代码闸门。
+        //   背景(VERDICT §4 N1):`GunControl.parseRelayArg` 的类在发布件里、方法却只被 dev-only 中继调用
+        //   ⇒ 发布件里是死方法;查"同类还有谁"时发现 `GunControl.applyAuto` 同病,一并搬到 `devonly/GunRelay`。
+        //   本闸门比**字节码符号**(不受注释影响);GunControl.class 缺失也算命中(空值 ≠ 通过)。
+        //   红态自证:拿改前 jar 走 -PreleaseJar ⇒ 必红并点名符号。
+        String[] deadHits = deadMethodHits(jar);
+        check(deadHits.length == 0,
+                "★ R12c[N1·构件] 发布件 dev/taclight/client/GunControl.class 不含中继专用死方法符号"
+                        + "(期望 0 命中,实际 [" + String.join(",", deadHits) + "]);选中 jar = " + jar);
 
         // 2026-09-28 U-1b:gradle.properties 的 mod_version 与 jar 清单 Implementation-Version 必须同源。
         //   为什么补这条:implVer 此前**只被打印、从未被 check**(全文件仅 :93 读、:96 打印),
@@ -336,6 +354,42 @@ public class InteropPackagingContract {
     private static boolean isDevOnlyEntry(String name) {
         for (String p : DEV_ONLY_PREFIXES) {
             if (name.startsWith(p)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * R12c:读发布件里 {@code dev/taclight/client/GunControl.class} 的**原始字节**,返回命中的死方法符号。
+     * ⚠️ 类条目缺失 ⇒ 返回 {@code ["<GunControl.class 缺失>"]}(命中非空 ⇒ 判红,不是"静默通过")。
+     */
+    private static String[] deadMethodHits(Path jar) throws IOException {
+        List<String> hit = new ArrayList<>();
+        try (ZipFile z = new ZipFile(jar.toFile())) {
+            ZipEntry e = z.getEntry("dev/taclight/client/GunControl.class");
+            if (e == null) {
+                hit.add("<GunControl.class 缺失>");
+                return hit.toArray(new String[0]);
+            }
+            byte[] data;
+            try (var in = z.getInputStream(e)) {
+                data = in.readAllBytes();
+            }
+            for (String sym : DEAD_METHOD_SYMBOLS) {
+                if (containsAscii(data, sym)) hit.add(sym);
+            }
+        }
+        return hit.toArray(new String[0]);
+    }
+
+    /** 朴素 ASCII 子串搜索(class 常量池为 modified-UTF8,ASCII 段逐字节可比)。 */
+    private static boolean containsAscii(byte[] data, String s) {
+        byte[] t = s.getBytes(StandardCharsets.US_ASCII);
+        for (int i = 0; i + t.length <= data.length; i++) {
+            boolean ok = true;
+            for (int j = 0; j < t.length; j++) {
+                if (data[i + j] != t[j]) { ok = false; break; }
+            }
+            if (ok) return true;
         }
         return false;
     }

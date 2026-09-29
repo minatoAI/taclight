@@ -1,30 +1,41 @@
 package dev.taclight.client;
 
+import dev.taclight.devonly.GunRelay;
+
 /**
  * 枪灯手动控制契约(2026-09-07 用户需求:枪灯要有游戏内开关 + 空手不亮可解释).
  * M 键与 !gun 共用同一状态机;!gun auto 清手动旗恢复探针跟随。
+ *
+ * <p><b>2026-09-29 R12c(N1 收尾)</b>:中继侧两个入口(参数决议 / auto 清旗)已从发布侧
+ * {@code GunControl} 搬到 {@code dev.taclight.devonly.GunRelay} ⇒ 本契约改为对 {@code GunRelay} 断言
+ * (它同为"零 MC 依赖"的纯逻辑,所以纯 JVM 可测这一点没变)。
+ * ⚠️ 「发布件里 {@code GunControl.class} 不含这两个方法符号」由
+ * {@code InteropPackagingContract} 的**构件层**闸门钉(那里比字节码 ⇒ 不受注释/文档文字影响),
+ * 本契约**不做**源码文本级负断言(会与 javadoc 里提到的名字打架 —— {@code AGENTS §五} M1 的镜像教训)。</p>
  */
 public class GunControlContract {
+    private static int checks;
+
     public static void main(String[] args) {
         // 复位,免受运行顺序污染
         ClientLightState.clearGunManual();
         ClientLightState.setGunLight(false);
-        // 参数决议
-        check(GunControl.parseRelayArg("") == GunControl.Action.TOGGLE, "裸 !gun=翻转(兼容旧行为)");
-        check(GunControl.parseRelayArg("on") == GunControl.Action.ON, "on");
-        check(GunControl.parseRelayArg(" ON ") == GunControl.Action.ON, "大小写+空格容忍");
-        check(GunControl.parseRelayArg("off") == GunControl.Action.OFF, "off");
-        check(GunControl.parseRelayArg("auto") == GunControl.Action.AUTO, "auto=回探针");
-        check(GunControl.parseRelayArg("probe") == GunControl.Action.AUTO, "probe=auto 别名");
-        check(GunControl.parseRelayArg("status") == GunControl.Action.STATUS, "status=回显");
-        check(GunControl.parseRelayArg("xyz") == GunControl.Action.STATUS, "未知参=回显不乱动");
+        // 参数决议(dev-only 纯逻辑:GunRelay)
+        check(GunRelay.parse("") == GunControl.Action.TOGGLE, "裸 !gun=翻转(兼容旧行为)");
+        check(GunRelay.parse("on") == GunControl.Action.ON, "on");
+        check(GunRelay.parse(" ON ") == GunControl.Action.ON, "大小写+空格容忍");
+        check(GunRelay.parse("off") == GunControl.Action.OFF, "off");
+        check(GunRelay.parse("auto") == GunControl.Action.AUTO, "auto=回探针");
+        check(GunRelay.parse("probe") == GunControl.Action.AUTO, "probe=auto 别名");
+        check(GunRelay.parse("status") == GunControl.Action.STATUS, "status=回显");
+        check(GunRelay.parse("xyz") == GunControl.Action.STATUS, "未知参=回显不乱动");
         // M 键翻转语义:置手动旗
         check(GunControl.toggleGunManual(), "翻转 false->true");
         check(ClientLightState.gunManual(), "翻转后手动旗置位");
         ClientLightState.setGunLight(false);
         check(ClientLightState.gunLightOn(), "手动期探针写 false 不覆盖");
         // auto 清旗恢复探针
-        check(!GunControl.applyAuto(), "auto 后手动旗恒 false");
+        check(!GunRelay.applyAuto(), "auto 后手动旗恒 false");
         ClientLightState.setGunLight(false);
         check(!ClientLightState.gunLightOn(), "auto 后探针写 false 生效");
         ClientLightState.setGunLight(true);
@@ -50,11 +61,13 @@ public class GunControlContract {
         ClientLightState.setGunProbe(false);
         ClientLightState.setGunLight(false);
         ClientLightState.clearGunManual();
-        System.out.println("GunControlContract: ALL PASS (19 checks)");
+        System.out.println("GunControlContract: ALL PASS (" + checks + " checks)");
     }
 
+    /** 计数改为**动态**(R13-6 的同族清理:硬编码 checks 数会与静态调用点数漂移)。 */
     private static void check(boolean cond, String what) {
         if (!cond) throw new AssertionError("FAIL " + what);
+        checks++;
         System.out.println("  PASS " + what);
     }
 }

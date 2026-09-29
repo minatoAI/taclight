@@ -559,10 +559,10 @@ public final class DebugCommandRelay {
             // (主手有灯枪即亮、空手即灭);未知参=回显。用 GunControl 与 M 键共状态机。
             String arg = line.length() > 4 ? line.substring(4).trim() : "";
             dev.taclight.client.GunControl.Action act =
-                    dev.taclight.client.GunControl.parseRelayArg(arg);
+                    dev.taclight.devonly.GunRelay.parse(arg);
             switch (act) {
                 case AUTO: {
-                    dev.taclight.client.GunControl.applyAuto();
+                    dev.taclight.devonly.GunRelay.applyAuto();
                     dev.taclight.network.TacLightNetwork.sendSetLight(
                             ClientLightState.isOn(), ClientLightState.gunLightEffective());
                     TacLightMod.LOGGER.info("[TacLight] RELAY gunLight -> auto (probe-follow)");
