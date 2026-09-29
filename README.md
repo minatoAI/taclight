@@ -5,7 +5,7 @@
 本仓是**公开发布仓**(由开发仓整理导出):
 - 只包含**产品代码**(`src/main/java`、`src/main/resources`)、**光影包源码**(`pack/shaders`,41 个文件)、构建脚本与许可/致谢文件。
 - **不包含**:第三方 jar(见下「依赖许可与再分发」)、内部调试/自动化面、内部开发记录与历史。
-- 发布日期:2026-09-29 ｜ 版本:**v0.11.1** ｜ 许可:**GPL-3.0-or-later**
+- 发布日期:2026-09-29 ｜ 版本:**v0.11.2** ｜ 许可:**GPL-3.0-or-later**
 
 > TacLight — a Forge 1.20.1 mod adding cone spotlights / flashlights and a gun-mounted light that integrates with Timeless and Classics Zero (TaCZ). It also ships a runtime **light-injection engine** for Iris/Oculus shader packs (feeds mod lights into the volumetric light/occlusion pipeline) plus the full source of the companion shader pack. This is a curated public release repo: product code + shader sources only, no third-party jars, no internal tooling.
 
@@ -16,14 +16,14 @@
 | # | 组件 | 版本 | 必需? | 说明 |
 |---|---|---|---|---|
 | 1 | Minecraft Forge | 1.20.1-47.1.3(范围 `[47.1,48)`) | **必需** | 服务端/客户端 |
-| 2 | TacLight | v0.11.1 | **必需** | 把 `taclight-0.11.1.jar` 放进 `mods/` |
+| 2 | TacLight | v0.11.2 | **必需** | 把 `taclight-0.11.2.jar` 放进 `mods/` |
 | 3 | Timeless and Classics Zero (TaCZ) | 1.1.8-hotfix | 可选 | 提供枪挂灯联动;缺失时降级(见 `META-INF/mods.toml`,全部 optional + 能力探测) |
 | 4 | Oculus | 1.8.0 | 可选(客户端) | Iris Forge 移植;装光影必需 |
 | 5 | Embeddium | 0.3.31 | 可选(客户端) | Sodium Forge 移植,提升帧率 |
 | 6 | Player Animator | 1.0.2-rc1+1.20 | 可选 | TaCZ 第三人称动画依赖的第三方库;本模组零代码引用 |
 | 7 | Freecam | 1.2.1+1.20 | 可选 | 观战/观察用;本模组零代码引用 |
 
-**光影包**:把 `taclight-shaders-0.11.1.zip`(发布件)整个放进 `.minecraft/shaderpacks/`,在 *视频设置 → 光影* 里选择 `taclight-shaders-0.11.1`。它是构建自本仓 `pack/shaders/` 的派生包(补丁模板见 `src/main/resources/shader_patches/`)。
+**光影包**:把 `taclight-shaders-0.11.2.zip`(发布件)整个放进 `.minecraft/shaderpacks/`,在 *视频设置 → 光影* 里选择 `taclight-shaders-0.11.2`。它是构建自本仓 `pack/shaders/` 的派生包(补丁模板见 `src/main/resources/shader_patches/`)。
 
 > ⚠️ 光影只在**客户端**生效;无 Oculus/Iris 时模组本体仍可用,但没有体积光效果。
 
@@ -48,8 +48,8 @@
 #      libs/oculus-1.8.0.jar
 #      (运行游戏时另需: embeddium-0.3.31.jar / player-animation-lib-forge-1.0.2-rc1+1.20.jar / freecam-forge-1.2.1+1.20.jar)
 
-./gradlew jar              # 产物: build/libs/taclight-0.11.1.jar
-./gradlew packShaderZip    # 产物: build/distributions/taclight-shaders-0.11.1.zip
+./gradlew jar              # 产物: build/libs/taclight-0.11.2.jar
+./gradlew packShaderZip    # 产物: build/distributions/taclight-shaders-0.11.2.zip
 ./gradlew build            # 全量构建
 ```
 - `libs/` 下缺 jar 时,构建会在 `checkLocalDeps` 阶段给出**明确的缺件报错**,而不是编译期的 "package does not exist"。
@@ -74,7 +74,7 @@
 ## 6. 目录结构
 
 ```
-src/main/java/dev/taclight/     产品代码(73 个 .java;= 开发树的**发布侧面**,已剔除全部开发/调试面)
+src/main/java/dev/taclight/     产品代码(71 个 .java;= 开发树的**发布侧面**,已剔除全部开发/调试面)
 src/main/resources/             资源:mixin 配置、枪灯枪包、光影补丁模板与内联 core(77 个文件)
 pack/shaders/                   光影包源码(41 个文件,含 lib/taclight_core.glsl 等单一真源)
 pack/pack.png                   光影包图标(packShaderZip 用)
