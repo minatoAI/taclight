@@ -1,4 +1,4 @@
-package dev.taclight.channel;
+package dev.taclight.devonly;
 
 /**
  * {@code !light} 参数语义(纯逻辑,零 MC 依赖)。

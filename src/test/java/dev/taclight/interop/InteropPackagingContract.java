@@ -29,7 +29,7 @@ import java.util.zip.ZipFile;
  *       以及 **R12c 新增的"方法级死代码"闸门**({@code GunControl.class} 不得含中继专用方法符号);
  *       若<b>选不到</b> release jar(未构建 / 只有 dev 变体 / 显式路径不存在)会<b>大声失败</b>
  *       (2026-09-25 起不再"静默跳过";选取规则见下)——否则这条边界断言会假装通过;</li>
- *   <li><b>{@code build/classes} 必须含</b> {@code DebugCommandRelay.class} 与 9 个**已搬进 dev-only
+ *   <li><b>{@code build/classes} 必须含</b> {@code DebugCommandRelay.class} 与 11 个**已搬进 dev-only
  *       命名空间**的类(证明是"被剔除"而不是"没编译"——两者对排障含义完全不同);</li>
  *   <li>{@code build.gradle} 的 6 条 exclude 必须在(防误删);</li>
  *   <li>监听路径表达式必须是 {@code FMLPaths.GAMEDIR.get().resolve("taclight-cmds.txt")};
@@ -100,6 +100,8 @@ public class InteropPackagingContract {
             "dev/taclight/devonly/DevLanAuthHook.class",
             "dev/taclight/devonly/tools/PackPatcherTool.class",
             "dev/taclight/devonly/GunRelay.class",
+            "dev/taclight/devonly/LightCommand.class",
+            "dev/taclight/devonly/BobViewControl.class",
     };
 
     /**

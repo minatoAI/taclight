@@ -394,16 +394,16 @@ public final class DebugCommandRelay {
             // 让"先置 OFF 再加按键"这类因果链悄悄错位(测试同事 task-10 报的仪器缺陷)。
             // 回执直接说明是 toggle 还是置位(LightCommand.describe),不再靠人猜。
             String arg = line.length() > 6 ? line.substring(6).trim() : "";
-            int act = dev.taclight.channel.LightCommand.action(arg);
-            if (act == dev.taclight.channel.LightCommand.ACTION_NONE) {
+            int act = dev.taclight.devonly.LightCommand.action(arg);
+            if (act == dev.taclight.devonly.LightCommand.ACTION_NONE) {
                 TacLightMod.LOGGER.info("[TacLight] RELAY light -> bad arg '{}'; {}", arg,
-                        dev.taclight.channel.LightCommand.usage());
+                        dev.taclight.devonly.LightCommand.usage());
                 return;
             }
-            if (act == dev.taclight.channel.LightCommand.ACTION_STATUS) {
+            if (act == dev.taclight.devonly.LightCommand.ACTION_STATUS) {
                 boolean now = ClientLightState.isOn();
                 TacLightMod.LOGGER.info("[TacLight] RELAY {}",
-                        dev.taclight.channel.LightCommand.describe(act, now, now));
+                        dev.taclight.devonly.LightCommand.describe(act, now, now));
                 return;
             }
             // 持物门对齐开灯键(2026-09-25):未持手电筒且非霓虹调试时不改状态,回显原因(不假成功)。
@@ -412,13 +412,13 @@ public final class DebugCommandRelay {
                 return;
             }
             boolean before = ClientLightState.isOn();
-            boolean after = dev.taclight.channel.LightCommand.nextState(act, before);
+            boolean after = dev.taclight.devonly.LightCommand.nextState(act, before);
             ClientLightState.setHandheld(after);
             // 08-31 实测坑:开灯键路径(InjectionEvent) toggle 后会 sendSetLight 上报服务端,
             // relay 必须对齐,否则服务端实体数据不变 → 其他玩家看不到开关(ssbo count 假 1)。
             dev.taclight.network.TacLightNetwork.sendSetLight(ClientLightState.handheldEffective(), ClientLightState.gunLightEffective());
             TacLightMod.LOGGER.info("[TacLight] RELAY {}",
-                    dev.taclight.channel.LightCommand.describe(act, before, after));
+                    dev.taclight.devonly.LightCommand.describe(act, before, after));
             return;
         }
         if (line.startsWith("!hud")) {
@@ -648,7 +648,7 @@ public final class DebugCommandRelay {
         }
         if (line.startsWith("!bob")) {
             String arg = line.length() > 4 ? line.substring(4).trim() : "";
-            String result = BobViewControl.configure(arg,
+            String result = dev.taclight.devonly.BobViewControl.configure(arg,
                     () -> mc.options.bobView().get(),
                     enabled -> mc.options.bobView().set(enabled));
             TacLightMod.LOGGER.info("[TacLight] RELAY bob -> {}", result);

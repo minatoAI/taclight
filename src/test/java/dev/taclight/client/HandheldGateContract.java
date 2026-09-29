@@ -157,46 +157,46 @@ public class HandheldGateContract {
      *
      * <p><b>为什么这属于持物门契约</b>:{@code !light} 是 L 键(受持物门管)的程序化等价通道,
      * 它的语义错位会直接让"先置 OFF 再加按键"这条因果链失效(测试同事 task-10 实际踩到)。
-     * 内容层用纯函数 {@link dev.taclight.channel.LightCommand} 真值表;接线层钉中继分支。</p>
+     * 内容层用纯函数 {@link dev.taclight.devonly.LightCommand} 真值表;接线层钉中继分支。</p>
      */
     private static void lightSemantics() throws Exception {
         // ---- 内容层:参数解析(旧码必红锚点:旧实现没有解析,任何参数都当 toggle) ----
-        check(dev.taclight.channel.LightCommand.action(null) == dev.taclight.channel.LightCommand.ACTION_TOGGLE
-                        && dev.taclight.channel.LightCommand.action("") == dev.taclight.channel.LightCommand.ACTION_TOGGLE,
+        check(dev.taclight.devonly.LightCommand.action(null) == dev.taclight.devonly.LightCommand.ACTION_TOGGLE
+                        && dev.taclight.devonly.LightCommand.action("") == dev.taclight.devonly.LightCommand.ACTION_TOGGLE,
                 "无参/null = toggle(向后兼容)");
-        check(dev.taclight.channel.LightCommand.action("on") == dev.taclight.channel.LightCommand.ACTION_ON
-                        && dev.taclight.channel.LightCommand.action(" ON ") == dev.taclight.channel.LightCommand.ACTION_ON
-                        && dev.taclight.channel.LightCommand.action("off") == dev.taclight.channel.LightCommand.ACTION_OFF
-                        && dev.taclight.channel.LightCommand.action("Off") == dev.taclight.channel.LightCommand.ACTION_OFF
-                        && dev.taclight.channel.LightCommand.action("status") == dev.taclight.channel.LightCommand.ACTION_STATUS,
+        check(dev.taclight.devonly.LightCommand.action("on") == dev.taclight.devonly.LightCommand.ACTION_ON
+                        && dev.taclight.devonly.LightCommand.action(" ON ") == dev.taclight.devonly.LightCommand.ACTION_ON
+                        && dev.taclight.devonly.LightCommand.action("off") == dev.taclight.devonly.LightCommand.ACTION_OFF
+                        && dev.taclight.devonly.LightCommand.action("Off") == dev.taclight.devonly.LightCommand.ACTION_OFF
+                        && dev.taclight.devonly.LightCommand.action("status") == dev.taclight.devonly.LightCommand.ACTION_STATUS,
                 "on/off/status(大小写与空白不敏感)");
-        check(dev.taclight.channel.LightCommand.action("oops") == dev.taclight.channel.LightCommand.ACTION_NONE,
+        check(dev.taclight.devonly.LightCommand.action("oops") == dev.taclight.devonly.LightCommand.ACTION_NONE,
                 "[旧码必红] 未知名 ⇒ NONE(旧实现忽略参数照样 toggle;中继据此报 usage 且不改状态)");
-        check(dev.taclight.channel.LightCommand.isSet(dev.taclight.channel.LightCommand.ACTION_ON)
-                        && dev.taclight.channel.LightCommand.isSet(dev.taclight.channel.LightCommand.ACTION_OFF)
-                        && !dev.taclight.channel.LightCommand.isSet(dev.taclight.channel.LightCommand.ACTION_TOGGLE),
+        check(dev.taclight.devonly.LightCommand.isSet(dev.taclight.devonly.LightCommand.ACTION_ON)
+                        && dev.taclight.devonly.LightCommand.isSet(dev.taclight.devonly.LightCommand.ACTION_OFF)
+                        && !dev.taclight.devonly.LightCommand.isSet(dev.taclight.devonly.LightCommand.ACTION_TOGGLE),
                 "isSet 只对 on/off 为真");
-        check(!dev.taclight.channel.LightCommand.mutates(dev.taclight.channel.LightCommand.ACTION_STATUS)
-                        && !dev.taclight.channel.LightCommand.mutates(dev.taclight.channel.LightCommand.ACTION_NONE)
-                        && dev.taclight.channel.LightCommand.mutates(dev.taclight.channel.LightCommand.ACTION_TOGGLE),
+        check(!dev.taclight.devonly.LightCommand.mutates(dev.taclight.devonly.LightCommand.ACTION_STATUS)
+                        && !dev.taclight.devonly.LightCommand.mutates(dev.taclight.devonly.LightCommand.ACTION_NONE)
+                        && dev.taclight.devonly.LightCommand.mutates(dev.taclight.devonly.LightCommand.ACTION_TOGGLE),
                 "status/NONE 不改状态");
 
         // ---- 置位幂等 + 切换 ----
-        check(dev.taclight.channel.LightCommand.nextState(dev.taclight.channel.LightCommand.ACTION_ON, false)
-                        && dev.taclight.channel.LightCommand.nextState(dev.taclight.channel.LightCommand.ACTION_ON, true),
+        check(dev.taclight.devonly.LightCommand.nextState(dev.taclight.devonly.LightCommand.ACTION_ON, false)
+                        && dev.taclight.devonly.LightCommand.nextState(dev.taclight.devonly.LightCommand.ACTION_ON, true),
                 "set ON 幂等(→ ON,无论原状态)");
-        check(!dev.taclight.channel.LightCommand.nextState(dev.taclight.channel.LightCommand.ACTION_OFF, true)
-                        && !dev.taclight.channel.LightCommand.nextState(dev.taclight.channel.LightCommand.ACTION_OFF, false),
+        check(!dev.taclight.devonly.LightCommand.nextState(dev.taclight.devonly.LightCommand.ACTION_OFF, true)
+                        && !dev.taclight.devonly.LightCommand.nextState(dev.taclight.devonly.LightCommand.ACTION_OFF, false),
                 "set OFF 幂等(→ OFF,无论原状态)");
-        check(!dev.taclight.channel.LightCommand.nextState(dev.taclight.channel.LightCommand.ACTION_TOGGLE, true)
-                        && dev.taclight.channel.LightCommand.nextState(dev.taclight.channel.LightCommand.ACTION_TOGGLE, false),
+        check(!dev.taclight.devonly.LightCommand.nextState(dev.taclight.devonly.LightCommand.ACTION_TOGGLE, true)
+                        && dev.taclight.devonly.LightCommand.nextState(dev.taclight.devonly.LightCommand.ACTION_TOGGLE, false),
                 "toggle 双向翻转");
 
         // ---- 回执必须能区分"切换/置位"(task-14 验收原话:回执必须含"我是 toggle 还是置位") ----
-        String tg = dev.taclight.channel.LightCommand.describe(dev.taclight.channel.LightCommand.ACTION_TOGGLE, true, false);
-        String on = dev.taclight.channel.LightCommand.describe(dev.taclight.channel.LightCommand.ACTION_ON, false, true);
-        String off = dev.taclight.channel.LightCommand.describe(dev.taclight.channel.LightCommand.ACTION_OFF, true, false);
-        String st = dev.taclight.channel.LightCommand.describe(dev.taclight.channel.LightCommand.ACTION_STATUS, true, true);
+        String tg = dev.taclight.devonly.LightCommand.describe(dev.taclight.devonly.LightCommand.ACTION_TOGGLE, true, false);
+        String on = dev.taclight.devonly.LightCommand.describe(dev.taclight.devonly.LightCommand.ACTION_ON, false, true);
+        String off = dev.taclight.devonly.LightCommand.describe(dev.taclight.devonly.LightCommand.ACTION_OFF, true, false);
+        String st = dev.taclight.devonly.LightCommand.describe(dev.taclight.devonly.LightCommand.ACTION_STATUS, true, true);
         check(tg.contains("toggle") && on.contains("set ON") && off.contains("set OFF") && st.contains("status"),
                 "回执措辞区分 toggle / set / status: [" + tg + "] [" + on + "] [" + off + "]");
 

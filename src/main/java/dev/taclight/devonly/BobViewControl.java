@@ -1,4 +1,4 @@
-package dev.taclight.client;
+package dev.taclight.devonly;
 
 import java.util.Locale;
 import java.util.function.BooleanSupplier;
