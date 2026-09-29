@@ -514,6 +514,11 @@ tasks.register('packShaderZip', Zip) {
     dependsOn tasks.named('checkShaderIncludes')
     archiveFileName = "taclight-shaders-${project.mod_version}.zip"
     destinationDirectory = layout.buildDirectory.dir('distributions')
+    // 可复现(2026-09-29 R12b 发布途中发现并修):Zip 默认 preserveFileTimestamps=true 会把每个条目
+    // 时间戳写成源文件 mtime ⇒ **同源码两次构建同尺寸(100,777 B)/同条目(44)但 sha 不同**。
+    // 关掉时间戳 + 固定条目顺序 ⇒ 与 jar 一样可复现(public 树同步同一条)。
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
     from('pack/shaders') { into 'shaders' }
     from('pack/pack.png')
 }
