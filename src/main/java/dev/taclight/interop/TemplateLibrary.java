@@ -350,18 +350,18 @@ public final class TemplateLibrary {
             + "    int iy = int(floor(cellCoords.y));\n"
             + "    int iz = int(floor(cellCoords.z));\n"
             + "    int idx = ix + iy * int(dim.x) + iz * int(dim.x) * int(dim.y);\n"
-            + "    int word = idx / 8;\n"
-            + "    int slot = idx - word * 8;\n"
+            + "    int word = idx / 4;\n"
+            + "    int slot = idx - word * 4;\n"
             + "    uint w = voxData[word];\n"
-            // 2026-09-25 高度感知遮挡:4bit/体素(8 格/uint)。前向路径继续避开位运算(AST 高危),
-            // 用 / 与 %(除 16)逐格下移,语义等价于主核的 `>> ((idx&7)*4) & 15u`。
-            + "    for (int b = 0; b < 8; b++) { if (b >= slot) break; w = w / 16u; }\n"
-            + "    float code = float(w % 16u);\n"
+            // 2026-10-03 R21 形状调色板:8bit/体素(4 格/uint)。前向路径继续避开位运算(AST 高危),
+            // 用 / 与 %(除 256)逐格下移,语义等价于主核的 `>> ((idx&3)*8) & 255u`。
+            + "    for (int b = 0; b < 4; b++) { if (b >= slot) break; w = w / 256u; }\n"
+            + "    float code = float(w % 256u);\n"
             + "    return code;\n"
             + "}\n"
-            // 2026-10-03 R20:单盒遮挡比(scalar 版,与完整核 taclight_vox_box_fraction 同规则;
-            // 只做 vec3/float,无 ivec3/bvec3 —— gbuffers AST 高危面清单见上方).
-            + "float taclight_vox_box_fraction(vec3 a, vec3 dir, float tNext, float tExit, vec3 cb, vec3 blo, vec3 bhi) {\n"
+            // 2026-10-03 R20/R21:盒相交 kernel 的 scalar 版(与完整核 taclight_vox_box_span /
+            // _band / _fraction 同规则;只做 vec3/vec2/float,无 ivec3/bvec3 —— gbuffers AST 高危面)。
+            + "vec2 taclight_vox_box_span(vec3 a, vec3 dir, float tNext, float tExit, vec3 cb, vec3 blo, vec3 bhi) {\n"
             + "    vec3 lo = cb + blo;\n"
             + "    vec3 hi = cb + bhi;\n"
             + "    float tn = tNext;\n"
@@ -371,24 +371,31 @@ public final class TemplateLibrary {
             + "        float u2 = (hi.x - a.x) / dir.x;\n"
             + "        tn = max(tn, min(u1, u2));\n"
             + "        tf = min(tf, max(u1, u2));\n"
-            + "    } else if (a.x < lo.x || a.x > hi.x) return 1.0;\n"
+            + "    } else if (a.x < lo.x || a.x > hi.x) return vec2(1000000000.0, 0.0);\n"
             + "    if (abs(dir.y) > 0.000000001) {\n"
             + "        float u1 = (lo.y - a.y) / dir.y;\n"
             + "        float u2 = (hi.y - a.y) / dir.y;\n"
             + "        tn = max(tn, min(u1, u2));\n"
             + "        tf = min(tf, max(u1, u2));\n"
-            + "    } else if (a.y < lo.y || a.y > hi.y) return 1.0;\n"
+            + "    } else if (a.y < lo.y || a.y > hi.y) return vec2(1000000000.0, 0.0);\n"
             + "    if (abs(dir.z) > 0.000000001) {\n"
             + "        float u1 = (lo.z - a.z) / dir.z;\n"
             + "        float u2 = (hi.z - a.z) / dir.z;\n"
             + "        tn = max(tn, min(u1, u2));\n"
             + "        tf = min(tf, max(u1, u2));\n"
-            + "    } else if (a.z < lo.z || a.z > hi.z) return 1.0;\n"
+            + "    } else if (a.z < lo.z || a.z > hi.z) return vec2(1000000000.0, 0.0);\n"
             + "    float path = tf - tn;\n"
-            + "    if (path <= 0.0) return 1.0;\n"
-            + "    float thin = min(hi.x - lo.x, min(hi.y - lo.y, hi.z - lo.z));\n"
-            + "    float band = min(TACLIGHT_VOX_FUZZ, max(thin, 0.001));\n"
-            + "    return 1.0 - clamp(path / band, 0.0, 1.0);\n"
+            + "    if (path <= 0.0) return vec2(1000000000.0, 0.0);\n"
+            + "    return vec2(tn, path);\n"
+            + "}\n"
+            + "float taclight_vox_box_band(vec3 blo, vec3 bhi) {\n"
+            + "    float thin = min(bhi.x - blo.x, min(bhi.y - blo.y, bhi.z - blo.z));\n"
+            + "    return min(TACLIGHT_VOX_FUZZ, max(thin, 0.001));\n"
+            + "}\n"
+            + "float taclight_vox_box_fraction(vec3 a, vec3 dir, float tNext, float tExit, vec3 cb, vec3 blo, vec3 bhi) {\n"
+            + "    vec2 sp = taclight_vox_box_span(a, dir, tNext, tExit, cb, blo, bhi);\n"
+            + "    if (sp.x > 100000000.0) return 1.0;\n"
+            + "    return 1.0 - clamp(sp.y / taclight_vox_box_band(blo, bhi), 0.0, 1.0);\n"
             + "}\n"
             + "float taclight_vox_transmit(vec3 worldA, vec3 worldB) {\n"
             + "    if (voxOrigin.w <= 0.0) return -1.0;\n"
@@ -439,10 +446,36 @@ public final class TemplateLibrary {
             + "            if (f >= 1.0) return 0.0;\n"
             + "            T *= 1.0 - f;\n"
             + "        }\n"
+            // 2026-10-03 R21 形状调色板(必须在薄板分支之前:薄板条件是 code>=4.0,
+            // 不拦的话 ≥16 也会被当成薄板 ⇒ (code−3)/8 算出十几倍格高 = 假遮挡)。
+            + "        else if (code >= 16.0) {\n"
+            + "            float slotF = code - 16.0;\n"
+            + "            if (slotF < float(voxPalMeta.x)) {\n"
+            + "                int palBase = int(slotF) * voxPalMeta.y;\n"
+            + "                int nBox = int(voxPalBox[palBase]);\n"
+            + "                vec3 ulo = vec3(voxPalBox[palBase + 1], voxPalBox[palBase + 2], voxPalBox[palBase + 3]);\n"
+            + "                vec3 uhi = vec3(voxPalBox[palBase + 4], voxPalBox[palBase + 5], voxPalBox[palBase + 6]);\n"
+            + "                vec2 un = taclight_vox_box_span(a, dir, tNext, tExit, vec3(cx, cy, cz), ulo, uhi);\n"
+            + "                if (un.x <= 100000000.0) {\n"
+            + "                    for (int b = 0; b < 8; b++) {\n"
+            + "                        if (b >= nBox) break;\n"
+            + "                        int o = palBase + 7 + b * 6;\n"
+            + "                        vec3 blo = vec3(voxPalBox[o], voxPalBox[o + 1], voxPalBox[o + 2]);\n"
+            + "                        vec3 bhi = vec3(voxPalBox[o + 3], voxPalBox[o + 4], voxPalBox[o + 5]);\n"
+            + "                        vec2 sp = taclight_vox_box_span(a, dir, tNext, tExit, vec3(cx, cy, cz), blo, bhi);\n"
+            + "                        T *= 1.0 - clamp(sp.y / taclight_vox_box_band(blo, bhi), 0.0, 1.0);\n"
+            + "                        if (T <= 0.0) return 0.0;\n"
+            + "                    }\n"
+            + "                }\n"
+            + "            } else {\n"
+            + "                T *= taclight_vox_box_fraction(a, dir, tNext, tExit, vec3(cx, cy, cz), vec3(0.0), vec3(1.0));\n"
+            + "                if (T <= 0.0) return 0.0;\n"
+            + "            }\n"
+            + "        }\n"
             // 薄板(4..15,2026-09-25 高度感知 / 2026-10-03 R20 软化):与形状盒共用
             // taclight_vox_box_fraction ⇒ band = min(FUZZ, 板厚)。旧写法"y 区间相交即 T=0"
             // 使薄板比满方块更硬,用户实测"半砖影子比满方块凸出去一点"。
-            + "        else if (code >= 4.0) {\n"
+            + "        else if (code >= 4.0 && code < 16.0) {\n"
             + "            float lo = code >= 12.0 ? (code - 8.0) / 8.0 : 0.0;\n"
             + "            float hi = code >= 12.0 ? 1.0 : (code - 3.0) / 8.0;\n"
             + "            T *= taclight_vox_box_fraction(a, dir, tNext, tExit, vec3(cx, cy, cz),\n"
@@ -564,7 +597,10 @@ public final class TemplateLibrary {
                     continue; // ②' 块收
                 }
                 var m = java.util.regex.Pattern
-                        .compile("#\\s*define\\s+(TACLIGHT_[A-Za-z_]+)\\s+([^\\s/]+)\\s*(//.*)?")
+                        // 宏名允许数字(2026-10-03 R21 发现:原 `TACLIGHT_[A-Za-z_]+` 匹配不到
+                        // `TACLIGHT_VOX_PAL_BOX0` 里的 `0`,整行落到下面的 fail-safe 抛异常 ⇒
+                        // 注入被拒 = 零注入。宏名含数字在 C 预处理器里完全合法,是原正则太窄)。
+                        .compile("#\\s*define\\s+(TACLIGHT_[A-Za-z0-9_]+)\\s+([^\\s/]+)\\s*(//.*)?")
                         .matcher(t);
                 if (m.matches()) {
                     out.append(constFromDefine(m.group(1), m.group(2), m.group(3) == null ? "" : m.group(3)))

@@ -51,6 +51,16 @@ public final class VoxelDda {
         int code(Cell cell);
     }
 
+    /**
+     * 调色板码 → 格内盒列表(2026-10-03 R21):平铺 6 个 0..1 浮点坐标/盒;
+     * {@code null} = 该码没有盒(走基础码语义)。没有它,{@code PAL[..]} 码在 Java oracle
+     * 里会既不落基础码分支也不落盒分支 ⇒ 被当成全透射,诊断报出的数与着色器不一致。
+     */
+    @FunctionalInterface
+    public interface ShapeLookup {
+        float[] boxesFor(Cell cell, int code);
+    }
+
     private VoxelDda() { }
 
     /** 返回起点格与终点格之间真正穿入的体素；两端格均豁免。 */
@@ -75,6 +85,14 @@ public final class VoxelDda {
             double ax, double ay, double az,
             double bx, double by, double bz,
             Classifier classifier) {
+        return transmit(ax, ay, az, bx, by, bz, classifier, null);
+    }
+
+    /** 带形状调色板的透射率(2026-10-03 R21);{@code shapes == null} 时与单项版逐位一致。 */
+    public static double transmit(
+            double ax, double ay, double az,
+            double bx, double by, double bz,
+            Classifier classifier, ShapeLookup shapes) {
         double dx = bx - ax, dy = by - ay, dz = bz - az;
         double len = Math.sqrt(dx * dx + dy * dy + dz * dz);
         if (len < 1e-4) return 1.0;
@@ -82,7 +100,22 @@ public final class VoxelDda {
         double transmission = 1.0;
         for (Visited visited : traceVisited(ax, ay, az, bx, by, bz)) {
             int code = classifier.code(visited.cell());
-            if (code == VoxelField.CODE_SOLID) {
+            if (code >= VoxelField.CODE_PALETTE_BASE) {
+                // 形状调色板:逐盒走与薄板同一条盒规则;取不到盒 ⇒ 保守按整格(宁可误挡)
+                float[] boxes = shapes == null ? null : shapes.boxesFor(visited.cell(), code);
+                if (boxes == null) {
+                    double f = boxFraction(ax, ay, az, nx, ny, nz, visited, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0);
+                    if (f <= 0.0) return 0.0;
+                    transmission *= f;
+                    continue;
+                }
+                for (int i = 0; i + 5 < boxes.length; i += 6) {
+                    double f = boxFraction(ax, ay, az, nx, ny, nz, visited,
+                            boxes[i], boxes[i + 1], boxes[i + 2], boxes[i + 3], boxes[i + 4], boxes[i + 5]);
+                    if (f <= 0.0) return 0.0;
+                    transmission *= f;
+                }
+            } else if (code == VoxelField.CODE_SOLID) {
                 double factor = Math.min(visited.penetration() / FUZZ_BLOCKS, 1.0);
                 if (factor >= 1.0) return 0.0;
                 transmission *= 1.0 - factor;

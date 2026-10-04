@@ -148,7 +148,7 @@ public class UploaderSemanticContract {
         int[] wdata = new int[VoxelField.VOX_MAX_UINTS];
         VoxelField.pack(wbox, 0, 0, 5, VoxelField.CODE_SOLID, wdata);
         VoxelField.Snapshot wsnap = new VoxelField.Snapshot(
-                wbox.ox, wbox.oy, wbox.oz, wbox.dx, wbox.dy, wbox.dz, wdata, 7L);
+                wbox.ox, wbox.oy, wbox.oz, wbox.dx, wbox.dy, wbox.dz, wdata, null, 7L);
         ClientSpotlightUploader.clampLightsOutOfSolid(wl, wsnap);
         SpotlightData wallMoved = wl.get(0);
         check((int) Math.floor(wallMoved.posZ()) == 4, "墙内灯头退到墙前空气格");

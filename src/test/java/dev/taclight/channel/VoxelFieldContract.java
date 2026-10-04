@@ -27,13 +27,24 @@ public class VoxelFieldContract {
         check(box2.dx == VoxelField.MAX_DIM, "远灯 x 轴钳到 128");
         check(box2.dy <= VoxelField.MAX_DIM && box2.dz <= VoxelField.MAX_DIM, "其余轴仍≤128");
 
-        // ---- 3. 4bit 打包位序 = GLSL 镜像:idx=x+y*dx+z*dx*dy;word=idx>>3;bit=(idx&7)*4 ----
+        // ---- 3. 8bit 打包位序 = GLSL 镜像:idx=x+y*dx+z*dx*dy;word=idx>>2;bit=(idx&3)*8 ----
+        // 2026-10-03 R21 形状调色板:4bit → 8bit(低 4 位语义不变,码 ≥16 = 调色板槽)。
         int[] data = new int[VoxelField.VOX_MAX_UINTS];
         VoxelField.pack(box2, 3, 2, 5, VoxelField.CODE_SOLID, data);
         int idx = 3 + 2 * box2.dx + 5 * box2.dx * box2.dy;
-        check(((data[idx >> 3] >> ((idx & 7) * 4)) & 15) == VoxelField.CODE_SOLID, "GLSL 位序读回=CODE_SOLID");
+        check(((data[idx >> 2] >> ((idx & 3) * 8)) & 255) == VoxelField.CODE_SOLID, "GLSL 位序读回=CODE_SOLID");
         check(VoxelField.unpack(box2, 3, 2, 5, data) == VoxelField.CODE_SOLID, "unpack=CODE_SOLID");
         check(VoxelField.unpack(box2, 4, 2, 5, data) == VoxelField.CODE_EMPTY, "相邻体素不受污染");
+        // 调色板码必须原样存取(码域 0..255,且 ≥16 不得被旧 4bit 掩码截断)
+        int palCode = VoxelField.CODE_PALETTE_BASE + 239;   // 最大槽
+        VoxelField.pack(box2, 6, 2, 5, palCode, data);
+        check(VoxelField.unpack(box2, 6, 2, 5, data) == palCode,
+                "调色板码 " + palCode + " 原样存取(4bit 掩码会把它截成 " + (palCode & 15) + ")");
+        check(((data[idx >> 2] >> ((idx & 3) * 8)) & 255) == VoxelField.CODE_SOLID
+                        && VoxelField.VOXELS_PER_UINT == 4,
+                "同字 4 槽独立(VOXELS_PER_UINT=4):6 号写入不污染 3 号");
+        check(!VoxelField.isSlab(palCode) && VoxelField.isPalette(palCode),
+                "isSlab 上界必须拦住调色板码(旧式 code>=4 会把 255 当薄板 ⇒ (255−3)/8=31.5 格假遮挡)");
         VoxelField.pack(box2, 4, 2, 5, VoxelField.CODE_LEAF, data);
         check(VoxelField.unpack(box2, 3, 2, 5, data) == VoxelField.CODE_SOLID
                 && VoxelField.unpack(box2, 4, 2, 5, data) == VoxelField.CODE_LEAF, "同字双体素独立");
@@ -53,10 +64,10 @@ public class VoxelFieldContract {
 
         // ---- 4. Snapshot 语义 ----
         VoxelField.Snapshot snap = new VoxelField.Snapshot(box.ox, box.oy, box.oz,
-                box.dx, box.dy, box.dz, data, 42L);
+                box.dx, box.dy, box.dz, data, null, 42L);
         check(snap.ox() == box.ox && snap.dx() == box.dx && snap.version() == 42L, "snapshot 字段直传");
         check(snap.usedUints() == (box.dx * box.dy * box.dz + VoxelField.VOXELS_PER_UINT - 1) / VoxelField.VOXELS_PER_UINT,
-                "usedUints=ceil(voxels/8,4bit 打包)");
+                "usedUints=ceil(voxels/4,8bit 打包)");
 
         // ---- 5. 小半径灯不产生退化盒 ----
         SpotlightData L0 = SpotlightData.spot(5f, 5f, 5f, 0.5f,

@@ -188,6 +188,11 @@ public class AllContracts {
 
         // 薄板命中距离(2026-09-30 R13):建表路径 taclight_vox_hit_dist 对薄板返回"入格距离"
         // 而非"板面穿越距离" ⇒ 薄雪层阴影被拉长(中位 0.88/最差 1.36 格)。契约 BACKLOG §2.123/§2.124。
+        // 形状调色板(2026-10-03 R21):精确性口径/去重/容量与降级/布局与 GLSL 逐值对齐。
+        // 它是 4bit→8bit + 调色板段的唯一机核闸门 —— 错一个偏移 = 读到别的浮点 = 随机假遮挡。
+        System.out.println("== ShapePaletteContract ==");
+        dev.taclight.channel.ShapePaletteContract.main(args);
+
         System.out.println("== SlabHitDistContract ==");
         SlabHitDistContract.main(args);
 

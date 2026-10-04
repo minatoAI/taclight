@@ -24,13 +24,13 @@ import java.util.List;
  * dev.taclight.client.VoxelGrid。本类自研,零第三方照搬(红线 1)。</p>
  */
 public final class VoxelField {
-    /** 栅格单轴最大格数(SSBO 容量与 DDA 步数上限同源;128³×4bit = 1MB)。 */
+    /** 栅格单轴最大格数(SSBO 容量与 DDA 步数上限同源;128³×8bit = 2MB)。 */
     public static final int MAX_DIM = 128;
-    /** 每体素位数(2026-09-25 高度感知遮挡:2bit → 4bit,16 码)。 */
-    public static final int BITS_PER_VOXEL = 4;
+    /** 每体素位数(2026-09-25 高度感知:2bit → 4bit,16 码;2026-10-03 形状调色板:4bit → 8bit)。 */
+    public static final int BITS_PER_VOXEL = 8;
     /** 每个 uint 装几个体素。 */
     public static final int VOXELS_PER_UINT = 32 / BITS_PER_VOXEL;
-    /** 每轴 128 格、4bit/体素时的 uint 总数(= SpotlightBufferLayout.VOX_MAX_UINTS)。 */
+    /** 每轴 128 格、8bit/体素时的 uint 总数(= SpotlightBufferLayout.VOX_MAX_UINTS)。 */
     public static final int VOX_MAX_UINTS = MAX_DIM * MAX_DIM * MAX_DIM / VOXELS_PER_UINT;
 
     public static final int CODE_EMPTY = 0;
@@ -41,6 +41,16 @@ public final class VoxelField {
     public static final int CODE_SLAB_BOTTOM_BASE = 4;
     /** 顶薄板码基:12..15 = 占满 XZ 足印、到 y=1 止、底高 = (code−8)/8。 */
     public static final int CODE_SLAB_TOP_BASE = 12;
+    /**
+     * 形状调色板码基(2026-10-03 R21):码 {@code 16 + slot} 表示"该格的遮挡形是本帧调色板里
+     * 第 slot 条盒列表"。0..15 保持原义(空/植被/树叶/实心/薄板),故**旧行为逐位不变**,
+     * golden 与既有契约不受影响;只有"16 档码表达不了的形状"才吃调色板槽。
+     */
+    public static final int CODE_PALETTE_BASE = 16;
+    /** 是否为形状调色板码(≥16)。 */
+    public static boolean isPalette(int code) {
+        return code >= CODE_PALETTE_BASE;
+    }
 
     /** 底薄板码:{@code eighths} ∈ 1..7(顶高 = eighths/8)。 */
     public static int slabBottomCode(int eighths) {
@@ -52,9 +62,13 @@ public final class VoxelField {
         return CODE_SLAB_TOP_BASE + (eighths - 4);
     }
 
-    /** 是否薄板码(4..15;0..3 为 空/植被/树叶/实心 四个基础码)。 */
+    /**
+     * 是否薄板码(4..15)。<b>上界必须存在</b>(2026-10-03 R21):8bit 后码域扩到 255,
+     * 旧式 {@code code >= 4} 会把调色板码(≥16)也吞成"薄板",进而用 (code−3)/8 算出
+     * 12 倍格高之类的假区间 ⇒ 假遮挡。
+     */
     public static boolean isSlab(int code) {
-        return code >= CODE_SLAB_BOTTOM_BASE;
+        return code >= CODE_SLAB_BOTTOM_BASE && code < CODE_PALETTE_BASE;
     }
 
     /** 薄板占据的格内 y 区间下端(0..1)。 */
@@ -89,7 +103,8 @@ public final class VoxelField {
     }
 
     /** 上传快照(data 为复用缓冲的只读视图,仅渲染线程消费)。 */
-    public record Snapshot(float ox, float oy, float oz, int dx, int dy, int dz, int[] data, long version) {
+    public record Snapshot(float ox, float oy, float oz, int dx, int dy, int dz,
+                           int[] data, ShapePalette palette, long version) {
         /** 实际占用 uint 数(上传只传有数据区)。 */
         public int usedUints() { return (dx * dy * dz + VOXELS_PER_UINT - 1) / VOXELS_PER_UINT; }
     }
@@ -265,17 +280,20 @@ public final class VoxelField {
         return x + y * b.dx + z * b.dx * b.dy;
     }
 
-    /** 4bit 打包:第 idx 个体素占 uint[idx&gt;&gt;3] 的 (idx&amp;7)×4 位,写覆盖旧码。 */
+    /**
+     * 8bit 打包(2026-10-03 R21:4bit→8bit):第 idx 个体素占 uint[idx&gt;&gt;2] 的 (idx&amp;3)×8 位,
+     * 写覆盖旧码。低 4 位语义不变(0..15 基础码),码 ≥16 = 调色板槽。
+     */
     public static void pack(Box b, int x, int y, int z, int code, int[] data) {
         int idx = voxelIndex(b, x, y, z);
         int sh = (idx & (VOXELS_PER_UINT - 1)) * BITS_PER_VOXEL;
         int i = idx / VOXELS_PER_UINT;
-        data[i] = (data[i] & ~(15 << sh)) | ((code & 15) << sh);
+        data[i] = (data[i] & ~(255 << sh)) | ((code & 255) << sh);
     }
 
     public static int unpack(Box b, int x, int y, int z, int[] data) {
         int idx = voxelIndex(b, x, y, z);
-        return (data[idx / VOXELS_PER_UINT] >> ((idx & (VOXELS_PER_UINT - 1)) * BITS_PER_VOXEL)) & 15;
+        return (data[idx / VOXELS_PER_UINT] >> ((idx & (VOXELS_PER_UINT - 1)) * BITS_PER_VOXEL)) & 255;
     }
 
     /** 出实心步进(沿 −dir 回退的单步距离)。 */

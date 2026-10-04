@@ -58,6 +58,7 @@ public final class VoxelShapePaletteContract {
         Map<String, String> sample = new HashMap<>();      // key -> 代表状态
         Map<String, Integer> byBlock = new TreeMap<>();    // 方块 id -> 需要调色板的状态数
         int total = 0, occEmpty = 0, baseExpressible = 0, need = 0, maxBoxes = 0;
+        int looseBase = 0;
 
         for (Block block : BuiltInRegistries.BLOCK) {
             String id = BuiltInRegistries.BLOCK.getKey(block).toString();
@@ -65,6 +66,7 @@ public final class VoxelShapePaletteContract {
                 total++;
                 List<AABB> boxes = st.getOcclusionShape(EmptyBlockGetter.INSTANCE, p).toAabbs();
                 if (boxes.isEmpty()) { occEmpty++; continue; }
+                if (isBaseExpressibleLoose(boxes)) looseBase++;
                 if (isBaseExpressible(boxes)) { baseExpressible++; continue; }
                 need++;
                 byBlock.merge(id, 1, Integer::sum);
@@ -78,6 +80,11 @@ public final class VoxelShapePaletteContract {
         System.out.println(String.format(Locale.ROOT,
                 "[shape-palette] total=%d  occ空=%d  16码已能精确表达=%d  **需要调色板=%d (%.1f%%)**",
                 total, occEmpty, baseExpressible, need, 100.0 * need / total));
+        // R19 的宽口径(只按 1/16 查端点,不管薄板码的 1/8 量化与顶板 clamp)⇒ 系统性少算
+        System.out.println(String.format(Locale.ROOT,
+                "[shape-palette] 订正:R19 宽口径曾报'已能精确表达=%d' ⇒ 严格口径 %d,"
+                        + "**少算 %d 个状态**(端点不在 1/8 网格 / 顶板底高 <4/8 被 clamp)",
+                looseBase, baseExpressible, looseBase - baseExpressible));
         System.out.println(String.format(Locale.ROOT,
                 "[shape-palette] 不同形状数=%d（容量 %d，余量 %d）  单形状最大盒数=%d（上限 %d）",
                 byShape.size(), PALETTE_CAPACITY, PALETTE_CAPACITY - byShape.size(),
@@ -130,8 +137,29 @@ public final class VoxelShapePaletteContract {
         System.out.println("VoxelShapePaletteContract: ALL PASS (" + checks + " checks)");
     }
 
-    /** 16 档基础码能否<b>精确</b>表达这组盒：单一盒 + 占满 XZ 足印 + 从 y=0 起或到 y=1 止。 */
+    /**
+     * 16 档基础码能否<b>精确</b>表达这组盒。
+     *
+     * <p><b>2026-10-03 R21 订正</b>:R19 首版判据是"单一盒 + 占满 XZ 足印 + 从 y=0 起或到 y=1 止",
+     * 只按 <b>1/16</b> 网格检查端点。但薄板码把高度量化到 <b>1/8</b>,顶薄板还把底高 clamp 到
+     * ≥4/8 ⇒ 端点 0.1875(3/16)会被写成 0.25、[0.25,1] 会被写成 [0.5,1]。故精确判据必须比
+     * R19 更严(见 {@link dev.taclight.channel.VoxelClassifier#baseCodeExpresses})。
+     * 本契约现在<b>直接调用生产判据</b>并把两个口径都打出来,便于对照"我上次数少了多少"。</p>
+     */
     private static boolean isBaseExpressible(List<AABB> boxes) {
+        if (boxes.isEmpty()) return false;
+        float[] f = new float[boxes.size() * 6];
+        for (int i = 0; i < boxes.size(); i++) {
+            AABB b = boxes.get(i);
+            int o = i * 6;
+            f[o] = (float) b.minX; f[o + 1] = (float) b.minY; f[o + 2] = (float) b.minZ;
+            f[o + 3] = (float) b.maxX; f[o + 4] = (float) b.maxY; f[o + 5] = (float) b.maxZ;
+        }
+        return dev.taclight.channel.VoxelClassifier.baseCodeExpresses(f, boxes.size());
+    }
+
+    /** R19 的宽口径(仅按 1/16 查端点),只为对照"上次数少了多少",不再作为判据。 */
+    private static boolean isBaseExpressibleLoose(List<AABB> boxes) {
         if (boxes.size() != 1) return false;
         AABB b = boxes.get(0);
         boolean fullXZ = q(b.minX) == 0 && q(b.minZ) == 0 && q(b.maxX) == 16 && q(b.maxZ) == 16;

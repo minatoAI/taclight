@@ -149,13 +149,17 @@ public class InlineCoreContract {
         }
         String fwdFetch = extractFn(fwd, "float taclight_vox_fetch(").replaceAll("\\s+", "");
         check(fwdFetch.contains("voxData[word]"),
-                "前向标量取数 taclight_vox_fetch 经 voxData[word] 读 4bit 分类(无 >>/& 位运算)");
+                "前向标量取数 taclight_vox_fetch 经 voxData[word] 读 8bit 分类(无 >>/& 位运算)");
         // 2026-09-04 方形假阴影修复(坑102):整字 float(voxData[word]) 在字值>2^24 时舍入
         // (node 实测 50331651→50331652,首体素码 3→0:空读成实心=无中生有方块影)。
-        // 修法=uint 逐槽剥除(/16u×slot 次)+末余 %16u,0..15 小数值转 float 才精确;禁用 float 整字路径。
-        // 2026-09-25 高度感知:2bit→4bit,剥除基数 4u→16u(槽数 16→8),坑102 的机理与修法不变。
-        check(fwdFetch.contains("/16u") && fwdFetch.contains("%16u"),
-                "前向取数经 uint 剥除(/16u)+末余(%16u,小数值转 float 精确,坑102)");
+        // 修法=uint 逐槽剥除(/基数×slot 次)+末余 %基数,0..255 小数值转 float 才精确;
+        // 禁用 float 整字路径。
+        // 2026-09-25 高度感知:2bit→4bit,剥除基数 4u→16u(槽数 16→8)。
+        // 2026-10-03 R21 形状调色板:4bit→8bit,剥除基数 16u→256u(槽数 8→4),坑102 的机理与修法不变。
+        check(fwdFetch.contains("/256u") && fwdFetch.contains("%256u"),
+                "前向取数经 uint 剥除(/256u)+末余(%256u,小数值转 float 精确,坑102;8bit 槽数 4)");
+        check(fwdFetch.contains("/4") && fwdFetch.contains("b<4"),
+                "前向取数的字内索引按 8bit 打包:word=idx/4、槽数 4(旧 4bit 是 idx/8、槽数 8)");
         check(!fwdFetch.contains("float(voxData[word])") && !fwdFetch.contains("div*=4.0")
                         && !fwdFetch.contains("mod(floor(w/div)"),
                 "前向取数禁用 float 整字除法路径(大字舍入=假阴影,坑102)");
@@ -171,8 +175,11 @@ public class InlineCoreContract {
                 "前向 vox_transmit 薄板分支走共享盒规则(4..15 ⇒ 盒内穿透长度 band=min(FUZZ,板厚))");
         check(fwd.contains("float taclight_vox_box_fraction(vec3 a, vec3 dir, float tNext, float tExit, vec3 cb, vec3 blo, vec3 bhi)"),
                 "前向精简定义了标量版 taclight_vox_box_fraction(完整核的同名函数是 ivec3 版,gbuffers 禁 ivec3)");
-        check(fwd.contains("float band = min(TACLIGHT_VOX_FUZZ, max(thin, 0.001));"),
+        check(fwd.contains("float taclight_vox_box_band(vec3 blo, vec3 bhi)")
+                        && fwd.contains("min(TACLIGHT_VOX_FUZZ, max(thin, 0.001))"),
                 "前向盒规则的带宽表达式与完整核逐字一致(band = min(FUZZ, 盒最薄边))");
+        check(fwd.contains("vec2 taclight_vox_box_span(") && fwd.contains("float taclight_vox_box_fraction("),
+                "前向盒 kernel = span(入界时间+盒内路径) + band + fraction 三件,与完整核同名同构");
         // 2026-09-04 阴影破碎修复:掠边穿透软化带(与主线 TACLIGHT_VOX_FUZZ 0.35 同源,
         // 穿透<0.35 按比例放行,≥0.35 仍 return 0.0,墙后遮挡基线不变)+tie eps 与主线同 1e-6。
         check(fwdVox.contains("penLen") && fwdVox.contains("/0.35") && fwdVox.contains("T*=1.0-f")

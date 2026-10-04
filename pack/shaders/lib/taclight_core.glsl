@@ -63,6 +63,10 @@ struct TacLightSpot {
 // 那会让 Iris 自建同名缓冲覆盖模组绑定。此缓冲由模组创建并每帧更新,包只读。
 // v0.12(09-01 深夜④):lights 改定长 [8],尾段并入体素遮挡栅格
 // (VoxelField/VoxelGrid 每 tick 填充;taclight_vox_transmit DDA 消费)。
+// 2026-10-03 R21(形状调色板):体素从 4bit 加宽到 8bit(码 16+slot 指向调色板盒),
+// 调色板段插在 voxData 之前 —— 唯一的定长数组在前、运行时长数组仍在末尾,std430 合法。
+// voxPalBox 的 11760 是字面量(= 240 槽 × 49 float,与 SpotlightBufferLayout 逐值对齐,
+// 由 SpotlightBufferLayoutContract 钉死);不用宏是为了不引入预处理指令路径。
 layout(std430, binding = 7) buffer TacLightSSBO {
     uint  lightCount;     // 头偏移 0
     float vlIntensity;    // 头偏移 4
@@ -71,8 +75,14 @@ layout(std430, binding = 7) buffer TacLightSSBO {
     TacLightSpot lights[8];   // 16..783(定长;Java 侧 clamp 8 同源)
     vec4  voxOrigin;      // 784: xyz=栅格角点 world(方块格对齐) w>0=有效/w<=0=无效
     ivec4 voxMeta;        // 800: xyz=各轴格数;w 保留
-    uint  voxData[];      // 816..: 4bit/体素,idx=x+y*dx+z*dx*dy,word=idx>>3,slot=(idx&7)*4
+    ivec4 voxPalMeta;     // 816: x=已用槽数(0=无调色板) y=每槽 float 数(55) z/w 保留
+    float voxPalBox[13200];  // 832..53631: 240 槽 × [盒数, 并集盒, 盒0..盒7](每盒 6 个 0..1 格内坐标)
+    uint  voxData[];      // 53632..: 8bit/体素(4 格/uint),idx=x+y*dx+z*dx*dy,word=idx>>2,slot=(idx&3)*8
 };
+#define TACLIGHT_VOX_PAL_SLOT_FLOATS 55
+#define TACLIGHT_VOX_PAL_BOX0        7
+#define TACLIGHT_VOX_PAL_UNION       1
+#define TACLIGHT_VOX_PAL_MAX_BOXES   8
 
 // ---- 帧内数值探针(P2,2026-09-25)----
 // 目的:把光照**项**的数值(vis/atten/spot/ndl…)导出,而不是只看像素色 ⇒
@@ -363,15 +373,16 @@ float taclight_sso(vec3 fragView, vec3 lightView, TacLightSpot L) {
 //   输入:射线在**当前格内**的段 [tNext,tExit](方向已归一 ⇒ t 即世界长度)、
 //         格内局部盒 [blo,bhi](0..1)。返回该盒造成的透射倍数 ∈ [0,1]:
 //           1.0 = 未相交(掠过,完全放行);0.0 = 盒内穿透长度 ≥ band(全挡)。
-//   band = min(TACLIGHT_VOX_FUZZ, 盒最薄边长) —— 这条规则同时服务两类遮挡体:
+//   band = min(TACLIGHT_VOX_FUZZ, 盒最薄边长) —— 这条规则同时服务三类遮挡体:
 //     · 满方块(薄板码 3 的语义):最薄 1.0 ⇒ band = 0.35(与旧实心格逐位一致);
 //     · 薄板(码 4..15):半砖 0.5 ⇒ band 0.35(与满方块一致 ⇒ 影子不再外凸);
 //       雪 1 层 0.125 ⇒ band 0.125(穿满整个板厚仍 T=0,不重演"细雪层穿光");
 //     · 形状调色板盒(码 ≥16):任意小盒,最薄边即其真实厚度。
 //   取"最薄边长"作带宽是刻意的:薄的东西本来就只该在"真被穿透"时才全挡。
 // ----------------------------------------------------------------------------
-float taclight_vox_box_fraction(vec3 a, vec3 dir, float tNext, float tExit,
-                                ivec3 cell, vec3 blo, vec3 bhi) {
+/** 射线段 [tNext,tExit] 与格内盒的交:(入界时间, 盒内路径长度);未相交 ⇒ x = 1e9。 */
+vec2 taclight_vox_box_span(vec3 a, vec3 dir, float tNext, float tExit,
+                           ivec3 cell, vec3 blo, vec3 bhi) {
     vec3 lo = vec3(cell) + blo;
     vec3 hi = vec3(cell) + bhi;
     float tn = tNext;
@@ -381,24 +392,42 @@ float taclight_vox_box_fraction(vec3 a, vec3 dir, float tNext, float tExit,
         float t2 = (hi.x - a.x) / dir.x;
         tn = max(tn, min(t1, t2));
         tf = min(tf, max(t1, t2));
-    } else if (a.x < lo.x || a.x > hi.x) return 1.0;
+    } else if (a.x < lo.x || a.x > hi.x) return vec2(1e9, 0.0);
     if (abs(dir.y) > 1e-9) {
         float t1 = (lo.y - a.y) / dir.y;
         float t2 = (hi.y - a.y) / dir.y;
         tn = max(tn, min(t1, t2));
         tf = min(tf, max(t1, t2));
-    } else if (a.y < lo.y || a.y > hi.y) return 1.0;
+    } else if (a.y < lo.y || a.y > hi.y) return vec2(1e9, 0.0);
     if (abs(dir.z) > 1e-9) {
         float t1 = (lo.z - a.z) / dir.z;
         float t2 = (hi.z - a.z) / dir.z;
         tn = max(tn, min(t1, t2));
         tf = min(tf, max(t1, t2));
-    } else if (a.z < lo.z || a.z > hi.z) return 1.0;
+    } else if (a.z < lo.z || a.z > hi.z) return vec2(1e9, 0.0);
     float path = tf - tn;
-    if (path <= 0.0) return 1.0;
-    float thin = min(hi.x - lo.x, min(hi.y - lo.y, hi.z - lo.z));
-    float band = min(TACLIGHT_VOX_FUZZ, max(thin, 1e-3));
-    return 1.0 - clamp(path / band, 0.0, 1.0);
+    if (path <= 0.0) return vec2(1e9, 0.0);
+    return vec2(tn, path);
+}
+
+/** 盒内路径长度 → 带宽(min(FUZZ, 盒最薄边长);下限 1e-3 防退化盒除零)。 */
+float taclight_vox_box_band(vec3 blo, vec3 bhi) {
+    float thin = min(bhi.x - blo.x, min(bhi.y - blo.y, bhi.z - blo.z));
+    return min(TACLIGHT_VOX_FUZZ, max(thin, 1e-3));
+}
+
+float taclight_vox_box_fraction(vec3 a, vec3 dir, float tNext, float tExit,
+                                ivec3 cell, vec3 blo, vec3 bhi) {
+    vec2 sp = taclight_vox_box_span(a, dir, tNext, tExit, cell, blo, bhi);
+    if (sp.x > 1e8) return 1.0;
+    return 1.0 - clamp(sp.y / taclight_vox_box_band(blo, bhi), 0.0, 1.0);
+}
+
+/** 形状调色板槽 → 并集盒(表路径的保守代理;表要按 512×256 方向建,不能逐盒展开)。 */
+void taclight_vox_pal_union(uint slot, out vec3 blo, out vec3 bhi) {
+    int base = int(slot) * voxPalMeta.y + TACLIGHT_VOX_PAL_UNION;
+    blo = vec3(voxPalBox[base], voxPalBox[base + 1], voxPalBox[base + 2]);
+    bhi = vec3(voxPalBox[base + 3], voxPalBox[base + 4], voxPalBox[base + 5]);
 }
 
 // ----------------------------------------------------------------------------
@@ -458,8 +487,8 @@ float taclight_vox_transmit(vec3 worldA, vec3 worldB) {
         if (any(lessThan(cell, ivec3(0))) || any(greaterThanEqual(cell, ivec3(dim)))) return T;
         if (all(equal(cell, last))) return T;
         int idx = cell.x + cell.y * int(dim.x) + cell.z * int(dim.x) * int(dim.y);
-        // 2026-09-25 高度感知遮挡:4bit/体素(8 格/uint),码 0..15。
-        uint code = (voxData[idx >> 3] >> uint((idx & 7) * 4)) & 15u;
+        // 2026-10-03 R21:8bit/体素(4 格/uint)。低 4 位语义不变;码 ≥16 = 调色板槽。
+        uint code = (voxData[idx >> 2] >> uint((idx & 3) * 8)) & 255u;
         if (code == 3u) {
             // 穿透长度软化:tMax 以归一化方向计,单位=沿射线方块数(终点在 t=len);
             // 出格时间-入格时间(钳到 len)即该格内穿透长度;≥带宽仍 T=0。
@@ -469,9 +498,41 @@ float taclight_vox_transmit(vec3 worldA, vec3 worldB) {
             if (f >= 1.0) return 0.0;
             T *= 1.0 - f;
         }
-        else if (code >= 4u) {
+        // 2026-10-03 R21 形状调色板(必须在薄板分支之前:薄板分支的条件是 code>=4,
+        // 不拦的话 ≥16 也会被当成"薄板"⇒ (code−3)/8 算出十几倍格高 = 假遮挡)。
+        else if (code >= 16u) {
+            float tExit = min(tMax.x, min(tMax.y, tMax.z));
+            uint slot = code - 16u;
+            if (slot < uint(voxPalMeta.x)) {
+                int palBase = int(slot) * voxPalMeta.y;
+                int nBox = int(voxPalBox[palBase]);
+                // 并集盒先做一次廉价否决:射线不碰形状外接盒 ⇒ 整格跳过(大多数掠过格走这条)
+                vec3 ulo; vec3 uhi;
+                taclight_vox_pal_union(slot, ulo, uhi);
+                vec2 un = taclight_vox_box_span(a, dir, tNext, tExit, cell, ulo, uhi);
+                if (un.x <= 1e8) {
+                    for (int b = 0; b < 8; b++) {
+                        if (b >= nBox) break;
+                        int o = palBase + TACLIGHT_VOX_PAL_BOX0 + b * 6;
+                        vec3 blo = vec3(voxPalBox[o], voxPalBox[o + 1], voxPalBox[o + 2]);
+                        vec3 bhi = vec3(voxPalBox[o + 3], voxPalBox[o + 4], voxPalBox[o + 5]);
+                        T *= 1.0 - clamp(taclight_vox_box_span(a, dir, tNext, tExit, cell, blo, bhi).y
+                                         / taclight_vox_box_band(blo, bhi), 0.0, 1.0);
+                        if (T <= 0.0) return 0.0;
+                    }
+                }
+            } else {
+                // 槽越界(不该发生):保守按整格实心 —— 宁可误挡不可漏光
+                T *= taclight_vox_box_fraction(a, dir, tNext, tExit, cell, vec3(0.0), vec3(1.0));
+                if (T <= 0.0) return 0.0;
+            }
+        }
+        else if (code >= 4u && code < 16u) {
             // 薄板(高度感知,4..15):占满 XZ 足印的高度带。从板顶上方掠过必须放行
             // (细雪层/地毯/半砖正是这一类)。
+            // 上界 {code < 16u} 是**纵深防御**:调色板分支已在前(顺序也对),但万一顺序被
+            // 后来的改动颠倒,`code >= 4u` 会把调色板码当成薄板 ⇒ (code−3)/8 算出十几倍
+            // 格高 = 假遮挡。两条防线都要在。
             // 2026-10-03 R20(用户实测"半砖的影子比正常方块凸出去一点"):旧写法是
             // "该格内 y 区间与板区间相交 ⇒ 当场 return 0.0",即**薄板不套软化** ——
             // 而实心格有 FUZZ 软化(穿透 <0.35 按比例放行)⇒ 薄板比满方块更硬,
@@ -534,8 +595,8 @@ float taclight_vox_hit_dist(vec3 worldA, vec3 dir, float maxDist) {
         tMax += tDelta * vec3(tied);
         if (any(lessThan(cell, ivec3(0))) || any(greaterThanEqual(cell, ivec3(dim)))) return maxDist;
         int idx = cell.x + cell.y * int(dim.x) + cell.z * int(dim.x) * int(dim.y);
-        // 2026-09-25 高度感知:4bit/体素,与 taclight_vox_transmit 逐位同源。
-        uint code = (voxData[idx >> 3] >> uint((idx & 7) * 4)) & 15u;
+        // 2026-10-03 R21:8bit/体素,与 taclight_vox_transmit 逐位同源。
+        uint code = (voxData[idx >> 2] >> uint((idx & 3) * 8)) & 255u;
         if (code == 3u) {
             float tExit = min(tMax.x, min(tMax.y, tMax.z));
             float penLen = max(0.0, min(tExit, maxDist) - tNext);
@@ -543,7 +604,28 @@ float taclight_vox_hit_dist(vec3 worldA, vec3 dir, float maxDist) {
             if (f >= 1.0) return tNext;
             T *= 1.0 - f;
         }
-        else if (code >= 4u) {
+        // 2026-10-03 R21 形状调色板(必须在薄板分支之前,否则 ≥16 会被当成薄板):
+        // 表是**纯方向函数**、每帧要按 512×256 个方向各走一遍 DDA ⇒ **不逐盒展开**,
+        // 用槽里的"并集盒"一次判定(保守代理:方向一致偏暗,与表头注释的取舍方向相同)。
+        // 语义:射线与该格的形状外接盒相交,且其中穿透长度 ≥ 带宽 ⇒ 视为首次遮挡。
+        else if (code >= 16u) {
+            float tExit = min(tMax.x, min(tMax.y, tMax.z));
+            uint slot = code - 16u;
+            if (slot < uint(voxPalMeta.x)) {
+                vec3 ulo; vec3 uhi;
+                taclight_vox_pal_union(slot, ulo, uhi);
+                vec2 un = taclight_vox_box_span(a, dir, tNext, tExit, cell, ulo, uhi);
+                if (un.x <= 1e8) {
+                    float band = taclight_vox_box_band(ulo, uhi);
+                    if (un.y >= band) return un.x;
+                    T *= 1.0 - clamp(un.y / band, 0.0, 1.0);
+                }
+            } else {
+                return tNext;
+            }
+            if (T <= TACLIGHT_OCCL_SOFT_FLOOR) return tNext;
+        }
+        else if (code >= 4u && code < 16u) {
             // 薄板:命中即视为该方向上的首次遮挡(表是纯方向函数,无终点格豁免)
             float tExit = min(tMax.x, min(tMax.y, tMax.z));
             float lo = code >= 12u ? (float(code) - 8.0) / 8.0 : 0.0;

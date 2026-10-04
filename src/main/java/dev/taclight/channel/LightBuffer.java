@@ -21,6 +21,7 @@ public final class LightBuffer {
     private static boolean uploadLogged;
     private static long lastGridVersion = -1;
     private static java.nio.IntBuffer gridStage;
+    private static java.nio.FloatBuffer palStage;
 
     private LightBuffer() {}
 
@@ -71,6 +72,13 @@ public final class LightBuffer {
             } else {
                 SpotlightBufferLayout.writeVoxInvalid(buf);
             }
+            // 形状调色板槽数(2026-10-03 R21):每帧都要写(它决定 GLSL 是否读盒区);
+            // 盒区数据本身只在 version 变化时单独上传(见下)。
+            int palSlots = 0;
+            if (grid != null && grid.palette() != null) {
+                palSlots = Math.min(grid.palette().count(), ShapePalette.MAX_SLOTS);
+            }
+            SpotlightBufferLayout.writeVoxPalMeta(buf, palSlots);
             GL15.glBindBuffer(GL43.GL_SHADER_STORAGE_BUFFER, ssboId);
             if (realloc) {
                 GL15.glBufferData(GL43.GL_SHADER_STORAGE_BUFFER, (long) bytes, GL15.GL_STREAM_DRAW);
@@ -80,8 +88,23 @@ public final class LightBuffer {
             GL15.glBufferSubData(GL43.GL_SHADER_STORAGE_BUFFER, 0L, buf);
             long tailB = 0;
             if (grid != null && grid.version() != lastGridVersion) {
+                if (palSlots > 0) {
+                    float[] src = grid.palette().data();
+                    int floats = palSlots * ShapePalette.SLOT_STRIDE;
+                    if (palStage == null || palStage.capacity() < floats) {
+                        palStage = java.nio.ByteBuffer
+                                .allocateDirect(ShapePalette.TOTAL_FLOATS * 4)
+                                .order(java.nio.ByteOrder.nativeOrder()).asFloatBuffer();
+                    }
+                    palStage.clear();
+                    palStage.put(src, 0, floats);
+                    palStage.flip();
+                    GL15.glBufferSubData(GL43.GL_SHADER_STORAGE_BUFFER,
+                            (long) SpotlightBufferLayout.OFF_VOX_PAL_BOX, palStage);
+                    tailB += (long) floats * 4;
+                }
                 int used = Math.min(grid.usedUints(), SpotlightBufferLayout.VOX_MAX_UINTS);
-                tailB = (long) used * 4;
+                tailB += (long) used * 4;
                 if (gridStage == null || gridStage.capacity() < used) {
                     gridStage = java.nio.ByteBuffer
                             .allocateDirect(SpotlightBufferLayout.VOX_MAX_UINTS * 4)
@@ -94,8 +117,8 @@ public final class LightBuffer {
                         (long) SpotlightBufferLayout.OFF_VOX_DATA, gridStage);
                 lastGridVersion = grid.version();
             }
-            // !perf 上传量(2026-09-25 ⑨):头 816B/帧恒传,尾仅 version 变化时。关着时零开销。
-            if (PerfStats.active()) PerfStats.noteUpload(SpotlightBufferLayout.OFF_VOX_DATA, tailB);
+            // !perf 上传量(2026-09-25 ⑨):头段 832B/帧恒传;调色板盒区与体素数据仅 version 变化时。
+            if (PerfStats.active()) PerfStats.noteUpload(SpotlightBufferLayout.HEAD_STAGE_BYTES, tailB);
             if (!uploadLogged) { uploadLogged = true; LOGGER.info("[TacLight] upload {} light(s), flags={}", count, flags); }
             GL30.glBindBufferBase(GL43.GL_SHADER_STORAGE_BUFFER, SpotlightBufferLayout.BINDING, ssboId);
             // v0.9.0:路线 P 时代的 SLOT PROBE(binding 0/1/8 冗余绑定)已删除,

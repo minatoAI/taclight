@@ -11,11 +11,35 @@ public class SpotlightBufferLayoutContract {
         check(SpotlightBufferLayout.OFF_VOX_ORIGIN == 16 + 8 * 96, "voxOrigin 紧跟 8 灯");
         check(SpotlightBufferLayout.OFF_VOX_ORIGIN % 16 == 0, "voxOrigin 16B 对齐(std430 vec4)");
         check(SpotlightBufferLayout.OFF_VOX_META == SpotlightBufferLayout.OFF_VOX_ORIGIN + 16, "voxMeta 偏移");
-        check(SpotlightBufferLayout.OFF_VOX_DATA == SpotlightBufferLayout.OFF_VOX_META + 16, "voxData 偏移");
-        check(SpotlightBufferLayout.VOX_MAX_UINTS == 128 * 128 * 128 / 8,
-                "VOX_MAX_UINTS=4bit 打包 128^3(2026-09-25 高度感知遮挡)");
+        // 2026-10-03 R21 形状调色板:码 16+slot 指向的盒区插在 voxMeta 与 voxData 之间
+        check(SpotlightBufferLayout.OFF_VOX_PAL_META == SpotlightBufferLayout.OFF_VOX_META + 16, "voxPalMeta 偏移");
+        check(SpotlightBufferLayout.OFF_VOX_PAL_META % 16 == 0, "voxPalMeta 16B 对齐(std430 ivec4)");
+        check(SpotlightBufferLayout.OFF_VOX_PAL_BOX == SpotlightBufferLayout.OFF_VOX_PAL_META + 16, "voxPalBox 偏移");
+        check(SpotlightBufferLayout.OFF_VOX_DATA
+                == SpotlightBufferLayout.OFF_VOX_PAL_BOX + ShapePalette.TOTAL_FLOATS * 4, "voxData 偏移(盒区之后)");
+        check(SpotlightBufferLayout.OFF_VOX_DATA % 4 == 0, "voxData 4B 对齐(std430 uint[])");
+        check(SpotlightBufferLayout.VOX_MAX_UINTS == 128 * 128 * 128 / 4,
+                "VOX_MAX_UINTS=8bit 打包 128^3(2026-10-03 形状调色板:4bit→8bit)");
         check(SpotlightBufferLayout.bufferSize()
                 == SpotlightBufferLayout.OFF_VOX_DATA + SpotlightBufferLayout.VOX_MAX_UINTS * 4, "缓冲=定长布局");
+        // 阳性对照:总长必须**大于**"没有调色板段"的旧布局,否则说明盒区被算丢了
+        check(SpotlightBufferLayout.bufferSize()
+                > SpotlightBufferLayout.OFF_VOX_META + 16 + SpotlightBufferLayout.VOX_MAX_UINTS * 4,
+                "总长含调色板段(旧布局 " + (SpotlightBufferLayout.OFF_VOX_META + 16
+                        + SpotlightBufferLayout.VOX_MAX_UINTS * 4) + " B,现 "
+                        + SpotlightBufferLayout.bufferSize() + " B)");
+        check(SpotlightBufferLayout.HEAD_STAGE_BYTES == SpotlightBufferLayout.OFF_VOX_PAL_BOX,
+                "每帧头段止于 voxPalMeta(盒区/体素数据单独上传)");
+
+        // voxPalMeta 写入语义 + 无效位必须把槽数清零(否则 GLSL 会去读没上传的盒区)
+        ByteBuffer pv = SpotlightBufferLayout.newBuffer(1);
+        SpotlightBufferLayout.writeVoxPalMeta(pv, 7);
+        check(pv.getInt(SpotlightBufferLayout.OFF_VOX_PAL_META) == 7
+                && pv.getInt(SpotlightBufferLayout.OFF_VOX_PAL_META + 4) == ShapePalette.SLOT_STRIDE,
+                "voxPalMeta 写入:槽数 + 每槽 float 数");
+        SpotlightBufferLayout.writeVoxInvalid(pv);
+        check(pv.getInt(SpotlightBufferLayout.OFF_VOX_PAL_META) == 0,
+                "栅格无效位同时清零调色板槽数(GLSL 不会读未上传的盒区)");
 
         // 体素头/无效位写入语义
         ByteBuffer vox = SpotlightBufferLayout.newBuffer(1);
@@ -51,11 +75,14 @@ public class SpotlightBufferLayoutContract {
         check(Float.compare(read.cosOuter(), 0.848f) == 0, "cosOuter roundtrip");
         check(Float.compare(read.intensity(), 6f) == 0, "intensity roundtrip");
         check(read.type() == 1.0f, "type=1 spot");
-        System.out.println("SpotlightBufferLayoutContract: ALL PASS (23 checks)");
+        System.out.println("SpotlightBufferLayoutContract: ALL PASS (" + checks + " checks)");
     }
+
+    private static int checks;
 
     private static void check(boolean cond, String what) {
         if (!cond) throw new AssertionError("FAIL " + what);
+        checks++;
         System.out.println("  PASS " + what);
     }
 }

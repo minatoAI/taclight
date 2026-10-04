@@ -34,10 +34,12 @@ public final class VoxelProbe {
             case VoxelField.CODE_LEAF -> "LEAF";
             case VoxelField.CODE_SOLID -> "SOLID";
             default -> code < 0 ? "OUT"
-                    : (VoxelField.isSlab(code)
-                            ? String.format(Locale.ROOT, "SLAB[%.3f..%.3f]",
-                                    VoxelField.slabLow(code), VoxelField.slabHigh(code))
-                            : ("CODE" + code));
+                    : (VoxelField.isPalette(code)
+                            ? ("PAL[" + (code - VoxelField.CODE_PALETTE_BASE) + "]")
+                            : (VoxelField.isSlab(code)
+                                    ? String.format(Locale.ROOT, "SLAB[%.3f..%.3f]",
+                                            VoxelField.slabLow(code), VoxelField.slabHigh(code))
+                                    : ("CODE" + code)));
         };
     }
 
@@ -61,11 +63,11 @@ public final class VoxelProbe {
      */
     public static String scanReport(List<Row> leaky, List<Row> rest,
                                     int nonAir, int emptyNonAir,
-                                    int veg, int leaf, int slab, int solid) {
+                                    int veg, int leaf, int slab, int solid, int pal) {
         StringBuilder sb = new StringBuilder();
         sb.append(String.format(Locale.ROOT,
-                "VOXSCAN nonAir=%d EMPTY=%d VEG=%d LEAF=%d SLAB=%d SOLID=%d | 非空气却被判透光(EMPTY,完全不遮挡)=%d",
-                nonAir, emptyNonAir, veg, leaf, slab, solid, emptyNonAir));
+                "VOXSCAN nonAir=%d EMPTY=%d VEG=%d LEAF=%d SLAB=%d SOLID=%d PAL=%d | 非空气却被判透光(EMPTY,完全不遮挡)=%d",
+                nonAir, emptyNonAir, veg, leaf, slab, solid, pal, emptyNonAir));
         if (!leaky.isEmpty()) {
             java.util.LinkedHashMap<String, Integer> byBlock = new java.util.LinkedHashMap<>();
             for (Row r : leaky) {
@@ -96,6 +98,23 @@ public final class VoxelProbe {
         return sb.toString();
     }
 
+    /**
+     * 调色板码的盒列表摘要(诊断:让人眼能核对"这一格的形状到底被记成什么")。
+     * 非调色板码或取不到盒 ⇒ 空串。
+     */
+    private static String shapeNote(VoxelDda.ShapeLookup shapes, VoxelDda.Visited v, int code) {
+        if (shapes == null || !VoxelField.isPalette(code)) return "";
+        float[] bx = shapes.boxesFor(v.cell(), code);
+        if (bx == null) return " boxes=<none>";
+        StringBuilder sb = new StringBuilder(" boxes=[");
+        for (int i = 0; i + 5 < bx.length; i += 6) {
+            if (i > 0) sb.append(' ');
+            sb.append(String.format(Locale.ROOT, "(%.3f,%.3f,%.3f)-(%.3f,%.3f,%.3f)",
+                    bx[i], bx[i + 1], bx[i + 2], bx[i + 3], bx[i + 4], bx[i + 5]));
+        }
+        return sb.append(']').toString();
+    }
+
     private static String rowLine(Row r) {
         return String.format(Locale.ROOT, "\n  (%d,%d,%d) block=%s live=%s grid=%s%s",
                 r.x(), r.y(), r.z(), r.block(),
@@ -112,10 +131,14 @@ public final class VoxelProbe {
                                    double bx, double by, double bz,
                                    int maxCells,
                                    VoxelDda.Classifier live,
-                                   VoxelDda.Classifier grid) {
+                                   VoxelDda.Classifier grid,
+                                   VoxelDda.ShapeLookup gridShapes) {
         List<VoxelDda.Visited> visited = VoxelDda.traceVisited(ax, ay, az, bx, by, bz);
         double liveT = VoxelDda.transmit(ax, ay, az, bx, by, bz, live);
-        double gridT = VoxelDda.transmit(ax, ay, az, bx, by, bz, grid);
+        // grid 侧必须带上调色板盒(2026-10-03 R21):否则 PAL[..] 码在 Java oracle 里
+        // 既不落基础码分支也不落盒分支 ⇒ 被当成"全透射",诊断报出的 gridT 就不是
+        // 着色器实际算出来的那个数(探针失效比没有探针更坏)。
+        double gridT = VoxelDda.transmit(ax, ay, az, bx, by, bz, grid, gridShapes);
         StringBuilder sb = new StringBuilder();
         sb.append(String.format(Locale.ROOT,
                 "VOXRAY a=(%.2f,%.2f,%.2f) b=(%.2f,%.2f,%.2f) cells=%d liveT=%.3f gridT=%.3f",
@@ -123,9 +146,11 @@ public final class VoxelProbe {
         int shown = Math.min(visited.size(), Math.max(maxCells, 0));
         for (int i = 0; i < shown; i++) {
             VoxelDda.Visited v = visited.get(i);
-            sb.append(String.format(Locale.ROOT, "\n  [%d] (%d,%d,%d) live=%s grid=%s pen=%.3f",
+            int gc = grid.code(v.cell());
+            sb.append(String.format(Locale.ROOT, "\n  [%d] (%d,%d,%d) live=%s grid=%s%s pen=%.3f",
                     i, v.cell().x(), v.cell().y(), v.cell().z(),
-                    codeName(live.code(v.cell())), codeName(grid.code(v.cell())), v.penetration()));
+                    codeName(live.code(v.cell())), codeName(gc), shapeNote(gridShapes, v, gc),
+                    v.penetration()));
         }
         if (visited.size() > shown) {
             sb.append("\n  ...TRUNCATED(").append(visited.size() - shown).append(" 格未列出)");
