@@ -521,6 +521,47 @@ public final class DebugCommandRelay {
                     dev.taclight.channel.LightTuneOverride.configureOccl(arg));
             return;
         }
+        if (line.startsWith("!swing")) {
+            // 2026-10-04 R59:挥动**仪器**。`!key attack` 走不通 —— vanilla 用
+            // `options.keyAttack.consumeClick()` 触发 startAttack(),而 relay 对鼠标类键
+            // 只能 setDown(不产生 click 计数)⇒ 挥动根本不会发生(本轮实测踩到,回执无报错)。
+            // 这里直接调 `player.swing(hand)`,与真人挥动**同一入口** ⇒ attackAnim 走同一条动画。
+            String arg = line.length() > 6 ? line.substring(6).trim() : "";
+            net.minecraft.world.InteractionHand h = arg.equalsIgnoreCase("off")
+                    ? net.minecraft.world.InteractionHand.OFF_HAND
+                    : net.minecraft.world.InteractionHand.MAIN_HAND;
+            if (net.minecraft.client.Minecraft.getInstance().player != null) {
+                net.minecraft.client.Minecraft.getInstance().player.swing(h);
+                TacLightMod.LOGGER.info("[TacLight] RELAY swing -> {}", h);
+            }
+            return;
+        }
+        if (line.startsWith("!anchor")) {
+            // 2026-10-04 R59(用户需求⑤⑥):读"最近一次上传的手持灯锚点/方向 + 来源 + 哪只手"。
+            // src=pose-item ⇒ 锚来自**物品位姿捕获**(随手摆动);src=fallback-offset ⇒ 旧行为(眼位+固定偏移)。
+            TacLightMod.LOGGER.info("[TacLight] RELAY anchor -> {}",
+                    dev.taclight.client.HandItemPose.describe());
+            return;
+        }
+        if (line.startsWith("!lens")) {
+            // 2026-10-04 R59:灯头前移量(格)。`!lens 0` = **阳性对照**(偏移归零 ⇒ 看摆动是否只由位姿提供);
+            // 无参数 = 复位默认。范围钳制 [-1, 2] 防手滑。
+            String arg = line.length() > 5 ? line.substring(5).trim() : "";
+            if (arg.isEmpty() || arg.equals("reset")) {
+                dev.taclight.client.HandItemPose.resetLensForward();
+            } else {
+                try {
+                    float v = Float.parseFloat(arg);
+                    dev.taclight.client.HandItemPose.setLensForward(Math.max(-1f, Math.min(2f, v)));
+                } catch (NumberFormatException e) {
+                    TacLightMod.LOGGER.info("[TacLight] RELAY lens -> 用法: !lens <格> | !lens reset");
+                    return;
+                }
+            }
+            TacLightMod.LOGGER.info("[TacLight] RELAY lens -> lensForward={}",
+                    dev.taclight.client.HandItemPose.lensForward());
+            return;
+        }
         if (line.startsWith("!tm")) {
             // 2026-09-06 第十旋钮:体积光时间复用(默认开)——步数 64→32 + 抖动逐帧
             // 旋转 + 上一帧历史重投影混合(权重 0.75×逐灯置信度,LightMotionConf 差分
@@ -580,12 +621,25 @@ public final class DebugCommandRelay {
                     break;
                 }
                 default: {
-                    boolean next = (act == dev.taclight.client.GunControl.Action.ON)
+                    // 2026-10-04 R98(⑦ 对齐):!gun 与 M 键同路径 —— 状态写**手持枪自己的 NBT**,
+                // 不再写全局 manual 布(否则用 !gun 造状态会得出与真按键不同的假结论)。
+                net.minecraft.world.item.ItemStack heldGun =
+                        net.minecraft.client.Minecraft.getInstance().player == null
+                                ? net.minecraft.world.item.ItemStack.EMPTY
+                                : net.minecraft.client.Minecraft.getInstance().player.getMainHandItem();
+                if (heldGun.isEmpty()) {
+                    TacLightMod.LOGGER.info("[TacLight] RELAY gunLight ignored (no item in main hand)");
+                    break;
+                }
+                boolean next = (act == dev.taclight.client.GunControl.Action.ON)
                             ? true
                             : (act == dev.taclight.client.GunControl.Action.OFF)
                                     ? false
-                                    : !ClientLightState.gunLightOn();
-                    ClientLightState.setGunLightManual(next);
+                                    : !dev.taclight.item.FlashlightItem.isOn(heldGun);
+                    dev.taclight.item.FlashlightItem.setOn(heldGun, next);
+                ClientLightState.clearGunManual();
+                ClientLightState.setGunLight(next);
+                dev.taclight.network.TacLightNetwork.sendToggleItemLight(false, next);
                     // 手动覆写必须同步服务端真源,否则本端 SSBO 有光而对端(同步读)永远看不见
                     // —— 这正是"Dev 视角切开关无变化 + B 看不见 Dev 灯"的另一半根因。
                     // 上报有效灯:空手 !gun on 只存偏好不亮灯,切回枪即复。
