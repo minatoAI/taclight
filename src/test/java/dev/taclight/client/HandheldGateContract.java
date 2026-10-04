@@ -117,12 +117,32 @@ public class HandheldGateContract {
         check(ClientLightState.effective(true, false, true),
                 "霓虹调试豁免持物门:它的用途是证明 SSBO 通道,与手里拿什么无关");
 
-        // autoClear = 离手自动关
-        check(ClientLightState.autoClear(true, true, false, false), "原本持有→现在不持有 ⇒ 自动关");
-        check(!ClientLightState.autoClear(true, false, false, false), "本来就没持有 ⇒ 不触发(防误报)");
-        check(!ClientLightState.autoClear(true, true, true, false), "仍持有 ⇒ 不触发");
-        check(!ClientLightState.autoClear(false, true, false, false), "开关本就是关 ⇒ 不触发");
-        check(!ClientLightState.autoClear(true, true, false, true), "霓虹调试期间不自动关(否则一放手就灭)");
+        // ---- 2026-10-04 用户定案:开关 = **每支手电筒自己的属性**(旧 autoClear 已删除留痕) ----
+        // 纯函数核(零注册表依赖):缺标签 = 开(与旧默认 handheldOn=true 等价);有标签 = 该值。
+        check(dev.taclight.item.FlashlightSwitch.resolveTag(false, false),
+                "开关语义:缺标签 ⇒ 默认开(新拿到的电筒直接亮,「拿到还要先按一下」这条抱怨消失)");
+        check(!dev.taclight.item.FlashlightSwitch.resolveTag(true, false),
+                "开关语义:显式 false ⇒ 关(这才是「这支电筒关了」)");
+        check(dev.taclight.item.FlashlightSwitch.resolveTag(true, true), "开关语义:显式 true ⇒ 开");
+        // 真 NBT 往返:用户原话「我手里拿了很多个手电筒,每一个的开关状态都是它自己的」 ⇒
+        // **两个标签必须各记各的**。这是本轮修复的核心判据(旧码:全局 static,必然同时变)。
+        // 走**纯 NBT 存储层**(isOnTag/setOnTag):本契约 JVM 不做注册表引导,
+        // 构造 Item/ItemStack 会撞 Bootstrap.checkBootstrapCalled(本轮实测踩到),故不在此构造物品。
+        net.minecraft.nbt.CompoundTag ta = new net.minecraft.nbt.CompoundTag();
+        net.minecraft.nbt.CompoundTag tb = new net.minecraft.nbt.CompoundTag();
+        check(dev.taclight.item.FlashlightSwitch.isOnTag(ta) && dev.taclight.item.FlashlightSwitch.isOnTag(tb),
+                "新建电筒默认开(两支都是:空标签 ⇒ 默认开)");
+        dev.taclight.item.FlashlightSwitch.setOnTag(ta, false);
+        check(!dev.taclight.item.FlashlightSwitch.isOnTag(ta), "★ A 自己记住了「关」");
+        check(dev.taclight.item.FlashlightSwitch.isOnTag(tb), "★ 把 A 关掉**不影响** B —— 旧全局开关在此必红");
+        check(ta.contains(dev.taclight.item.FlashlightSwitch.TAG_ON)
+                        && "taclight_on".equals(dev.taclight.item.FlashlightSwitch.TAG_ON),
+                "★ 「关」是**显式写进物品自己的 NBT**(键名契约钉死),不是「没写=关」");
+        dev.taclight.item.FlashlightSwitch.setOnTag(tb, false);
+        dev.taclight.item.FlashlightSwitch.setOnTag(ta, true);
+        check(dev.taclight.item.FlashlightSwitch.isOnTag(ta) && !dev.taclight.item.FlashlightSwitch.isOnTag(tb),
+                "★ 两个堆各自独立:置位后 A 开 / B 关(单一真源 = 物品自己的 NBT)");
+        check(dev.taclight.item.FlashlightSwitch.isOnTag(null), "null 标签按「缺键」处理 ⇒ 默认开(不 NPE)");
     }
 
     /** 接线层:源码文本级(非运行时行为验证)。 */
@@ -132,20 +152,29 @@ public class HandheldGateContract {
         Path relay = Path.of("src/main/java/dev/taclight/client/DebugCommandRelay.java");
         Path snapshot = Path.of("src/main/java/dev/taclight/client/DebugSnapshotter.java");
         Path item = Path.of("src/main/java/dev/taclight/item/FlashlightItemIris.java");
+        Path state = Path.of("src/main/java/dev/taclight/client/ClientLightState.java");
         check(Files.isRegularFile(uploader) && Files.isRegularFile(events) && Files.isRegularFile(relay)
-                        && Files.isRegularFile(snapshot) && Files.isRegularFile(item),
-                "找到五个受影响源文件");
+                        && Files.isRegularFile(snapshot) && Files.isRegularFile(item) && Files.isRegularFile(state),
+                "找到六个受影响源文件");
         if (!Files.isRegularFile(uploader)) return;
         String up = Files.readString(uploader, StandardCharsets.UTF_8);
         String ev = Files.readString(events, StandardCharsets.UTF_8);
         String rl = Files.readString(relay, StandardCharsets.UTF_8);
         String sn = Files.readString(snapshot, StandardCharsets.UTF_8);
         String it = Files.readString(item, StandardCharsets.UTF_8);
+        String cs = Files.readString(state, StandardCharsets.UTF_8);
 
         check(up.contains("ClientLightState.handheldEffective()"), "接线①:上传器用手持灯有效值");
         check(!up.contains("selfOn && ClientLightState.isOn()"), "[旧码必红] 上传器不再只看开关");
         check(ev.contains("ClientLightState.setHandheldProbe("), "接线②:tick 覆写持物探针");
-        check(ev.contains("ClientLightState.autoClear("), "接线③:tick 执行离手自动关");
+        // 接线③(2026-10-04 改钉):开关真源从"全局 static"改为"手上那支电筒的 NBT"。
+        check(ev.contains("FlashlightItem.heldStack(mc.player)"), "接线③:tick 取「手上那支电筒」堆(主手→副手)");
+        check(ev.contains("FlashlightItem.isOn(heldFlash)"), "接线③b:tick 从**物品自己的标签**读开关");
+        check(!ev.contains("autoClear("), "[旧码必红] tick 不再执行「离手自动关」(旧码在此为真)");
+        check(ev.contains("FlashlightItem.toggleOn(heldFlash)"), "接线③c:L 键把开关**写进物品**,不写全局");
+        check(!cs.contains("public static boolean autoClear"),
+                "[旧码必红] ClientLightState 的 autoClear 函数体已删除(只留留痕注释)");
+        check(cs.contains("FlashlightItem.TAG_ON"), "接线③d:ClientLightState 留痕指向新真源(可追)");
         check(ev.contains("holdingFlashlight("), "接线④:L 键走同一判据");
         check(rl.contains("ClientEvents.holdingFlashlight(mc.player)"), "接线⑤:中继 !light 走同一判据");
         check(sn.contains("\"handheldEffective\""), "接线⑥:快照暴露有效值(与 gunEffective 对称)");

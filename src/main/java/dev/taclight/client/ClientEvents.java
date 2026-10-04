@@ -17,6 +17,8 @@ import net.minecraftforge.fml.common.Mod;
 public class ClientEvents {
     private static GunLaserReader.Status lastGunStatus = GunLaserReader.Status.NONE;
     private static boolean lastSentEffective = false;
+    /** 手持灯有效值上次上报值(与枪灯分开判变化:开关现在挂在**物品**上,换手就会变)。 */
+    private static boolean lastSentHandheld = false;
     private static int e2eTick;
     private static boolean e2eLogged;
     /** tune 持久化恢复(一次性,首个世界 tick;config 此时必已加载,比 MOD setup 更稳)。 */
@@ -169,11 +171,23 @@ public class ClientEvents {
                 TacLightMod.LOGGER.info("[TacLight] handheld toggle ignored (not holding flashlight)");
                 continue;
             }
-            ClientLightState.toggle();
+            // 2026-10-04:开关写进**手上那支电筒自己的 NBT**(旧版写全局 static)。
+            // 未手持(仅霓虹调试可到这)时保留旧行为:翻全局偏好,让调试能点灯。
+            net.minecraft.world.item.ItemStack heldFlash =
+                    dev.taclight.item.FlashlightItem.heldStack(Minecraft.getInstance().player);
+            boolean now;
+            if (!heldFlash.isEmpty()) {
+                now = dev.taclight.item.FlashlightItem.toggleOn(heldFlash);
+                ClientLightState.setHandheld(now);
+            } else {
+                ClientLightState.toggle();
+                now = ClientLightState.isOn();
+            }
             // M5:开关上报纸服务端(SynchedEntityData 真源),其他玩家客户端可见
             dev.taclight.network.TacLightNetwork.sendSetLight(
                     ClientLightState.handheldEffective(), ClientLightState.gunLightEffective());
-            TacLightMod.LOGGER.info("[TacLight] handheld flashlight {}", ClientLightState.isOn() ? "ON" : "OFF");
+            TacLightMod.LOGGER.info("[TacLight] handheld flashlight {} (per-item tag={})",
+                    now ? "ON" : "OFF", !heldFlash.isEmpty());
         }
         while (KeyBindings.GUNLIGHT_TOGGLE.consumeClick()) {
             boolean next = dev.taclight.client.GunControl.toggleGunManual();
@@ -449,15 +463,21 @@ public class ClientEvents {
             ClientLightState.setDebug(true);
             TacLightMod.LOGGER.info("[TacLight] DIAG auto: debug neon ON at login");
         }
-        // 手持灯持物门(2026-09-25 用户报的 bug):每 tick 覆写探针;离手即**自动关**并同步服务端
-        // (第三条:从手里移除后自动关闭)。霓虹调试期间不清,否则一放手电筒霓虹就灭。
-        boolean holdingNow = holdingFlashlight(mc.player);
-        boolean wasHolding = ClientLightState.handheldProbeOn();
+        // 手持灯持物门 + **每支手电筒自己的开关**(2026-10-04 用户定案):
+        //   开关状态存在**物品自己的 NBT**里(FlashlightItem.TAG_ON),不在玩家身上。
+        //   每 tick 从"手上那支电筒"读出来镜像进 ClientLightState ——
+        //   渲染 / HUD / 上传器 / Iris 光源都继续读 ClientLightState,口径不变。
+        //   ★ 取代旧设计的两条:① 全局 static 开关;② "离手自动关"(autoClear)把开关清掉
+        //   ⇒ 用户实测"切走再切回来还得再开一次"。现在切走只是不亮(持物门),
+        //   **开关偏好留在物品上**,切回来即复。
+        //   霓虹调试期间不镜像:调试要能自己把灯点着(forceHandheldOn),否则手里没电筒就灭。
+        net.minecraft.world.item.ItemStack heldFlash =
+                dev.taclight.item.FlashlightItem.heldStack(mc.player);
+        boolean holdingNow = !heldFlash.isEmpty();
         ClientLightState.setHandheldProbe(holdingNow);
-        if (ClientLightState.autoClear(ClientLightState.isOn(), wasHolding, holdingNow, ClientLightState.debugMode())) {
-            ClientLightState.setHandheld(false);
-            dev.taclight.network.TacLightNetwork.sendSetLight(false, ClientLightState.gunLightEffective());
-            TacLightMod.LOGGER.info("[TacLight] handheld flashlight OFF (left hand: no longer holding flashlight)");
+        if (!ClientLightState.debugMode()) {
+            ClientLightState.setHandheld(holdingNow
+                    && dev.taclight.item.FlashlightItem.isOn(heldFlash));
         }
 
         GunLaserReader.Status status = GunLaserReader.Status.NONE;
@@ -494,11 +514,15 @@ public class ClientEvents {
                     status == GunLaserReader.Status.OUR_LIGHT ? "ON" : "OFF", detail);
             lastGunStatus = status;
         }
-        // M5:有效灯变化即同步服务端真源(含手动期切走/切回:偏好不变但有效翻转)
+        // M5:有效灯变化即同步服务端真源(含手动期切走/切回:偏好不变但有效翻转)。
+        // 2026-10-04:手持灯也纳入判变化 —— 开关挂在物品上后,换手/换电筒都会让有效值翻转,
+        // 只盯枪灯会在"切到另一支电筒"时漏报(服务端实体数据陈旧 → 其他玩家看不到变化)。
         boolean effNow = ClientLightState.gunLightEffective();
-        if (effNow != lastSentEffective) {
+        boolean handheldNow = ClientLightState.handheldEffective();
+        if (effNow != lastSentEffective || handheldNow != lastSentHandheld) {
             lastSentEffective = effNow;
-            dev.taclight.network.TacLightNetwork.sendSetLight(ClientLightState.handheldEffective(), effNow);
+            lastSentHandheld = handheldNow;
+            dev.taclight.network.TacLightNetwork.sendSetLight(handheldNow, effNow);
         }
     }
 }

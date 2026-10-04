@@ -46,6 +46,74 @@ public class FlashlightItem extends Item {
         }
     }
 
+    // ------------------------------------------------------------------------
+    // 开关状态 = **该手电筒自己的属性**(用户 2026-10-04 定案)
+    //
+    // 用户原话:"开关应该是一个类似于标签一样的东西:我手里拿了很多个手电筒,每一个手电筒
+    // 的开关状态都应该是针对每个手电筒的,是它自己的一个属性,而不是角色自身的一个开关。"
+    // 旧设计是 ClientLightState 里一个**客户端全局** static + "离手自动关"(autoClear),
+    // 于是切走再切回来开关就没了,还得再按一次。
+    //
+    // 现规则(契约 FlashlightSwitchContract 钉死):
+    //   * 状态存在 **ItemStack 自己的 NBT**(键 TAG_ON);
+    //   * **缺标签 = 开** —— 与旧默认 handheldOn=true 等价(新拿到的电筒直接亮,
+    //     "拿到还要先开一下"这条抱怨随之消失);
+    //   * **显式写 false = 关**,且**不再被"离手"清掉** ⇒ 每支电筒各记各的。
+    // ------------------------------------------------------------------------
+
+    /** 开关状态标签键(per-ItemStack)。规则层在 {@link FlashlightSwitch}(不继承 Item,可离线判定)。 */
+    public static final String TAG_ON = FlashlightSwitch.TAG_ON;
+
+    /** 纯函数(离线契约钉死,零注册表依赖):**缺标签 = 开;有标签 = 该值**。 */
+    public static boolean resolveTag(boolean hasKey, boolean value) {
+        return FlashlightSwitch.resolveTag(hasKey, value);
+    }
+
+    /** 存储层(纯 NBT)。 */
+    public static boolean isOnTag(net.minecraft.nbt.CompoundTag tag) {
+        return FlashlightSwitch.isOnTag(tag);
+    }
+
+    /** 存储层写入(纯 NBT)。 */
+    public static void setOnTag(net.minecraft.nbt.CompoundTag tag, boolean on) {
+        FlashlightSwitch.setOnTag(tag, on);
+    }
+
+    /** 该手电筒自己的开关状态。非手电筒/空堆返回 false。 */
+    public static boolean isOn(ItemStack stack) {
+        if (stack == null || stack.isEmpty()) return false;
+        return FlashlightSwitch.isOnTag(stack.getTag());
+    }
+
+    /** 置位该手电筒自己的开关(写进物品自己的 NBT;不动任何全局状态)。 */
+    public static void setOn(ItemStack stack, boolean on) {
+        if (stack == null || stack.isEmpty()) return;
+        FlashlightSwitch.setOnTag(stack.getOrCreateTag(), on);
+    }
+
+    /** 翻转该手电筒自己的开关,返回翻转后的状态。 */
+    public static boolean toggleOn(ItemStack stack) {
+        boolean next = !isOn(stack);
+        setOn(stack, next);
+        return next;
+    }
+
+    /**
+     * 手上(主手优先,其次副手)的那支手电筒;没拿返回 {@link ItemStack#EMPTY}。
+     * 注册表未就绪等异常一律视为"未持有":宁可不亮,不误亮(与旧 holdingFlashlight 同约定)。
+     */
+    public static ItemStack heldStack(net.minecraft.world.entity.player.Player p) {
+        if (p == null) return ItemStack.EMPTY;
+        try {
+            Item item = dev.taclight.registry.ModItems.FLASHLIGHT.get();
+            if (p.getMainHandItem().is(item)) return p.getMainHandItem();
+            if (p.getOffhandItem().is(item)) return p.getOffhandItem();
+        } catch (Throwable t) {
+            return ItemStack.EMPTY;
+        }
+        return ItemStack.EMPTY;
+    }
+
     @Override
     public void appendHoverText(ItemStack stack, @Nullable Level level, List<Component> tooltip, TooltipFlag flag) {
         tooltip.add(Component.translatable("item.taclight.flashlight.tip"));

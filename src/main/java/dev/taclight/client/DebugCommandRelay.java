@@ -400,8 +400,11 @@ public final class DebugCommandRelay {
                         dev.taclight.devonly.LightCommand.usage());
                 return;
             }
+            // 2026-10-04:开关真源 = **手上那支电筒自己的 NBT**(与开灯键同源)。
+            net.minecraft.world.item.ItemStack heldFlash =
+                    dev.taclight.item.FlashlightItem.heldStack(mc.player);
             if (act == dev.taclight.devonly.LightCommand.ACTION_STATUS) {
-                boolean now = ClientLightState.isOn();
+                boolean now = dev.taclight.item.FlashlightItem.isOn(heldFlash);
                 TacLightMod.LOGGER.info("[TacLight] RELAY {}",
                         dev.taclight.devonly.LightCommand.describe(act, now, now));
                 return;
@@ -411,8 +414,11 @@ public final class DebugCommandRelay {
                 TacLightMod.LOGGER.info("[TacLight] RELAY light -> ignored (not holding flashlight)");
                 return;
             }
-            boolean before = ClientLightState.isOn();
+            boolean before = dev.taclight.item.FlashlightItem.isOn(heldFlash);
             boolean after = dev.taclight.devonly.LightCommand.nextState(act, before);
+            if (!heldFlash.isEmpty()) {
+                dev.taclight.item.FlashlightItem.setOn(heldFlash, after);
+            }
             ClientLightState.setHandheld(after);
             // 08-31 实测坑:开灯键路径(InjectionEvent) toggle 后会 sendSetLight 上报服务端,
             // relay 必须对齐,否则服务端实体数据不变 → 其他玩家看不到开关(ssbo count 假 1)。
