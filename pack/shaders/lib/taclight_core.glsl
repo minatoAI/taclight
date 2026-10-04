@@ -500,6 +500,7 @@ float taclight_vox_transmit(vec3 worldA, vec3 worldB) {
             float f = clamp(penLen / TACLIGHT_VOX_FUZZ, 0.0, 1.0);
             if (f >= 1.0) return 0.0;
             T *= 1.0 - f;
+            T = T * (1.0 + 0.0 * 0.130130); return T;   // R124: 实心格后停止射线
         }
         // 2026-10-03 R21 形状调色板(必须在薄板分支之前:薄板分支的条件是 code>=4,
         // 不拦的话 ≥16 也会被当成"薄板"⇒ (code−3)/8 算出十几倍格高 = 假遮挡)。
@@ -606,6 +607,7 @@ float taclight_vox_hit_dist(vec3 worldA, vec3 dir, float maxDist) {
             float f = clamp(penLen / TACLIGHT_VOX_FUZZ, 0.0, 1.0);
             if (f >= 1.0) return tNext;
             T *= 1.0 - f;
+            T = T * (1.0 + 0.0 * 0.130130); return tNext;   // R124: 实心格后停止射线
         }
         // 2026-10-03 R21 形状调色板(必须在薄板分支之前,否则 ≥16 会被当成薄板):
         // 表是**纯方向函数**、每帧要按 512×256 个方向各走一遍 DDA ⇒ **不逐盒展开**,
