@@ -103,14 +103,23 @@ public final class ShapePaletteContract {
         // 盒数上限
         ShapePalette q = new ShapePalette();
         q.clear();
+        // 2026-10-04 R56:上限 8→16。**9 盒的栅栏现在必须能建槽**(这正是用户报的"木栅栏无孔洞"的修法),
+        // 故这里的越界样本改成 17 盒;限内样本改成 16 盒。
+        float[] many = new float[17 * 6];
+        for (int i = 0; i < 17; i++) {
+            many[i * 6] = 0.01f * i; many[i * 6 + 1] = 0f; many[i * 6 + 2] = 0f;
+            many[i * 6 + 3] = 0.01f * i + 0.005f; many[i * 6 + 4] = 0.5f; many[i * 6 + 5] = 1f;
+        }
+        check(q.slotFor(many, 17) == -1, "17 盒超过单形状上限 " + ShapePalette.MAX_BOXES + " ⇒ -1");
+        check(q.slotFor(many, 16) == 0, "16 盒在限内 ⇒ 建槽");
+        check(q.boxesInSlot(0) == 16, "槽内盒数如实记录(实测 " + q.boxesInSlot(0) + ")");
+        // ★ 用户报的那个形状:9 盒(4 面全连接的栅栏)必须**能建槽**(旧上限 8 时它是 -1 ⇒ 退回整格 ⇒ 无孔洞)
         float[] nine = new float[9 * 6];
         for (int i = 0; i < 9; i++) {
             nine[i * 6] = 0.01f * i; nine[i * 6 + 1] = 0f; nine[i * 6 + 2] = 0f;
             nine[i * 6 + 3] = 0.01f * i + 0.005f; nine[i * 6 + 4] = 0.5f; nine[i * 6 + 5] = 1f;
         }
-        check(q.slotFor(nine, 9) == -1, "9 盒超过单形状上限 " + ShapePalette.MAX_BOXES + " ⇒ -1");
-        check(q.slotFor(nine, 8) == 0, "8 盒在限内 ⇒ 建槽");
-        check(q.boxesInSlot(0) == 8, "槽内盒数如实记录(实测 " + q.boxesInSlot(0) + ")");
+        check(q.slotFor(nine, 9) >= 0, "★ 9 盒(4 面连接栅栏)必须能建槽 ⇒ 有真实形状(不再退回整格近似)");
     }
 
     /** ④ 并集盒 = 盒集合的包围盒(表路径的保守代理)。 */

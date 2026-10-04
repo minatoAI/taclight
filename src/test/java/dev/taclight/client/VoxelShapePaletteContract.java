@@ -40,10 +40,13 @@ public final class VoxelShapePaletteContract {
      *  盒是 128³、装不下全局的 676 种。真实场景一个盒里通常几十种；万一超了，
      *  溢出的格退回基础码（降级到今天的行为），不会崩、不会错位。 */
     public static final int PALETTE_CAPACITY = 240;
-    /** 一条形状允许的最大盒数（决定 SSBO 步长）。按实测盒数分布定：8 盒覆盖 669/676 种形状。 */
-    public static final int MAX_BOXES_PER_SHAPE = 8;
-    /** 步长选择必须覆盖的形状占比下限（设计闸门）。 */
-    public static final double MIN_STRIDE_COVERAGE = 0.95;
+    /** 一条形状允许的最大盒数（决定 SSBO 步长）。
+     *  **2026-10-04 R56:8 → 16** —— 实测全局最大 **15 盒**，而旧值 8 让 6 种形状
+     *  （4 面全连接的栅栏 = 9 盒、墙、红石线…）退回基础码 = 整格近似 ⇒ 用户实测"木栅栏中间镂空仍挡光"。
+     *  16 盒 ⇒ **全覆盖**。 */
+    public static final int MAX_BOXES_PER_SHAPE = 16;
+    /** 步长选择必须覆盖的形状占比下限（设计闸门）。R56 起收紧到 **100%**（16 盒覆盖全部形状）。 */
+    public static final double MIN_STRIDE_COVERAGE = 1.0;
 
     private static int checks = 0;
     private static int fails = 0;

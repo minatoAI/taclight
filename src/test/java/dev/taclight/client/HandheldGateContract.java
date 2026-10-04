@@ -153,9 +153,11 @@ public class HandheldGateContract {
         Path snapshot = Path.of("src/main/java/dev/taclight/client/DebugSnapshotter.java");
         Path item = Path.of("src/main/java/dev/taclight/item/FlashlightItemIris.java");
         Path state = Path.of("src/main/java/dev/taclight/client/ClientLightState.java");
+        Path net = Path.of("src/main/java/dev/taclight/network/TacLightNetwork.java");
         check(Files.isRegularFile(uploader) && Files.isRegularFile(events) && Files.isRegularFile(relay)
-                        && Files.isRegularFile(snapshot) && Files.isRegularFile(item) && Files.isRegularFile(state),
-                "找到六个受影响源文件");
+                        && Files.isRegularFile(snapshot) && Files.isRegularFile(item) && Files.isRegularFile(state)
+                        && Files.isRegularFile(net),
+                "找到七个受影响源文件");
         if (!Files.isRegularFile(uploader)) return;
         String up = Files.readString(uploader, StandardCharsets.UTF_8);
         String ev = Files.readString(events, StandardCharsets.UTF_8);
@@ -163,6 +165,7 @@ public class HandheldGateContract {
         String sn = Files.readString(snapshot, StandardCharsets.UTF_8);
         String it = Files.readString(item, StandardCharsets.UTF_8);
         String cs = Files.readString(state, StandardCharsets.UTF_8);
+        String nw = Files.readString(net, StandardCharsets.UTF_8);
 
         check(up.contains("ClientLightState.handheldEffective()"), "接线①:上传器用手持灯有效值");
         check(!up.contains("selfOn && ClientLightState.isOn()"), "[旧码必红] 上传器不再只看开关");
@@ -172,6 +175,11 @@ public class HandheldGateContract {
         check(ev.contains("FlashlightItem.isOn(heldFlash)"), "接线③b:tick 从**物品自己的标签**读开关");
         check(!ev.contains("autoClear("), "[旧码必红] tick 不再执行「离手自动关」(旧码在此为真)");
         check(ev.contains("FlashlightItem.toggleOn(heldFlash)"), "接线③c:L 键把开关**写进物品**,不写全局");
+        // 接线③e/f(2026-10-04 R55):**per-item 状态必须服务端权威** —— 只写客户端那份 ItemStack
+        // 会被槽同步/重进抹掉(用户实测"切回来自己关了";R54 服务端读数实测确认,BACKLOG §2.164/§2.165)。
+        check(ev.contains("sendToggleItemLight("), "接线③e:L 键把开关**意图上报服务端**(服务端权威)");
+        check(nw.contains("serverApplyItemLight"), "接线③f:服务端把开关写进**它自己那份** ItemStack(权威)");
+        check(nw.contains("inventoryMenu.broadcastChanges()"), "接线③g:写完做原版库存同步(客户端跟随真源)");
         check(!cs.contains("public static boolean autoClear"),
                 "[旧码必红] ClientLightState 的 autoClear 函数体已删除(只留留痕注释)");
         check(cs.contains("FlashlightItem.TAG_ON"), "接线③d:ClientLightState 留痕指向新真源(可追)");

@@ -389,6 +389,15 @@ tasks.register('taclightToolsSelftest', Exec) {
     commandLine 'powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', 'selftest.ps1'
 }
 
+// 形状盒数离线 probe(2026-10-04 R57;台账 BACKLOG §2.168)。
+// 起因:§2.164 断言"4 面连接的栅栏 = 9 盒 > 上限 8 ⇒ 退回整格",而 §2.167 的 A/B 把它推翻
+// ⇒ 用**真 registry** 把"连接数 → 遮挡盒数"结算掉,以后不再靠推断。
+tasks.register('taclightFenceProbe', JavaExec) {
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.taclight.client.FenceShapeProbe'
+}
+
 // 光影包补丁(开发/构建期):输入原包目录,输出派生包目录,原包不动
 // 用法:gradlew patchIterationT [-PtaclightPackDir=...] [--args 覆盖]
 tasks.register('patchIterationT', JavaExec) {

@@ -31,8 +31,18 @@ import java.util.Map;
 public final class ShapePalette {
     /** 槽数上限(= 8bit 码域 16..255)。 */
     public static final int MAX_SLOTS = 240;
-    /** 单形状盒数上限(实测 8 盒覆盖 676 种形状里的 670 种 = 99.11%)。 */
-    public static final int MAX_BOXES = 8;
+    /**
+     * 单形状盒数上限。**2026-10-04 R56:8 → 16**(依据 {@code BACKLOG §2.164/§2.167})。
+     *
+     * <p>为什么必须提:实测盒数分布里有 **10/12/13/15 盒**的形状 —— 例如 **4 面全连接的栅栏 = 9 盒**
+     * (柱 1 + 每面横杆 2)、墙、红石线。旧上限 8 让这 6 种形状 {@code slotFor} 返回 -1 ⇒
+     * 退回基础码 = **VEG 整格近似**(洞在数据里不存在)⇒ 用户实测"**木栅栏中间镂空仍挡光、没有孔洞**"
+     * (而 2 盒的栅栏门走调色板 ⇒ 正常)。16 覆盖全部形状(全局最大 15 盒)。</p>
+     *
+     * <p>代价:槽步长 55 → **103**、盒区 13200 → **24720** float(+46 KB)⇒
+     * **模组与光影包必须同步改**(R21 铁律:包内嵌 {@code taclight_core.glsl},布局变了旧包必错)。</p>
+     */
+    public static final int MAX_BOXES = 16;
     /** 每盒 float 数:[minX,minY,minZ,maxX,maxY,maxZ]。 */
     public static final int FLOATS_PER_BOX = 6;
     /**
@@ -41,9 +51,9 @@ public final class ShapePalette {
      * 512×256 个方向各走一遍 DDA,逐盒展开会把成本乘上 8)⇒ 表用"盒集合的包围盒"一次判定,
      * 方向一致偏暗(宁可误挡不可漏光),逐采样路径仍逐盒精确。</p>
      */
-    public static final int SLOT_STRIDE = 1 + FLOATS_PER_BOX + MAX_BOXES * FLOATS_PER_BOX;   // 55
+    public static final int SLOT_STRIDE = 1 + FLOATS_PER_BOX + MAX_BOXES * FLOATS_PER_BOX;   // 103
     /** 调色板 float 总数(= 上传区字节数 / 4)。 */
-    public static final int TOTAL_FLOATS = MAX_SLOTS * SLOT_STRIDE;         // 13200
+    public static final int TOTAL_FLOATS = MAX_SLOTS * SLOT_STRIDE;         // 24720
     /** 槽内第一个真实盒的偏移(跳过分量 0 的盒数、分量 1..6 的并集盒)。 */
     public static final int SLOT_BOX0 = 1 + FLOATS_PER_BOX;                  // 7
     /** 并集盒在槽内的起始偏移。 */

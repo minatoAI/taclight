@@ -39,7 +39,51 @@ public final class TacLightNetwork {
         int id = 0;
         channel.registerMessage(id++, SetLightC2S.class, SetLightC2S::encode, SetLightC2S::decode, SetLightC2S::handle);
         channel.registerMessage(id++, SyncLightS2C.class, SyncLightS2C::encode, SyncLightS2C::decode, SyncLightS2C::handle);
+        // 2026-10-04 R55:per-item 开关的**服务端权威**通道(见 serverApplyItemLight 的注释)。
+        channel.registerMessage(id++, ToggleItemLightC2S.class, ToggleItemLightC2S::encode,
+                ToggleItemLightC2S::decode, ToggleItemLightC2S::handle);
         TacLightMod.LOGGER.info("[TacLight] NET channel registered ({} packets)", id);
+    }
+
+    /**
+     * 客户端发送:把"**这一手**的开关置位"的**意图**上报服务端(2026-10-04 R55)。
+     *
+     * <p>为什么必须有这条(用户实测 + R54 真机复现,{@code BACKLOG §2.164/§2.165}):
+     * 旧实现只在**客户端**那份 ItemStack 上写 {@code taclight_on},而 {@code sendSetLight} 只带两个布尔 ⇒
+     * **服务端权威副本(与存档)里从来没有这个标签** ⇒ 任何一次槽同步/容器/维度/重进都会把它抹掉,
+     * 用户看到的就是"开了 → 切走 → 切回自己关了"。R54 用服务端读数
+     * {@code /data get entity <player> SelectedItem} 实测:真按 L 之后服务端那份**仍无 tag**。</p>
+     */
+    public static void sendToggleItemLight(boolean offhand, boolean on) {
+        try {
+            if (channel != null) {
+                channel.sendToServer(new ToggleItemLightC2S(offhand, on));
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    /**
+     * 服务端:把开关写进**该手那份 ItemStack 自己的 NBT**(权威),再让原版库存同步把它回给客户端。
+     *
+     * @return true = 确实写进了一支手电筒;false = 该手不是手电筒(或注册表未就绪)⇒ 什么都不做
+     */
+    public static boolean serverApplyItemLight(ServerPlayer p, boolean offhand, boolean on) {
+        if (p == null) return false;
+        net.minecraft.world.item.ItemStack st = offhand ? p.getOffhandItem() : p.getMainHandItem();
+        if (st == null || st.isEmpty()) return false;
+        try {
+            if (!st.is(dev.taclight.registry.ModItems.FLASHLIGHT.get())) return false;
+        } catch (Throwable t) {
+            return false;
+        }
+        dev.taclight.item.FlashlightItem.setOn(st, on);
+        // 权威回写:让客户端那份跟着变(否则客户端显示与真源分叉)
+        try {
+            p.inventoryMenu.broadcastChanges();
+        } catch (Throwable ignored) {}
+        TacLightMod.LOGGER.info("[TacLight] ITEM-LIGHT {} {} -> {} (server-authoritative)",
+                p.getGameProfile().getName(), offhand ? "offhand" : "main", on ? "ON" : "OFF");
+        return true;
     }
 
     /** 客户端发送:把本地开关上报(失败静默,单人/未连接时灯仍是本地行为)。 */
@@ -102,6 +146,33 @@ public final class TacLightNetwork {
         public static void handle(SyncLightS2C msg, Supplier<NetworkEvent.Context> ctx) {
             ctx.get().enqueueWork(() ->
                     dev.taclight.client.ClientPacketHandlers.applyServerLightState(msg.handheld(), msg.gun()));
+            ctx.get().setPacketHandled(true);
+        }
+    }
+
+    /**
+     * C2S:**这一手**的开关置位意图(2026-10-04 R55)。
+     *
+     * <p>只带"哪只手 + 目标状态",**不带槽号** —— 因为 R54 实测发现注入/切槽后
+     * 客户端的选中槽与服务端可能不一致({@code BACKLOG §2.165 ④});按"手"解析由**服务端**自己做,
+     * 与服务端那份权威 ItemStack 永远自洽。</p>
+     */
+    public record ToggleItemLightC2S(boolean offhand, boolean on) {
+        public static void encode(ToggleItemLightC2S msg, FriendlyByteBuf buf) {
+            buf.writeBoolean(msg.offhand);
+            buf.writeBoolean(msg.on);
+        }
+
+        public static ToggleItemLightC2S decode(FriendlyByteBuf buf) {
+            return new ToggleItemLightC2S(buf.readBoolean(), buf.readBoolean());
+        }
+
+        public static void handle(ToggleItemLightC2S msg, Supplier<NetworkEvent.Context> ctx) {
+            ctx.get().enqueueWork(() -> {
+                ServerPlayer sender = ctx.get().getSender();
+                if (sender == null || sender.level().isClientSide()) return;
+                TacLightNetwork.serverApplyItemLight(sender, msg.offhand(), msg.on());
+            });
             ctx.get().setPacketHandled(true);
         }
     }

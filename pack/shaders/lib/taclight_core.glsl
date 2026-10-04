@@ -65,8 +65,11 @@ struct TacLightSpot {
 // (VoxelField/VoxelGrid 每 tick 填充;taclight_vox_transmit DDA 消费)。
 // 2026-10-03 R21(形状调色板):体素从 4bit 加宽到 8bit(码 16+slot 指向调色板盒),
 // 调色板段插在 voxData 之前 —— 唯一的定长数组在前、运行时长数组仍在末尾,std430 合法。
-// voxPalBox 的 11760 是字面量(= 240 槽 × 49 float,与 SpotlightBufferLayout 逐值对齐,
+// voxPalBox 的 24720 是字面量(= 240 槽 × 103 float,与 SpotlightBufferLayout 逐值对齐,
 // 由 SpotlightBufferLayoutContract 钉死);不用宏是为了不引入预处理指令路径。
+// 2026-10-04 R56(单形状盒数 8→16):旧值让 9 盒以上的形状(4 面连接的栅栏、墙…)退回基础码 =
+// 整格近似 ⇒ 用户实测"木栅栏中间镂空仍挡光、没有孔洞"。16 盒覆盖全部形状(全局最大 15)⇒
+// 槽步长 55→103、盒区 13200→24720 float。**模组与包必须同步**(R21 铁律)。
 layout(std430, binding = 7) buffer TacLightSSBO {
     uint  lightCount;     // 头偏移 0
     float vlIntensity;    // 头偏移 4
@@ -75,14 +78,14 @@ layout(std430, binding = 7) buffer TacLightSSBO {
     TacLightSpot lights[8];   // 16..783(定长;Java 侧 clamp 8 同源)
     vec4  voxOrigin;      // 784: xyz=栅格角点 world(方块格对齐) w>0=有效/w<=0=无效
     ivec4 voxMeta;        // 800: xyz=各轴格数;w 保留
-    ivec4 voxPalMeta;     // 816: x=已用槽数(0=无调色板) y=每槽 float 数(55) z/w 保留
-    float voxPalBox[13200];  // 832..53631: 240 槽 × [盒数, 并集盒, 盒0..盒7](每盒 6 个 0..1 格内坐标)
-    uint  voxData[];      // 53632..: 8bit/体素(4 格/uint),idx=x+y*dx+z*dx*dy,word=idx>>2,slot=(idx&3)*8
+    ivec4 voxPalMeta;     // 816: x=已用槽数(0=无调色板) y=每槽 float 数(103) z/w 保留
+    float voxPalBox[24720];  // 832..99711: 240 槽 × [盒数, 并集盒, 盒0..盒15](每盒 6 个 0..1 格内坐标)
+    uint  voxData[];      // 99712..: 8bit/体素(4 格/uint),idx=x+y*dx+z*dx*dy,word=idx>>2,slot=(idx&3)*8
 };
-#define TACLIGHT_VOX_PAL_SLOT_FLOATS 55
+#define TACLIGHT_VOX_PAL_SLOT_FLOATS 103
 #define TACLIGHT_VOX_PAL_BOX0        7
 #define TACLIGHT_VOX_PAL_UNION       1
-#define TACLIGHT_VOX_PAL_MAX_BOXES   8
+#define TACLIGHT_VOX_PAL_MAX_BOXES   16
 
 // ---- 帧内数值探针(P2,2026-09-25)----
 // 目的:把光照**项**的数值(vis/atten/spot/ndl…)导出,而不是只看像素色 ⇒

@@ -99,11 +99,37 @@ public final class ClientSpotlightUploader {
             // 世界空间锚定:手持灯锚取玩家眼位，视线仍取实际观察相机(所见即所照)；
             // 这保证第一/第三人称与 Freecam 的灯源归属语义一致。vanilla view-bob 位于
             // projection，不写 Java Camera.position；不能把本锚点规则解释成 bob 根治。
-            Vec3 anchor = spotAnchor(eye, playerEye);
+            //
+            // 2026-10-04 R59(用户需求⑤⑥):锚 = 眼位基准 + **手部基准(主副手左右翻转 ⇒ ⑥)**
+            //   + **挥动摆动(attackAnim ⇒ ⑤)** + 灯头沿视线前移。方向仍取视线:用户要的是"发出点"
+            //   跟着物品/手摆动(视差摆动);方向也跟物品会让瞄准变成晃动、不可用。
+            //   实测教训:Forge RenderHandEvent 的 PoseStack 在触发点平移恒为 0(手部变换尚未写入)
+            //   ⇒ 矩阵捕获拿不到位置,改用解析式(见 HandItemPose 类注释)。
             Vec3 lookDir = fp ? look : mc.player.getLookAngle();
-            SpotlightData hand = toSpot(anchor.add(handheldOffset(lookDir)), lookDir, cfg, 0.9f);
+            Vec3 lens;
+            String anchorSrc;
+            boolean anchorOffHand = false;
+            float swing = 0f;
+            if (fp) {
+                anchorOffHand = !mc.player.getMainHandItem()
+                        .is(dev.taclight.registry.ModItems.FLASHLIGHT.get());
+                swing = mc.player.getAttackAnim(mc.getPartialTick());
+                Vec3 swayView = dev.taclight.client.HandItemPose.sway(lookDir, swing, anchorOffHand);
+                org.joml.Vector3f w = dev.taclight.pose.MuzzlePoseMath.gunViewDirToWorld(
+                        (float) swayView.x, (float) swayView.y, (float) swayView.z, cam.rotation());
+                lens = spotAnchor(eye, playerEye)
+                        .add(dev.taclight.client.HandItemPose.handBase(lookDir, anchorOffHand))
+                        .add(w.x(), w.y(), w.z())
+                        .add(lookDir.scale(dev.taclight.client.HandItemPose.lensForward()));
+                anchorSrc = "hand-sway";
+            } else {
+                lens = spotAnchor(eye, playerEye).add(handheldOffset(lookDir));
+                anchorSrc = "fallback-offset";
+            }
+            SpotlightData hand = toSpot(lens, lookDir, cfg, 0.9f);
             lights.add(selfCapped(hand, playerEye));
             slotKeys.add("self:hand");
+            dev.taclight.client.HandItemPose.noteUploaded(lens, lookDir, anchorSrc, anchorOffHand, swing);
         }
         if (selfOn && ClientLightState.gunLightEffective()) {
             dev.taclight.pose.MuzzlePoseMath.Pose muzzle = dev.taclight.client.MuzzlePoseCapture.consumeFresh();
