@@ -359,6 +359,49 @@ float taclight_sso(vec3 fragView, vec3 lightView, TacLightSpot L) {
 #define TACLIGHT_VOX_FUZZ 0.35
 
 // ----------------------------------------------------------------------------
+// M1 · 单盒遮挡比(2026-10-03 R20;Java 侧镜像 = VoxelDda.boxFraction)
+//   输入:射线在**当前格内**的段 [tNext,tExit](方向已归一 ⇒ t 即世界长度)、
+//         格内局部盒 [blo,bhi](0..1)。返回该盒造成的透射倍数 ∈ [0,1]:
+//           1.0 = 未相交(掠过,完全放行);0.0 = 盒内穿透长度 ≥ band(全挡)。
+//   band = min(TACLIGHT_VOX_FUZZ, 盒最薄边长) —— 这条规则同时服务两类遮挡体:
+//     · 满方块(薄板码 3 的语义):最薄 1.0 ⇒ band = 0.35(与旧实心格逐位一致);
+//     · 薄板(码 4..15):半砖 0.5 ⇒ band 0.35(与满方块一致 ⇒ 影子不再外凸);
+//       雪 1 层 0.125 ⇒ band 0.125(穿满整个板厚仍 T=0,不重演"细雪层穿光");
+//     · 形状调色板盒(码 ≥16):任意小盒,最薄边即其真实厚度。
+//   取"最薄边长"作带宽是刻意的:薄的东西本来就只该在"真被穿透"时才全挡。
+// ----------------------------------------------------------------------------
+float taclight_vox_box_fraction(vec3 a, vec3 dir, float tNext, float tExit,
+                                ivec3 cell, vec3 blo, vec3 bhi) {
+    vec3 lo = vec3(cell) + blo;
+    vec3 hi = vec3(cell) + bhi;
+    float tn = tNext;
+    float tf = tExit;
+    if (abs(dir.x) > 1e-9) {
+        float t1 = (lo.x - a.x) / dir.x;
+        float t2 = (hi.x - a.x) / dir.x;
+        tn = max(tn, min(t1, t2));
+        tf = min(tf, max(t1, t2));
+    } else if (a.x < lo.x || a.x > hi.x) return 1.0;
+    if (abs(dir.y) > 1e-9) {
+        float t1 = (lo.y - a.y) / dir.y;
+        float t2 = (hi.y - a.y) / dir.y;
+        tn = max(tn, min(t1, t2));
+        tf = min(tf, max(t1, t2));
+    } else if (a.y < lo.y || a.y > hi.y) return 1.0;
+    if (abs(dir.z) > 1e-9) {
+        float t1 = (lo.z - a.z) / dir.z;
+        float t2 = (hi.z - a.z) / dir.z;
+        tn = max(tn, min(t1, t2));
+        tf = min(tf, max(t1, t2));
+    } else if (a.z < lo.z || a.z > hi.z) return 1.0;
+    float path = tf - tn;
+    if (path <= 0.0) return 1.0;
+    float thin = min(hi.x - lo.x, min(hi.y - lo.y, hi.z - lo.z));
+    float band = min(TACLIGHT_VOX_FUZZ, max(thin, 1e-3));
+    return 1.0 - clamp(path / band, 0.0, 1.0);
+}
+
+// ----------------------------------------------------------------------------
 // M1 · 体素 DDA 遮挡(v0.12,2026-09-01 深夜④;立项 = 用户实测墙后地面漏光,
 // 满足 AGENTS §4 条件项"实机真见漏光才立项")
 // 根治 SSO 已知局限(上方注释:视锥外的遮挡者不投影 → 墙后地面漏光):
@@ -427,20 +470,21 @@ float taclight_vox_transmit(vec3 worldA, vec3 worldB) {
             T *= 1.0 - f;
         }
         else if (code >= 4u) {
-            // 薄板(高度感知,4..15):只有射线在该格内的 y 区间与板区间相交才挡——从板顶上方
-            // 掠过必须放行(细雪层/地毯/半砖正是这一类)。薄板不透明 ⇒ 命中即 T=0;
-            // 不套 FUZZ 软化:板厚(1/8..7/8)本就小于带宽,套用会把雪层又放行掉。
+            // 薄板(高度感知,4..15):占满 XZ 足印的高度带。从板顶上方掠过必须放行
+            // (细雪层/地毯/半砖正是这一类)。
+            // 2026-10-03 R20(用户实测"半砖的影子比正常方块凸出去一点"):旧写法是
+            // "该格内 y 区间与板区间相交 ⇒ 当场 return 0.0",即**薄板不套软化** ——
+            // 而实心格有 FUZZ 软化(穿透 <0.35 按比例放行)⇒ 薄板比满方块更硬,
+            // 同一足印下半砖/雪层的影子向外多出最多 0.35 格。现与形状盒共用
+            // taclight_vox_box_fraction:band = min(FUZZ, 板厚) ⇒ 半砖(0.5)与满方块
+            // 逐位一致,雪 1 层(0.125)穿满板厚仍 T=0(不会重演"细雪层穿光")。
             // 底薄板 4..11:lo=0, hi=(code−3)/8;顶薄板 12..15:lo=(code−8)/8, hi=1。
             float tExit = min(tMax.x, min(tMax.y, tMax.z));
             float lo = code >= 12u ? (float(code) - 8.0) / 8.0 : 0.0;
             float hi = code >= 12u ? 1.0 : (float(code) - 3.0) / 8.0;
-            float yA = a.y + dir.y * tNext - float(cell.y);
-            float yB = a.y + dir.y * tExit - float(cell.y);
-            float yLo = min(yA, yB);
-            float yHi = max(yA, yB);
-            bool hit = (yHi - yLo <= 1e-6) ? (yLo >= lo && yLo < hi)
-                                           : (min(yHi, hi) - max(yLo, lo) > 1e-6);
-            if (hit) return 0.0;
+            T *= taclight_vox_box_fraction(a, dir, tNext, tExit, cell,
+                                           vec3(0.0, lo, 0.0), vec3(1.0, hi, 1.0));
+            if (T <= 0.0) return 0.0;
         }
         else if (code == 2u) T *= 0.40;      // 树叶:0.6 遮挡/格 → 透射 0.4/格
         else if (code == 1u) T *= 0.75; // 软植被:0.25 遮挡/格
@@ -510,7 +554,21 @@ float taclight_vox_hit_dist(vec3 worldA, vec3 dir, float maxDist) {
             float yHi = max(yA, yB);
             bool hit = (yHi - yLo <= 1e-6) ? (yLo >= lo && yLo < hi)
                                            : (min(yHi, hi) - max(yLo, lo) > 1e-6);
-            if (hit) return tNext;
+            if (hit) {
+                // R13(2026-09-30) 修:返回**板面被真正穿越的距离**,而不是"进入该格的距离"。
+                // 缺陷(用户真机实测,薄雪层阴影异常延长):入格点可在板面上方近一整格
+                // (雪 1 层厚仅 1/8 格)⇒ 表里 dHit 系统性偏小 ⇒ taclight_occl_vis_from_hit
+                // 提前判遮挡 ⇒ 阴影朝光源方向被拉长约 0.88 格(中位) / 1.36 格(最差)。
+                // 数值证据与修法自证(两套独立参考,修后偏差 0.0000):
+                //   docs/evidence/2026-09-30-snow-shadow/  |  台账 BACKLOG §2.123
+                float tHit = tNext;
+                if (code >= 12u) {      // 顶薄板:自下方进入且向上 ⇒ 穿越 y = cell.y + lo
+                    if (dir.y > 0.0 && yA < lo) tHit = tNext + (lo - yA) / dir.y;
+                } else {                // 底薄板:自上方进入且向下 ⇒ 穿越 y = cell.y + hi
+                    if (dir.y < 0.0 && yA > hi) tHit = tNext + (yA - hi) / (-dir.y);
+                }
+                return tHit;
+            }
         }
         else if (code == 2u) T *= 0.40;
         else if (code == 1u) T *= 0.75;

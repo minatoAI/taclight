@@ -119,12 +119,21 @@ public final class VoxelClassifier {
     }
 
     /**
-     * C 口径总规则(守卫顺序写死，勿调换——两条守卫各自防一个漏光/误挡方向)：
+     * 分档总规则(守卫顺序写死，勿调换——两条守卫各自防一个漏光/误挡方向)：
      * <ol>
-     *   <li>{@code coll} 空 ⇒ EMPTY；</li>
-     *   <li>{@code coll} 最高盒顶 &gt; 1.0 ⇒ SOLID；</li>
+     *   <li>{@code coll} 空 ⇒ EMPTY(带"贴地最薄一档"例外)；</li>
+     *   <li>{@code occ} 最高盒顶 &gt; 1.0 ⇒ SOLID；</li>
      *   <li>否则按 {@code occ} 实心占比分档。</li>
      * </ol>
+     *
+     * <p><b>2026-10-03 R18 订正(用户按方块类型实测 + 真机逐格读码)：守卫 2 由 {@code coll} 改读 {@code occ}。</b>
+     * 碰撞形是<b>玩法</b>需要，不是遮光需要：栅栏/栅栏门的碰撞柱是 1.5 格高
+     * (字节码实测 {@code FenceBlock} 向 {@code CrossCollisionBlock} 传
+     * {@code nodeHeight=16, extensionHeight=16, collisionHeight=24}，而 {@code getOcclusionShape}
+     * 委托的 {@code getShape} 读的是 16/16 = <b>1.0</b> 那一组)，旧式据此判"整格实心"
+     * ⇒ 栅栏影子是一个满方块、栅栏门中间的洞在数据里不存在(用户实测：影子像满方块、门洞透不过光)。
+     * 改读 {@code occ} 后栅栏顶高 1.0 不触发该守卫，落占比档 ⇒ VEG。
+     * 依据 {@code BACKLOG §2.132/§2.133}。</p>
      */
     public static int codeForShapes(double[] coll, int collCount, double[] occ, int occCount) {
         if (collCount <= 0) {
@@ -137,7 +146,10 @@ public final class VoxelClassifier {
             if (VoxelField.isSlab(thin) && VoxelField.slabHigh(thin) <= NOCOLL_SLAB_MAX_TOP) return thin;
             return VoxelField.CODE_EMPTY;
         }
-        if (maxTopY(coll, collCount) > TALL_TOP_Y) return VoxelField.CODE_SOLID;
+        // 守卫 2(2026-10-03 R18):读**遮挡形 occ**,不读碰撞形 coll。
+        // 碰撞形只反映"玩家能不能穿过去"(栅栏柱 1.5 格),拿它判遮光会把栅栏/栅栏门/墙
+        // 判成整格实心 ⇒ 影子是满方块、门洞不存在。改读 occ 后这些方块落占比档 ⇒ VEG。
+        if (occCount > 0 && maxTopY(occ, occCount) > TALL_TOP_Y) return VoxelField.CODE_SOLID;
         double fraction = solidFraction(occ, occCount);
         if (fraction >= FULL_MIN_FRACTION) return VoxelField.CODE_SOLID;
         int slab = slabCodeFor(occ, occCount);

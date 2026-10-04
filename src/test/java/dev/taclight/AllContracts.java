@@ -13,6 +13,7 @@ import dev.taclight.channel.RemoteBaseSnapContract;
 import dev.taclight.channel.RemotePosSnapContract;
 import dev.taclight.channel.PerfStatsContract;
 import dev.taclight.channel.RemoteLookPredictorContract;
+import dev.taclight.channel.SlabHitDistContract;
 import dev.taclight.channel.SpotlightBufferLayoutContract;
 import dev.taclight.channel.UploaderSemanticContract;
 import dev.taclight.channel.BoundedIdentityCacheContract;
@@ -185,6 +186,11 @@ public class AllContracts {
         System.out.println("== ShaderPackDiagContract ==");
         dev.taclight.client.ShaderPackDiagContract.main(args);
 
+        // 薄板命中距离(2026-09-30 R13):建表路径 taclight_vox_hit_dist 对薄板返回"入格距离"
+        // 而非"板面穿越距离" ⇒ 薄雪层阴影被拉长(中位 0.88/最差 1.36 格)。契约 BACKLOG §2.123/§2.124。
+        System.out.println("== SlabHitDistContract ==");
+        SlabHitDistContract.main(args);
+
         System.out.println("== SpotlightBufferLayoutContract ==");
         SpotlightBufferLayoutContract.main(args);
 
@@ -235,6 +241,11 @@ public class AllContracts {
         // 但前面的结果已全部打印(不会掩盖其它契约的结论)。
         System.out.println("== VoxelRealRegistryContract ==");
         VoxelRealRegistryContract.main(args);
+
+        // 2026-10-03 R19:形状调色板的设计尺寸闸门(不同形状数 / 单形状最大盒数),
+        // 也放最后 —— 它同样需要 bootstrap。
+        System.out.println("== VoxelShapePaletteContract ==");
+        dev.taclight.client.VoxelShapePaletteContract.main(args);
 
         System.out.println("AllContracts: ALL PASS");
     }

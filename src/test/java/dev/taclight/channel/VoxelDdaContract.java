@@ -106,6 +106,46 @@ public class VoxelDdaContract {
                         cell -> cell.x() == 1 ? snow7 : VoxelField.CODE_EMPTY) == 0.0,
                 "同一 7 层雪板:格内 y=0.5 在板内 ⇒ T=0(高度决定挡不挡,而非整格一刀切)");
 
+        // ---- 薄板软化容差(2026-10-03 R20;用户实测"半砖影子比满方块凸出去一点") ----
+        // 旧语义:薄板"格内 y 区间与板区间相交即 return 0.0"(不套软化),而实心格按
+        // 穿透长度软化(穿透 <0.35 部分放行)⇒ 同一足印下**薄板比满方块更硬**,
+        // 影子向外多出最多 0.35 格。现改为 band = min(FUZZ, 板厚)。
+        // 阳性对照:掠着半砖顶面切过的射线(几何重叠仅 0.0025 格)旧语义当场 T=0,
+        // 新语义必须给**严格部分透射** —— 这条断言在旧实现上必红。
+        int halfSlab = VoxelField.slabBottomCode(4);      // 顶高 0.5 ⇒ band = min(0.35, 0.5) = 0.35
+        double grazeSlab = VoxelDda.transmit(0.5, 0.49, 0.5, 2.5, 0.52, 0.5,
+                cell -> cell.x() == 1 ? halfSlab : VoxelField.CODE_EMPTY);
+        check(grazeSlab > 0.0 && grazeSlab < 1.0,
+                "掠半砖顶面的射线得严格部分透射(旧语义必为 0.0)实测 T="
+                        + String.format("%.4f", grazeSlab));
+        // 同一射线:满方块仍全挡 ⇒ 薄板不再"比满方块更硬"(旧语义下两者都是 0,无法区分)
+        double grazeSolid = VoxelDda.transmit(0.5, 0.49, 0.5, 2.5, 0.52, 0.5,
+                cell -> cell.x() == 1 ? VoxelField.CODE_SOLID : VoxelField.CODE_EMPTY);
+        check(grazeSolid == 0.0 && grazeSlab > grazeSolid,
+                "同一掠边射线:满方块全挡、半砖部分放行(实测 " + grazeSolid + " vs "
+                        + String.format("%.4f", grazeSlab) + ")⇒ 半砖影子不再外凸");
+        // 负控:软化**不得**把薄雪层放行 —— 穿满整个板厚仍必须 T=0。
+        double snow1Through = VoxelDda.transmit(1.5, 1.9, 0.5, 1.5, -0.1, 0.5,
+                cell -> cell.y() == 0 ? snow1 : VoxelField.CODE_EMPTY);
+        check(snow1Through == 0.0,
+                "穿满 1 层雪板(0.125 = band)仍 T=0(软化不重演细雪层穿光)");
+        double snow1Side = VoxelDda.transmit(0.5, 0.05, 0.5, 2.5, 0.05, 0.5,
+                cell -> cell.x() == 1 ? snow1 : VoxelField.CODE_EMPTY);
+        check(snow1Side == 0.0,
+                "格内 y=0.05 水平穿 1 层雪板(盒内路径 1.0 ≫ band)仍 T=0");
+        // 半砖"完全穿透"与满方块逐位一致:band 都取 0.35 ⇒ 没有引入新的不对称。
+        double halfThrough = VoxelDda.transmit(0.5, 0.25, 0.5, 2.5, 0.25, 0.5,
+                cell -> cell.x() == 1 ? halfSlab : VoxelField.CODE_EMPTY);
+        double solidThrough = VoxelDda.transmit(0.5, 0.25, 0.5, 2.5, 0.25, 0.5,
+                cell -> cell.x() == 1 ? VoxelField.CODE_SOLID : VoxelField.CODE_EMPTY);
+        check(halfThrough == 0.0 && solidThrough == 0.0,
+                "水平完全穿透:半砖与满方块同为 T=0(带宽同为 0.35,无新不对称)");
+        // 盒内穿透长度守恒(与实心格同一条换算):掠边透射 = 1 − 盒内路径/band。
+        double penFromT = (1.0 - grazeSlab) * VoxelDda.FUZZ_BLOCKS;
+        check(Math.abs(penFromT - 0.1667) < 3e-3,
+                "掠半砖的盒内穿透长度守恒(实测 " + String.format("%.4f", penFromT)
+                        + " 格,几何解析 0.1667)");
+
         List<VoxelDda.Cell> boundary = VoxelDda.traceIntermediate(
                 0.5, 0.5, 0.5, 127.5, 127.5, 127.5);
         check(boundary.size() == 126

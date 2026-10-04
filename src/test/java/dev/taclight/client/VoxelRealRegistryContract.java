@@ -110,8 +110,10 @@ public class VoxelRealRegistryContract {
                 Blocks.OAK_TRAPDOOR.defaultBlockState()
                 .setValue(TrapDoorBlock.HALF, Half.TOP).setValue(TrapDoorBlock.OPEN, false),
                 VoxelField.slabTopCode(7), p);
-        checkCode("栅栏 oak_fence(碰撞柱 1.5)", Blocks.OAK_FENCE.defaultBlockState(), VoxelField.CODE_SOLID, p);
-        checkCode("墙 cobblestone_wall(碰撞柱 1.5)", Blocks.COBBLESTONE_WALL.defaultBlockState(), VoxelField.CODE_SOLID, p);
+        // 2026-10-03 R18:守卫 2 改读 occ(occ 顶 1.0 不触发)⇒ 栅栏/墙落占比档 VEG。
+        // 真 registry 实测:oak_fence occ 占比 0.0625、cobblestone_wall occ 占比 0.25 ⇒ 均 VEG。
+        checkCode("栅栏 oak_fence(coll 柱 1.5 / occ 顶 1.0 ⇒ VEG)", Blocks.OAK_FENCE.defaultBlockState(), VoxelField.CODE_VEG, p);
+        checkCode("墙 cobblestone_wall(coll 柱 1.5 / occ 顶 1.0 ⇒ VEG)", Blocks.COBBLESTONE_WALL.defaultBlockState(), VoxelField.CODE_VEG, p);
 
         // ---- 位置无关档(ID 表 / 空气)在真 registry 上的分支仍生效 ----
         // 注:水/熔岩这两条在**离线**靠"coll 空 ⇒ 守卫 1"通过,不是流体分支(见 3b 的离线口径哨兵);

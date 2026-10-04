@@ -65,12 +65,17 @@ public class VoxelClassifyContract {
                 "守卫 1:蛛网(coll 空 / occ 满格)⇒ EMPTY(先于占比,否则会被判 SOLID)");
         check(shapeCode(new double[0], 0, box(0, 0, 0, 1, 0.125, 1), 1) == VoxelField.slabBottomCode(1),
                 "守卫 1 例外:雪 1 层(coll 空 / occ 顶 1/8)⇒ 薄板码 4(2026-09-25 细雪层穿光根因)");
+        // 2026-10-03 R18:守卫 2 改读 occ ⇒ 栅栏/墙不再判整格实心(旧式读 coll 顶 1.5 才判 SOLID)。
+        // 用户实测依据:栅栏影子像一个满方块、栅栏门中间的洞透不过光(BACKLOG §2.132/§2.133)。
         check(shapeCode(box(0.375, 0, 0.375, 0.625, 1.5, 0.625),
-                box(0.375, 0, 0.375, 0.625, 1, 0.625)) == VoxelField.CODE_SOLID,
-                "守卫 2:栅栏(coll maxY 1.5 / occ 占比 0.0625)⇒ SOLID(先于占比,否则会漏光)");
+                box(0.375, 0, 0.375, 0.625, 1, 0.625)) == VoxelField.CODE_VEG,
+                "守卫 2 改读 occ:栅栏(coll maxY 1.5 / occ 顶 1.0 占比 0.0625)⇒ VEG(不再是整格实心)");
         check(shapeCode(box(0.25, 0, 0.25, 0.75, 1.5, 0.75),
-                box(0.25, 0, 0.25, 0.75, 1, 0.75)) == VoxelField.CODE_SOLID,
-                "守卫 2:墙(coll maxY 1.5 / occ 占比 0.25)⇒ SOLID(先于占比)");
+                box(0.25, 0, 0.25, 0.75, 1, 0.75)) == VoxelField.CODE_VEG,
+                "守卫 2 改读 occ:墙(coll maxY 1.5 / occ 顶 1.0 占比 0.25)⇒ VEG(不再是整格实心)");
+        check(shapeCode(box(0, 0, 0, 1, 1.5, 1),
+                box(0, 0, 0, 1, 1, 1)) == VoxelField.CODE_SOLID,
+                "守卫 2 改读 occ 不越界:occ 占满(占比 1.0)仍 ⇒ SOLID(实心判据没有丢)");
 
         // ================= 4. 雪层(2026-09-25 高度感知:按真实高度出薄板码) =================
         check(shapeCode(box(0, 0, 0, 1, 0.125, 1), box(0, 0, 0, 1, 0.25, 1)) == VoxelField.slabBottomCode(2),
