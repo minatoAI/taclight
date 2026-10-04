@@ -71,10 +71,25 @@ public final class TacLightNetwork {
         if (p == null) return false;
         net.minecraft.world.item.ItemStack st = offhand ? p.getOffhandItem() : p.getMainHandItem();
         if (st == null || st.isEmpty()) return false;
+        boolean isFlashlight = false;
+        boolean isGun = false;
         try {
-            if (!st.is(dev.taclight.registry.ModItems.FLASHLIGHT.get())) return false;
+            isFlashlight = st.is(dev.taclight.registry.ModItems.FLASHLIGHT.get());
         } catch (Throwable t) {
             return false;
+        }
+        // 2026-10-04 R3(用户报"开枪/换弹把枪灯关掉")：**枪也要走权威写**。
+        // 旧实现只认手电筒 ⇒ 枪的 taclight_on 只写在客户端那份；而 TaCZ 在开火/换弹时会**在服务端
+        // 改枪的 NBT**，原版槽同步随即把**服务端那份**发给客户端 ⇒ 客户端标签被覆盖(实测为 0b=关)
+        // ⇒ 每 tick 镜像(ClientEvents:526)读到"关" ⇒ 灯灭。根因与 ② R55 那次完全同型。
+        // 判"是不是枪"用 **NBT 标记**(TaCZ 的 GunId / AttachmentLASER)，不引用 TaCZ 类型
+        // ⇒ 发布件没有 TaCZ 也能编译/运行(软依赖)。
+        if (!isFlashlight) {
+            net.minecraft.nbt.CompoundTag tag = st.getTag();
+            if (tag != null) {
+                isGun = tag.contains("GunId") || tag.contains("AttachmentLASER");
+            }
+            if (!isGun) return false;
         }
         dev.taclight.item.FlashlightItem.setOn(st, on);
         // 权威回写:让客户端那份跟着变(否则客户端显示与真源分叉)
