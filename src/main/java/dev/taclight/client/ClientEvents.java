@@ -179,6 +179,14 @@ public class ClientEvents {
             if (!heldFlash.isEmpty()) {
                 now = dev.taclight.item.FlashlightItem.toggleOn(heldFlash);
                 ClientLightState.setHandheld(now);
+                // 2026-10-04 R55:**把意图上报服务端**,由服务端写进**它自己那份** ItemStack(权威)。
+                // 旧实现只写客户端那份 ⇒ 服务端(与存档)从来没有 taclight_on ⇒
+                // 槽同步/容器/维度/重进都会把它抹掉(用户实测"切回来自己关了";
+                // R54 用 `/data get entity <p> SelectedItem` 服务端读数实测确认,BACKLOG §2.164/§2.165)。
+                net.minecraft.client.player.LocalPlayer pl = Minecraft.getInstance().player;
+                boolean off = pl == null || !pl.getMainHandItem()
+                        .is(dev.taclight.registry.ModItems.FLASHLIGHT.get());
+                dev.taclight.network.TacLightNetwork.sendToggleItemLight(off, now);
             } else {
                 ClientLightState.toggle();
                 now = ClientLightState.isOn();
@@ -190,11 +198,25 @@ public class ClientEvents {
                     now ? "ON" : "OFF", !heldFlash.isEmpty());
         }
         while (KeyBindings.GUNLIGHT_TOGGLE.consumeClick()) {
-            boolean next = dev.taclight.client.GunControl.toggleGunManual();
-            // M5:上报有效灯(偏好×持枪门),空手按 M 只存偏好不亮灯,切回枪即复
+            // 2026-10-04 R95(⑦):开关写到**手上那支枪自己的 NBT**上(per-ItemStack,与 ② 手持电筒同构),
+            // 并上报服务端 ⇒ 服务端写**它自己那份**主手栈(权威;换槽/重进世界都保留)。
+            // 旧实现调 GunControl.toggleGunManual() 写全局静态布尔 ⇒ 两把枪共用一个开关(用户实测)。
+            net.minecraft.client.player.LocalPlayer gp = Minecraft.getInstance().player;
+            net.minecraft.world.item.ItemStack gun = gp == null
+                    ? net.minecraft.world.item.ItemStack.EMPTY : gp.getMainHandItem();
+            boolean next;
+            if (!gun.isEmpty()) {
+                next = dev.taclight.item.FlashlightItem.toggleOn(gun);
+                ClientLightState.clearGunManual();
+                ClientLightState.setGunLight(next);
+                dev.taclight.network.TacLightNetwork.sendToggleItemLight(false, next);
+            } else {
+                next = dev.taclight.client.GunControl.toggleGunManual();   // 空手:保留旧全局偏好(仅调试路径)
+            }
+            // M5:上报有效灯(开关×持枪门);空手按 M 只存偏好不亮灯,切回枪即复
             boolean eff = ClientLightState.gunLightEffective();
             dev.taclight.network.TacLightNetwork.sendSetLight(ClientLightState.handheldEffective(), eff);
-            TacLightMod.LOGGER.info("[TacLight] gun light {} (key, manual, effective={})", next ? "ON" : "OFF", eff ? "ON" : "OFF");
+            TacLightMod.LOGGER.info("[TacLight] gun light {} (key, per-gun tag, effective={})", next ? "ON" : "OFF", eff ? "ON" : "OFF");
         }
         while (KeyBindings.DEBUG_TOGGLE.consumeClick()) {
             ClientLightState.toggleDebug();
@@ -498,7 +520,11 @@ public class ClientEvents {
 
         boolean probeOn = (status == GunLaserReader.Status.OUR_LIGHT);
         ClientLightState.setGunProbe(probeOn);
-        ClientLightState.setGunLight(probeOn);
+        // 2026-10-04 R95(⑦ 用户报"两把枪的灯共用一个开关"):枪灯开关的**真源改为手上那支枪自己的 NBT**
+        // (FlashlightItem.TAG_ON;缺标签=开,见 FlashlightSwitch.resolveTag),不再写全局静态布尔。
+        // 这样两把枪各记各的:切到 A 亮/灭只看 A,切到 B 只看 B。
+        ClientLightState.setGunLight(probeOn
+                && dev.taclight.item.FlashlightItem.isOn(mc.player.getMainHandItem()));
         // Gun state remains tick-driven above; SSBO collection/upload occurs only in onRenderLevel.
         probeIfEnabled();
         checkShaderPackDiag(mc);
