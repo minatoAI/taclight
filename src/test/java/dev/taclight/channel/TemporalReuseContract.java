@@ -141,6 +141,15 @@ public class TemporalReuseContract {
                 "GLSL:composite1 无贡献像素置信度=0(灯关瞬间光束即灭,不靠历史衰减尾巴)");
         check(comp1.contains("if (tmOn && conf > 0.0)"), "GLSL:composite1 混合只在有贡献像素执行(无灯像素零成本)");
         check(comp1.contains("taclight_reproject_prev_uv(endView)"), "GLSL:composite1 重投影用 march 终点");
+        // 2026-10-04 R24:上面那条只钉了「调了重投影函数」。**调了 ≠ 用了** —— 实测旧码把返回值
+        // 只用于门控、取样仍按 texcoord(重投影写了不用 ⇒ 等于没重投影),而上面那条照样是绿的。
+        // 判据必须钉**语义**:取样坐标 = 重投影后的 uv。
+        check(comp1.contains("texture(colortex9, clamp(uvPrev, vec2(0.0), vec2(1.0)))"),
+                "GLSL:composite1 历史按**重投影后**的 uv 取样(uvPrev 必须真的参与取样,不是只做门控)");
+        check(!comp1.contains("texture(colortex9, texcoord)"),
+                "GLSL:composite1 不得按当前像素 texcoord 取历史(那就等于没重投影)");
+        check(comp1.contains("vec2 uvPrev = taclight_reproject_prev_uv(endView);"),
+                "GLSL:composite1 uvPrev 无条件求出(取样保持无条件:texture() 走隐式导数,不可放进发散分支)");
         check(comp1.contains("abs(hist.a * TACLIGHT_TM_HISTORY_DIST_SCALE - maxDist) < TACLIGHT_TM_DEPTH_TOL"),
                 "GLSL:composite1 终点距离一致性门(disocclusion 拒用历史)");
         check(comp1.contains("float wHist = ok ? TACLIGHT_TM_WEIGHT * conf : 0.0;"),
