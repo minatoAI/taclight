@@ -68,7 +68,7 @@
 2. **只在 Oculus/Iris 加光影包时才有锥形光。** 没有光影管线时模组本体照常工作，但没有光锥和光柱。
 3. **光影注入依赖补丁模板匹配包版本。** 包里换了版本或换了另一套包，注入可能不生效，聊天栏会提示。
 4. **参数是手动调参**，没有按场景自动适配。
-5. **公开仓不含内部验证台**，所以这个仓库里没有可以直接跑的自动化测试。
+5. **仓库里带着内部调试面与验证台**：`src/main/java/dev/taclight/debug` 与 `devonly` 是开发期工具，打包时会被剔除，不进发布件；`src/test` 的契约测试需要显式运行（见下）。
 6. 预览版定位：核心功能可用，观感仍在打磨。
 
 ## 性能
@@ -85,9 +85,10 @@
 前置：JDK 17。
 
 ```bash
-./gradlew jar            # 产物 build/libs/taclight-<version>.jar
-./gradlew packShaderZip  # 产物 build/distributions/taclight-shaders-<version>.zip
-./gradlew build          # 全量构建
+./gradlew jar              # 产物 build/libs/taclight-<version>.jar
+./gradlew packShaderZip    # 产物 build/distributions/taclight-shaders-<version>.zip
+./gradlew build            # 全量构建
+./gradlew taclightContracts # 跑契约测试（注意：没有接进 build，必须显式运行）
 ```
 
 TaCZ 与 Oculus 的 jar 需要你自己下载后放进 `libs/`（本项目不重分发，理由见 `THIRD_PARTY.md`）。缺件时构建会在 `checkLocalDeps` 阶段明确报出缺哪个文件，而不是丢一个编译错误。
@@ -102,10 +103,12 @@ TaCZ 与 Oculus 的 jar 需要你自己下载后放进 `libs/`（本项目不重
 ## 目录
 
 ```
-src/main/java/dev/taclight/   产品代码（不含内部调试面）
+src/main/java/dev/taclight/   模组源码（debug/ 与 devonly/ 是开发期工具，打包时剔除）
 src/main/resources/           资源：mixin 配置、枪灯枪包、光影补丁模板与内联 GLSL
+src/test/                     契约测试（显式运行 taclightContracts）
 pack/shaders/                 自带光影包源码
-docs/开发纪律与路线图.md        面向开发者：纪律、状态、路线图
+tools/                        开发期工具：场景、机位、像素比对
+docs/开发纪律与路线图.md        面向开发者：分支模型、纪律、状态、路线图
 CHANGELOG.md                  变更历史
 THIRD_PARTY.md                第三方致谢与许可
 ```
