@@ -17,6 +17,8 @@ public class TemplateLibraryContract {
         loadComplementaryTemplate();
         noPlaceholderResidue();
         inlineCoreThroughTemplate();
+        paletteInjectionCoverage();
+        shadowDepthForwardCoverage();
         malformedRejected();
         missingFieldsRejected();
         missingResource();
@@ -194,6 +196,38 @@ public class TemplateLibraryContract {
         check(injected.contains(TemplateLibrary.INLINE_CORE_PLACEHOLDER) == false
                         && injected.contains(PatchExecutor.MARKER),
                 "内联注入块含 marker(幂等锚)");
+    }
+
+    // R21 调色板注入覆盖(2026-10-05):Java 侧 SSBO 尾段两种包都收到,GLSL 侧必须两条路径都读。
+    // 前向(Complementary/gbuffers):scalar 盒 kernel + 16 盒循环(R56 对齐,旧 8 盒漏测 9..16);
+    // 完整版(iterationT/composite):整核内联,调色板 #define 经 directiveFree 转 const。
+    private static void paletteInjectionCoverage() {
+        String fwd = TemplateLibrary.inlineCoreTextForward();
+        check(fwd.contains("code >= 16.0"), "前向含调色板分支(code>=16 先于薄板,防误判薄板)");
+        check(fwd.contains("for (int b = 0; b < 16; b++)"), "前向盒循环 16 盒(R56 对齐)");
+        check(fwd.contains("voxPalBox") && fwd.contains("taclight_vox_box_span"),
+                "前向读调色板表并走盒 kernel(非整格近似)");
+        String full = TemplateLibrary.inlineCoreText();
+        check(full.contains("voxPalBox") && full.contains("taclight_vox_pal_union"),
+                "完整版含调色板表与并集盒函数");
+        check(full.contains("const int TACLIGHT_VOX_PAL_MAX_BOXES = 16"),
+                "完整版调色板宏经 directiveFree 转 const(坑80:内联零指令行)");
+        check(!full.contains("#define TACLIGHT_VOX_PAL"), "完整版无调色板宏残留");
+    }
+
+    // S4a 自渲 depth 前向覆盖(2026-10-06,用户实测栅栏门无影/孔洞不透后补):
+    // 内置包 composite 早有 binding=9,前向(Complementary/gbuffers)一直丢弃它
+    // (slim 只白名单 binding=7+8)⇒注入包里 depth 静默回退体素。
+    // 本方法钉死前向三件套:prelude 开关 + binding=9 声明与采样函数 + surface 对 light0 覆盖。
+    private static void shadowDepthForwardCoverage() {
+        String fwd = TemplateLibrary.inlineCoreTextForward();
+        check(fwd.contains("const uint TACLIGHT_FLAG_SHADOW_DEPTH = 128u"),
+                "前向 prelude 含 depth 开关 bit7(未置位短路零行为变更)");
+        check(fwd.contains("layout(std430, binding = 9)")
+                        && fwd.contains("float taclight_shadowdepth_vis("),
+                "前向含 binding=9 声明与 depth 采样函数(与内置核逐式镜像)");
+        check(fwd.contains("taclight_shadowdepth_vis(fragWorld)"),
+                "前向 surface 对 light0 走 depth 查表(<0 回退体素)");
     }
 
     private static void malformedRejected() {

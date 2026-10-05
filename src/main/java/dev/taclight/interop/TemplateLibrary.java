@@ -239,7 +239,8 @@ public final class TemplateLibrary {
                 + "const float TACLIGHT_ATTEN_K = 20.0; // 2026-09-06 用户扫参冻结(主包同值收敛)\n"
                 + "const float TACLIGHT_KNEE_GAIN = 2.0;\n"
                 + "const float TACLIGHT_VOX_FUZZ = 0.35;\n"
-                + "const uint TACLIGHT_FLAG_NUM_PROBE = 64u;\n";
+                + "const uint TACLIGHT_FLAG_NUM_PROBE = 64u;\n"
+                + "const uint TACLIGHT_FLAG_SHADOW_DEPTH = 128u;\n";
         r = "/* " + PatchExecutor.MARKER + " inline-core-forward (injected by TacLight interop) */\n"
                 + prelude + slim + "\n";
         inlineCoreForwardCache = r;
@@ -331,7 +332,7 @@ public final class TemplateLibrary {
         }
         // 体素 DDA 不进前向(ivec3/bvec3/位运算 AST 高危):上方白名单循环已整体跳过,
         // 此处只需追加单行恒可见桩(遮挡由宿主 DoLighting 主管)。
-        return joined + "\n" + FORWARD_VOX_STUB + FORWARD_PROBE_BLOCK + FORWARD_SURFACE;
+        return joined + "\n" + FORWARD_VOX_STUB + FORWARD_PROBE_BLOCK + FORWARD_SHADOW_BLOCK + FORWARD_SURFACE;
     }
 
     /** 前向 surface:漫反射单项 + 锥判定 + 距离衰减 + 标量体素 DDA 遮挡。
@@ -457,7 +458,9 @@ public final class TemplateLibrary {
             + "                vec3 uhi = vec3(voxPalBox[palBase + 4], voxPalBox[palBase + 5], voxPalBox[palBase + 6]);\n"
             + "                vec2 un = taclight_vox_box_span(a, dir, tNext, tExit, vec3(cx, cy, cz), ulo, uhi);\n"
             + "                if (un.x <= 100000000.0) {\n"
-            + "                    for (int b = 0; b < 8; b++) {\n"
+            // 2026-10-05 R56 对齐:单形状盒数上限已 16(4 面连接栅栏/墙全局最大 15),
+            // 前向仍 b<8 会漏测第 9..16 盒 = 注入包栅栏孔洞假遮挡。scalar 循环,AST 安全。
+            + "                    for (int b = 0; b < 16; b++) {\n"
             + "                        if (b >= nBox) break;\n"
             + "                        int o = palBase + 7 + b * 6;\n"
             + "                        vec3 blo = vec3(voxPalBox[o], voxPalBox[o + 1], voxPalBox[o + 2]);\n"
@@ -505,6 +508,48 @@ public final class TemplateLibrary {
             + "    vec4  probeFrag;\n"
             + "    ivec4 probeMeta;\n"
             + "} taclightProbe;\n";
+    /** S4a 自渲 depth 的**前向侧声明**(2026-10-06,用户实测栅栏门无影/孔洞不透后补):
+     * 与 pack/shaders/lib/taclight_core.glsl 的 binding=9 块逐式镜像,只用 vec/float/int
+     * 标量运算(gbuffers AST 高危面与体素 kernel 同口径);未置位/无效返回 -1 = 不覆盖回退体素。 */
+    private static final String FORWARD_SHADOW_BLOCK =
+            "layout(std430, binding = 9) buffer TacLightShadowDepth {\n"
+            + "    vec4 sdMeta0;\n"
+            + "    vec4 sdMeta1;\n"
+            + "    vec4 sdMeta2;\n"
+            + "    vec4 sdMeta3;\n"
+            + "    vec4 sdMeta4;\n"
+            + "    float sdDepth[];\n"
+            + "};\n"
+            + "float taclight_shadowdepth_vis(vec3 fragWorld) {\n"
+            + "    if ((flags & TACLIGHT_FLAG_SHADOW_DEPTH) == 0u) return -1.0;\n"
+            + "    if (sdMeta0.x < 0.5) return -1.0;\n"
+            + "    float size = sdMeta0.y;\n"
+            + "    if (size < 1.0) return -1.0;\n"
+            + "    vec3 rel = fragWorld - sdMeta1.yzw;\n"
+            + "    vec3 fwd = sdMeta2.xyz;\n"
+            + "    float t = dot(rel, fwd);\n"
+            + "    float near = sdMeta0.z;\n"
+            + "    float far = sdMeta0.w;\n"
+            + "    if (!(t >= near) || !(t <= far)) return -1.0;\n"
+            + "    vec3 off = rel - fwd * t;\n"
+            + "    float r = t * sdMeta1.x;\n"
+            + "    if (!(r > 0.000001)) return -1.0;\n"
+            + "    vec2 ndc = vec2(dot(off, sdMeta3.xyz), dot(off, sdMeta4.xyz)) / r;\n"
+            + "    if (abs(ndc.x) > 1.0 || abs(ndc.y) > 1.0) return -1.0;\n"
+            + "    vec2 uv = (ndc * 0.5 + 0.5) * size - 0.5;\n"
+            + "    float fragD = (t - near) / max(far - near, 0.0001);\n"
+            + "    float bias = 0.004;\n"
+            + "    vec2 base = floor(uv);\n"
+            + "    float v = 0.0;\n"
+            + "    for (int a = 0; a <= 1; a++) {\n"
+            + "        for (int b = 0; b <= 1; b++) {\n"
+            + "            vec2 ij = clamp(base + vec2(float(a), float(b)), vec2(0.0), vec2(size - 1.0));\n"
+            + "            float d = sdDepth[int(ij.y * size + ij.x)];\n"
+            + "            v += (fragD <= d + bias) ? 0.25 : 0.0;\n"
+            + "        }\n"
+            + "    }\n"
+            + "    return v;\n"
+            + "}\n";
 
     private static final String FORWARD_SURFACE =
             "vec3 taclight_surface_lighting(vec3 fragView, vec3 albedo, vec3 n,\n"
@@ -528,6 +573,7 @@ public final class TemplateLibrary {
             + "                vec3 fragWorld = taclight_view_to_world(fragView);\n"
             + "                float vt = taclight_vox_transmit(L.posRadius.xyz, fragWorld);\n"
             + "                float vis = vt >= 0.0 ? vt : 1.0;\n"
+            + "                if (i == 0) { float sv = taclight_shadowdepth_vis(fragWorld); if (sv >= 0.0) vis = sv; }\n"
             + "                vec3 lc = L.colorIntensity.rgb * L.colorIntensity.a;\n"
             + "                float attenK = L.cone.z > 0.0 ? L.cone.z : TACLIGHT_ATTEN_K;\n"
             + "                float atten = taclight_attenuation(dist, radius, attenK);\n"

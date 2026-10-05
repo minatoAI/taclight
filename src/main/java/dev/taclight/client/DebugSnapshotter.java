@@ -111,6 +111,12 @@ public final class DebugSnapshotter {
             voxel = null;
             notes.add("voxel: unreadable(" + t.getClass().getSimpleName() + ")");
         }
+        // S4a depth 状态行(2026-10-06):notes 自由列表,零键变更;F9 包自带"depth 跑没跑"铁证。
+        try {
+            notes.add("depth: " + dev.taclight.channel.ShadowDepthBake.status());
+        } catch (Throwable t) {
+            notes.add("depth: unreadable(" + t.getClass().getSimpleName() + ")");
+        }
         return new SnapData(reason, takenAt, now, renderdoc, pose, light, tune, voxel, notes);
     }
 

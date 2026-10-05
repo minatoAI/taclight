@@ -40,6 +40,17 @@ public final class TacSnapshotKeys {
             Path dir = DebugSnapshotter.saveSnapshot("key/F9");
             TacLightMod.LOGGER.info("[TacLight] SNAP key/F9 -> {}",
                     dir == null ? "FAILED" : dir.toString());
+            // S4a depth 自举(2026-10-06,release 可用,免中继):首张 F9 若 depth 尚无效则按当时
+            // light0 自动布防烘焙(~64 帧),第二张 F9 即是 depth 生效对照;已有有效 depth 不重烘
+            // (灯动即过期是 S4b 的题,此处只保证"按一次 F9,depth 真正跑起来")。
+            try {
+                if (!dev.taclight.channel.ShadowDepthBuffer.hasValid()) {
+                    String arm = dev.taclight.channel.ShadowDepthBake.arm();
+                    TacLightMod.LOGGER.info("[TacLight] SNAP key/F9 + {}", arm);
+                }
+            } catch (Throwable t) {
+                TacLightMod.LOGGER.warn("[TacLight] SNAP key/F9 depth-arm failed: {}", t.toString());
+            }
         }
     }
 }
