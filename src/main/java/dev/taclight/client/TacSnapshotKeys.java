@@ -40,17 +40,10 @@ public final class TacSnapshotKeys {
             Path dir = DebugSnapshotter.saveSnapshot("key/F9");
             TacLightMod.LOGGER.info("[TacLight] SNAP key/F9 -> {}",
                     dir == null ? "FAILED" : dir.toString());
-            // S4a depth 自举(2026-10-06,release 可用,免中继):每张 F9 都按当时
-            // light0 重烘(~64 帧)——frozen depth 灯一动即过期,旧图挡新灯会把半个
-            // 光锥切掉(16:02:41 实测:烘点老灯位,拍时已移 1.5m+转向,
-            // ageFrames=1327,斜切线一刀两断)。每次重烘即"_SECOND F9 不动等完再按"
-            // 流程下永远 fresh;不动保证不乱,动了第二张前先重烘。
-            try {
-                String arm = dev.taclight.channel.ShadowDepthBake.arm();
-                TacLightMod.LOGGER.info("[TacLight] SNAP key/F9 + {}", arm);
-            } catch (Throwable t) {
-                TacLightMod.LOGGER.warn("[TacLight] SNAP key/F9 depth-arm failed: {}", t.toString());
-            }
+            // S4a depth 自举已关(2026-10-06 凌晨 A/B 定案):16:10:47(体素)与
+            // 16:11:03(depth fresh,moved=0)同姿态差异证明 depth 跑通了,
+            // 但 frozen 形态不适合跟手电移动——每张 F9 强烘骚扰测试,
+            // 改回纯快照,depth 只在专门诊断轮手动布防(含中继的测试包)。
         }
     }
 }
