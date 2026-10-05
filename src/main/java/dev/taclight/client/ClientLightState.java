@@ -16,16 +16,17 @@ public final class ClientLightState {
      * 现在与枪灯同构:开关偏好 × 持物门,并且"离手"会**自动关**。</p>
      */
     private static volatile boolean handheldProbeOn = false;
-    private static boolean debugMode = false;
     /** 自身灯运行时覆写(null=跟随配置 SELF_LIGHT_ENABLED;!selflight 可翻转)。 */
     private static volatile Boolean selfLightOverride = null;
 
     private ClientLightState() {}
 
-    /** 手持手电筒开关偏好(不含持物门;渲染/HUD 显示"开关"时用它)。 */
+    /**
+     * 手持手电筒开关(**tick 镜像自手上那支电筒的 NBT**,见 FlashlightItem.TAG_ON)。
+     * 渲染/HUD 读它没问题,但**不要把它当"用户偏好"写** —— 写偏好要写物品上的标签。
+     */
     public static boolean isOn() { return handheldOn; }
     /** 强制开启(调试模式自动开灯时用)。 */
-    public static void forceHandheldOn() { handheldOn = true; }
     public static void toggle() { handheldOn = !handheldOn; }
     /** 服务端真源回写(S2C SyncLightS2C;命令改灯时本人客户端跟随)。 */
     public static void setHandheld(boolean on) { handheldOn = on; }
@@ -39,23 +40,35 @@ public final class ClientLightState {
     /**
      * 有效手持灯 = 开关 × (持物门 ∪ 霓虹调试旁路)。
      *
-     * <p>霓虹(K / {@code !neon})**故意豁免**持物门:它的用途是"证明 SSBO 通道可见",
      * 与手里拿什么无关(否则调试模式会因未持手电筒而失效)。</p>
      */
-    public static boolean handheldEffective() { return effective(handheldOn, handheldProbeOn, debugMode); }
+    public static boolean handheldEffective() { return effective(handheldOn, handheldProbeOn, false); }
 
-    /** 纯函数(离线契约钉死):开关 × (门 ∪ 调试旁路)。 */
+    /**
+     * 纯函数(离线契约钉死):开关 × (门 ∪ 调试旁路)。
+     *
+     * <p>⚠️ <b>2026-10-04 语义变更(用户定案)</b>:第一个入参 {@code switchOn} 现在的**真源是
+     * 手上那支手电筒自己的 NBT**({@code FlashlightItem.TAG_ON}),由 tick 每帧镜像进来;
+     * 它不再是"玩家身上一个开关"。本函数本身不变,仍然是纯函数。</p>
+     */
     public static boolean effective(boolean switchOn, boolean probeOn, boolean debugBypass) {
         return switchOn && (probeOn || debugBypass);
     }
 
-    /**
-     * 纯函数(离线契约钉死):**离手自动关** —— 原本持有且开关为开,现在不再持有 ⇒ 清开关。
-     * 调试旁路期间不清(否则一放手电筒霓虹就灭)。
-     */
-    public static boolean autoClear(boolean switchOn, boolean wasHolding, boolean nowHolding, boolean debugBypass) {
-        return switchOn && wasHolding && !nowHolding && !debugBypass;
-    }
+    // ------------------------------------------------------------------------
+    // 已删除(2026-10-04 用户定案):`autoClear(switchOn, wasHolding, nowHolding, debugBypass)`
+    //
+    // 它的语义是"离手自动关":一旦不再持有手电筒就把开关清成 false。那是**全局开关**设计
+    // 的配套动作 —— 开关本来只该有一份,玩家放手就没人管它,所以得清掉避免"下次拿起来
+    // 莫名其妙亮着"。
+    //
+    // 用户实测报的正是它的后果:"我拿到手电筒之后要开一下它才能够启用,然后我切到其他物品
+    // 再切回来,这个开关状态就没有了。" 用户要求开关是**每支电筒自己的属性**。
+    //
+    // 现在开关存在物品自己的 NBT 上 ⇒ 放手不清、切回来即复。留痕:函数与其 5 条契约检查
+    // 一并删除(不是"藏着不用"),证据见 BACKLOG §2.138 与
+    // docs/evidence/2026-10-04-item-switch/。
+    // ------------------------------------------------------------------------
 
     /** 枪挂灯状态(TaCZ 附件探针写入;手动 !gun 覆写后探针不再覆盖,见 setGunLightManual) */
     public static void setGunLight(boolean on) {
@@ -105,8 +118,4 @@ public final class ClientLightState {
         return next;
     }
 
-    /** 霓虹调试模式(K 键):GLSL 输出纯色锥形光,与内置手电一眼区分。 */
-    public static boolean debugMode() { return debugMode; }
-    public static void toggleDebug() { debugMode = !debugMode; }
-    public static void setDebug(boolean on) { debugMode = on; }
 }

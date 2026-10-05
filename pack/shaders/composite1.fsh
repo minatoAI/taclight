@@ -168,10 +168,20 @@ void main() {
     // ---- 时间复用混合(静态场景有效步数 32/(1−0.75)=128;拖影由置信度+有效性门兜底)----
     vec3 beam = vl;
     if (tmOn && conf > 0.0) {
-        vec4 hist = texture(colortex9, texcoord);
-        bool ok = hist.a > 1e-6 && hist.a == hist.a;
-        vec2 uvPrev = ok ? taclight_reproject_prev_uv(endView) : vec2(-1.0);
-        ok = ok && uvPrev.x > 0.0 && uvPrev.x < 1.0 && uvPrev.y > 0.0 && uvPrev.y < 1.0;
+        // 2026-10-04 R24 修:历史必须按**重投影后**的上一帧 uv 取样。
+        // 旧写法按当前像素的 texcoord 取历史、把 uvPrev 只拿去做了门控 ⇒ 取样点恒为**当前像素**
+        // (注:这里刻意不写旧调用字面量 —— TemporalReuseContract 用全文 contains 钉否定式
+        //  「不得按 texcoord 取样」,把字面量写进注释会把散文也算命中;2026-10-04 R24 实测踩过)
+        // ⇒ 重投影写了不用 = 等于没重投影。后果:相机或手持灯一移动,混进来的是"当前像素上、
+        // 几帧前那个**不同世界点**的光束",表现为光斑里叠着别处的图案(用户实测原话:
+        // "光斑里面有一些杂物…好像是透视到另一侧的那些方块的形状…基本上是缩小版")。
+        // 静止镜头会收敛到正确值,所以这个缺陷只在**动**的时候显形 —— 这也是
+        // 2026-10-04 R23b 静止 rig 复现不出来的原因(见 BACKLOG §2.140/§2.141)。
+        // 取样保持**无条件**执行(不放进 if):texture() 走隐式导数,放在发散分支里行为未定义。
+        vec2 uvPrev = taclight_reproject_prev_uv(endView);
+        vec4 hist = texture(colortex9, clamp(uvPrev, vec2(0.0), vec2(1.0)));
+        bool ok = uvPrev.x > 0.0 && uvPrev.x < 1.0 && uvPrev.y > 0.0 && uvPrev.y < 1.0
+                && hist.a > 1e-6 && hist.a == hist.a;
         if (ok) {
             ok = abs(hist.a * TACLIGHT_TM_HISTORY_DIST_SCALE - maxDist) < TACLIGHT_TM_DEPTH_TOL;
         }

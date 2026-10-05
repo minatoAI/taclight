@@ -27,6 +27,12 @@ public final class TacLightConfig {
     public static final ForgeConfigSpec.ConfigValue<Double> REMOTE_LIGHT_MAX_DIST;
     public static final ForgeConfigSpec.ConfigValue<Integer> REMOTE_LIGHT_MAX_COUNT;
     public static final ForgeConfigSpec.ConfigValue<Boolean> SELF_LIGHT_ENABLED;
+    // BUILTIN 2026-10-05: builtin-pack auto-exposure (baked into TacLight-Builtin at install).
+    public static final ForgeConfigSpec.ConfigValue<Boolean> EXPOSURE_ADAPTIVE;
+    public static final ForgeConfigSpec.ConfigValue<Double> EXPOSURE_TARGET;
+    public static final ForgeConfigSpec.ConfigValue<Double> EXPOSURE_MIN;
+    public static final ForgeConfigSpec.ConfigValue<Double> EXPOSURE_MAX;
+    public static final ForgeConfigSpec.ConfigValue<Double> EXPOSURE_ADAPT_RATE;
 
     static {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
@@ -58,6 +64,13 @@ public final class TacLightConfig {
         // false = 本客户端不上传自身两盏灯(远程灯照常),单变量看远程枪灯效果。
         // 默认 true(零行为变化);中继 !selflight 可运行时翻转,供测试对照。
         SELF_LIGHT_ENABLED = builder.comment("upload own handheld+gun lights (false = observe remote lights only)").define("selfLightEnabled", true);
+        builder.pop();
+        builder.comment("TacLight builtin-pack auto-exposure (baked into shaderpacks/TacLight-Builtin at install; rewrite on next launch after edit)").push("exposure");
+        EXPOSURE_ADAPTIVE = builder.comment("adaptive eye-adaptation on (false = locked exposure for deterministic A/B screenshots)").define("adaptive", true);
+        EXPOSURE_TARGET = builder.comment("target fullscreen average luminance (cave lift: raise toward 0.16-0.18)").defineInRange("target", 0.16, 0.02, 0.5);
+        EXPOSURE_MIN = builder.comment("exposure floor (daylight ceiling guard)").defineInRange("min", 0.5, 0.1, 2.0);
+        EXPOSURE_MAX = builder.comment("exposure ceiling (cave floor guard; above this raises noise, not light)").defineInRange("max", 4.0, 1.0, 8.0);
+        EXPOSURE_ADAPT_RATE = builder.comment("eye-adaptation rate per second (~0.3s time constant at 3.0)").defineInRange("adaptRate", 3.0, 0.5, 10.0);
         builder.pop();
         SPEC = builder.build();
     }

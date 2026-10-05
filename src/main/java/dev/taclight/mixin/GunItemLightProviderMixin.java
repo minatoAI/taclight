@@ -21,7 +21,21 @@ public abstract class GunItemLightProviderMixin implements IrisItemLightProvider
     @Override
     public int getLightEmission(Player player, ItemStack stack) {
         // 2026-09-04 用户体感:15→5 暖底基本消失→10 折中(与手电一致);锥形主光走 SSBO 不受影响。
-        return hasOurLight(stack) ? 10 : 0;
+        // 2026-10-06 用户实测:装上即亮不受开关=bug ⇒ 门控同 FlashlightItemIris(手持门),但枪灯有远端情况:
+        // 本地读本机有效值,远端读同步真源(PlayerLightAccess,服务端写的已是有效值);失败闭合(0),宁可误灭不可常亮。
+        boolean has = hasOurLight(stack);
+        if (!has) return 0;
+        try {
+            net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+            boolean isLocal = player != null && mc != null && mc.player != null && player.getId() == mc.player.getId();
+            // player=null(不认识上下文)按本地处理,跑本机门。
+            if (player == null || isLocal) {
+                return dev.taclight.client.GunControl.gunBlockLightEmission(true, true, dev.taclight.client.ClientLightState.gunLightEffective(), false);
+            }
+            return dev.taclight.client.GunControl.gunBlockLightEmission(true, false, false, dev.taclight.sync.PlayerLightAccess.gunLight(player));
+        } catch (Throwable t) {
+            return 0;
+        }
     }
 
     @Override

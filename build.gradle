@@ -29,10 +29,54 @@ minecraft {
         }
         client {
             property 'forge.enabledGameTestNamespaces', mod_id
-            args '-mixin.config=taclight.mixins.json'
+            args '-mixin.config=taclight.dev.mixins.json'
             jvmArgs '-Xmx4G'
+            // 坑32:原版集成服硬编码 LAN 会话验证,dev 第二客户端无会话必被踢;
+            // 本属性使 DevLanAuthHook 关闭集成服验证,仅 dev 生效(生产不带此属性)。
+            property 'taclight.dev.disableLanAuth', 'true'
+            // 调试自动化:gradlew runClient -PtaclightQuickPlay=test → 启动后自动进存档
+            // (1.20+ Quick Play;省去菜单点击,session.ps1 就绪判定依赖它)
+            if (project.hasProperty('taclightQuickPlay')) {
+                args '--quickPlaySingleplayer', "${project.property('taclightQuickPlay')}"
+            }
+        }
+        // M5 多人旁观:第二客户端实例(独立 run 目录防 logs/options 互踩)
+        // 用法:gradlew runClientObserver -PtaclightJoin=127.0.0.1:25565 -PtaclightUser=ObserverB
+        clientObserver {
+            // FG6 对未知 run 名不配主类("No main class" 实机踩坑 17:42)——显式继承 client
+            // 的启动装配(setParents);自身只覆盖 run 目录/内存/联机参数。
+            parents = [project.minecraft.runs.client]
+            workingDirectory project.file('run-observer')
+            property 'forge.enabledGameTestNamespaces', mod_id
+            property 'taclight.dev.disableLanAuth', 'true'
+            args '-mixin.config=taclight.dev.mixins.json'
+            jvmArgs '-Xmx3G'
+            if (project.hasProperty('taclightJoin')) {
+                args '--quickPlayMultiplayer', "${project.property('taclightJoin')}"
+            }
+            if (project.hasProperty('taclightUser')) {
+                args '--username', "${project.property('taclightUser')}"
+            }
+        }
+        // 方案C interop:第三实例(run-interop),与主线任务的 run/run-observer 完全隔离
+        // (并行任务会在 A/B 端换包+reload,共享目录会文件级互相覆盖)。
+        // 用法:gradlew runClientInterop -PtaclightQuickPlay=interop -PtaclightUser=InteropA
+        // quickPlay 不在本块重复声明:parents 继承 client 的条件参数,再声明会
+        // 重复传 --quickPlaySingleplayer → jopt 崩溃(实机踩坑)。
+        clientInterop {
+            parents = [project.minecraft.runs.client]
+            workingDirectory project.file('run-interop')
+            property 'forge.enabledGameTestNamespaces', mod_id
+            property 'taclight.dev.disableLanAuth', 'true'
+            args '-mixin.config=taclight.dev.mixins.json'
+            jvmArgs '-Xmx3G'
+            if (project.hasProperty('taclightUser')) {
+                args '--username', "${project.property('taclightUser')}"
+            }
         }
         server {
+            // 独立目录:server 与 client 同写 run/ 会互踩 logs/latest.log 与 options.txt
+            // 注意:oculus/embeddium 在 runtimeOnly → dev 专服必崩(dist);多人测试走 LAN。
             workingDirectory project.file('run-server')
             args '--nogui'
             jvmArgs '-Xmx4G'
@@ -45,74 +89,100 @@ minecraft {
 
 sourceSets.main.resources { srcDir 'src/generated/resources' }
 
-// ---------------------------------------------------------------------------
-// 依赖:本项目**不重分发任何第三方 jar**(许可原因,见 THIRD_PARTY.md「依赖许可与再分发」)。
-// 编译需要 TaCZ 与 Oculus 两个 jar,请从各自官方发布页下载对应版本后放入 libs/。
-// 缺失时下面的 checkLocalDeps 会给出明确报错,而不是编译期一堆 "package does not exist"。
-// ---------------------------------------------------------------------------
-repositories { flatDir { dirs 'libs' } }
-
-def requiredLibs = ['tacz-1.1.8-hotfix.jar', 'oculus-1.8.0.jar']
-
-tasks.register('checkLocalDeps') {
-    group = 'taclight'
-    description = '检查 libs/ 下的本地依赖 jar 是否存在(本项目不重分发这些 jar)'
+// B2 修复(2026-09-28 R12):版本号**单一真源** = gradle.properties 的 mod_version。
+//   背景:发布件元数据 `0.11.0` 而运行时横幅打印 `v0.10.0`(`TacLightMod.VERSION` 是手写字面量,
+//   javac 常量内联扩散到 2 个 class)⇒ 模组列表与日志自报两个版本,支持链路第一手就分叉。
+//   做法:构建期把 mod_version 生成为一个 Java 常量类 —— **带版本字面量的唯一地方是生成物**,
+//   源码里(含 TacLightMod.java)不再有任何手写版本字面量。
+//   生成物保持**纯 ASCII**(规避 javac 编码口径),且内容只随 mod_version 变 ⇒ 不破坏可复现构建。
+//   ⚠️ 契约侧只许断**关系**(mods.toml == mod_version == 清单 == 该类常量),不许钉本文件的 sha/字节数
+//   (mod_version 每轮都会合法变 —— AGENTS 五 第7条)。
+tasks.register('generateBuildInfo') {
+    def outDir = file("$buildDir/generated/buildinfo")
+    def outFile = file("$outDir/dev/taclight/TacLightBuildInfo.java")
+    inputs.property('modVersion', mod_version)
+    outputs.dir outDir
     doLast {
-        def missing = requiredLibs.findAll { !file("libs/${it}").exists() }
-        if (missing) {
-            throw new GradleException("""[TacLight] 缺少本地依赖 jar: ${missing.join(', ')}
-本项目不重分发任何第三方 jar(许可原因,见 THIRD_PARTY.md「依赖许可与再分发」)。
-请从官方发布页下载后放入 libs/:
-  - Timeless and Classics Zero (TaCZ) 1.1.8-hotfix -> libs/tacz-1.1.8-hotfix.jar
-  - Oculus (Iris Forge port) 1.8.0                 -> libs/oculus-1.8.0.jar
-可选(runtimeOnly,运行游戏时才需要,不参与编译): Embeddium 0.3.31、Player Animator 1.0.2-rc1、Freecam 1.2.1""")
-        }
+        outFile.parentFile.mkdirs()
+        // 用三引号 GString(单引号之间的**行首 `+`** 在 Groovy 里会被解析成一元正号 ⇒ 构建直接炸)
+        outFile.text = """package dev.taclight;
+
+/** Generated at build time. Single source of truth = gradle.properties mod_version. Do not edit. */
+public final class TacLightBuildInfo {
+    public static final String VERSION = "${mod_version}";
+
+    private TacLightBuildInfo() {}
+}
+"""
     }
 }
+sourceSets.main.java.srcDir "$buildDir/generated/buildinfo"
+tasks.named('compileJava') { dependsOn 'generateBuildInfo' }
+
+repositories { flatDir { dirs 'libs' } }
 
 dependencies {
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
 
-    // 本地离线 jar(flatDir)。TaCZ:枪械联动 API;Oculus:iris.api.v0(compileOnly 取 API 不打包)。
+    // 本地离线 jar(flatDir)。TaCZ:枪械联动 API;Oculus:iris.api.v0(compileOnly 取 API 不打包)
+    // 注:oculus/embeddium 是纯客户端 mod → dev 里 runServer 必崩(dist),
+    // 多人测试用 LAN 拓扑(tools/mp-session.ps1),不要起 dev 专用服。
     compileOnly fg.deobf("blank:tacz:1.1.8-hotfix")
     compileOnly fg.deobf("blank:oculus:1.8.0")
     runtimeOnly fg.deobf("blank:tacz:1.1.8-hotfix")
     runtimeOnly fg.deobf("blank:oculus:1.8.0")
-    // Player Animator / Freecam / Embeddium:可选运行时伴生(本模组零代码引用)。
-    // 只在 libs/ 里真的放了这个 jar 时才接入 —— 本项目不重分发这些 jar,
-    // 缺它们不影响 `gradlew jar` 与编译(编译只需 tacz + oculus,见 checkLocalDeps)。
-    // 必须走 fg.deobf —— 生产 jar 直接丢 run/mods 会在 dev(mapped_official)里
-    // mixin @Shadow 的 SRG 名对不上直接 FATAL 崩启动(2026-09-06 实测)。
-    [['embeddium-0.3.31.jar', 'blank:embeddium:0.3.31'],
-     ['player-animation-lib-forge-1.0.2-rc1+1.20.jar', 'blank:player-animation-lib-forge:1.0.2-rc1+1.20'],
-     ['freecam-forge-1.2.1+1.20.jar', 'blank:freecam-forge:1.2.1+1.20']].each { pair ->
-        if (file("libs/${pair[0]}").exists()) { dependencies.add('runtimeOnly', fg.deobf(pair[1])) }
-    }
-
-    // mixin refmap:生产(SRG)环境靠 taclight.refmap.json 重映射;没有它生产服必崩
-    // "No refMap loaded"(2026-09-04 实机抓获)。生成方式见下面 generateRefmap 任务。
+    runtimeOnly fg.deobf("blank:embeddium:0.3.31")
+    // playerAnimator(里程碑③,第三方库,libs/*.jar 不入库):TaCZ 第三人称动画消费方,
+    // 本模组零代码引用,纯运行时伴生
+    runtimeOnly fg.deobf("blank:player-animation-lib-forge:1.0.2-rc1+1.20")
+    // Freecam(第三方 mod,xolt Freecam 的 Forge 移植,libs/*.jar 不入库):
+    // 2026-09-06 用户要求装 freecam 做灵魂出窍观察,替代双客户端旁观拓扑。
+    // 必须走 fg.deobf —— 生产 jar 直接丢 run/mods 会在 dev(mapped_official)
+    // 里 mixin @Shadow SRG 名对不上直接 FATAL 崩启动(实测 2026-09-06)。
+    runtimeOnly fg.deobf("blank:freecam-forge:1.2.1+1.20")
+    // mixin refmap:生产服 SRG 环境靠 taclight.refmap.json 重映射;没有它 dev
+    // 能跑(开发映射),生产服必崩 No refMap loaded(实机抓获 2026-09-04)。
+    // 生成方式:不走 mixin 注解处理器(试过,AP 在 FG6 下认不出官方映射——
+    // inMap 试过 SRG/TSRG 两个方向+多种参数名,reobfSrgFile 能读文件但仍
+    // Unable to locate obfuscation mapping;详见坑86)—— 改由本构建脚本
+    // generateRefmap 任务直接从 build/createSrgToMcp/output.srg 提取精确行
+    // 生成,与源码 descriptor 逐字节对账,零猜测。
     compileOnly 'org.spongepowered:mixin:0.8.5'
 }
 
-// mixin refmap 生成:mixin 注解处理器在 ForgeGradle 6 下配不出 refmap,改由本任务直接
-// 从 FG 自带的 build/createSrgToMcp/output.srg 提取本模组 4 个原版目标(其余 3 个是
-// TaCZ 类,remap=false 不查表),按 refmap v1 格式写出;jar 任务依赖它,产物打进 jar 根。
+// 坑86(2026-09-04,生产服 jar 验证):mixin 注解处理器在 FG6 下配不出 refmap。
+// 本任务替代 AP:从 FG 自带的 output.srg(SRG→MCP/official)提取本模组 4 个
+// 原版目标(其余 3 个是 TaCZ 类,remap=false 不查表),按 refmap v1 格式写出,
+// jar 任务依赖它,产物打进 jar 根。SRG 行证据见任务内注释。
 tasks.register('generateRefmap') {
     group = 'taclight'
-    dependsOn 'createSrgToMcp'
+    // 2026-10-05 修:本任务 inputs.file 指向 build/createSrgToMcp/output.srg,却没声明谁生成它
+    //   ⇒ **干净检出**上 `jar` / `build` 直接失败,只在"该文件早已存在"的开发机上能过。
+    //   RELEASE.md 一直写 `clean build`,而这条路径从未在干净树上验证过 —— 补上真依赖。
+    //   不用 optional/懒读绕开:缺 SRG 时 refmap 会静默写不出去,发布件丢 remap 是更坏的失败方式
+    //   (fail-loud 是本项目既有取向)。
+    dependsOn tasks.named('createSrgToMcp')
     def srg = file('build/createSrgToMcp/output.srg')
     def out = file("$buildDir/generated/refmap/taclight.refmap.json")
     inputs.file srg
     outputs.file out
     doLast {
         def lines = srg.readLines('UTF-8')
+        // 精确行(2026-09-04 实证,含 descriptor,防重载错配):
+        // Player/m_8097_ ()V defineSynchedData
+        // EntityRenderDispatcher/m_114397_ (L...Entity;L...Frustum;DDD)Z shouldRender
+        // LivingEntityRenderer/m_7392_ (L...LivingEntity;FFL...PoseStack;L...MultiBufferSource;I)V render
+        // LivingEntity/f_20904_/f_20905_/f_20906_ lerpX/Y/Z
         def findMd = { String owner, String srgName, String desc ->
+            // SRG 行形如: MD: <owner>/<srg> <desc> <owner>/<mojmap> <desc>
+            // 第 2 段的尾部即 searge 真名(与传入 srgName 一致,此处做存在性校验)。
             def prefix = 'MD: ' + owner + '/' + srgName + ' ' + desc + ' ' + owner + '/'
             def hit = lines.find { it.startsWith(prefix) }
             if (hit == null) throw new GradleException("[TacLight] SRG 缺目标: ${owner}/${srgName} ${desc}")
             return srgName
         }
         def findFd = { String owner, String srgName ->
+            // FD 行形如: FD: <owner>/<srg> <owner>/<mojmap> —— 同理返回 searge 名。
             def prefix = 'FD: ' + owner + '/' + srgName + ' ' + owner + '/'
             def hit = lines.find { it.startsWith(prefix) }
             if (hit == null) throw new GradleException("[TacLight] SRG 缺字段: ${owner}/${srgName}")
@@ -124,15 +194,23 @@ tasks.register('generateRefmap') {
         def livingOwner = 'net/minecraft/world/entity/LivingEntity'
         def dispDesc = '(Lnet/minecraft/world/entity/Entity;Lnet/minecraft/client/renderer/culling/Frustum;DDD)Z'
         def renderDesc = '(Lnet/minecraft/world/entity/LivingEntity;FFLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;I)V'
+        // 方法查表键 = owner + mojmap 名 + descriptor(与源码 @Inject 写法逐字节一致)
+        def mDefine = 'L' + playerOwner + ';defineSynchedData()V'
+        def mShould = 'L' + dispOwner + ';shouldRender' + dispDesc
+        def mRender = 'L' + livingRdrOwner + ';render' + renderDesc
         def seargeDefine = findMd(playerOwner, 'm_8097_', '()V')
         def seargeShould = findMd(dispOwner, 'm_114397_', dispDesc)
         def seargeRender = findMd(livingRdrOwner, 'm_7392_', renderDesc)
         def seargeLerpX = findFd(livingOwner, 'f_20904_')
         def seargeLerpY = findFd(livingOwner, 'f_20905_')
         def seargeLerpZ = findFd(livingOwner, 'f_20906_')
-        // refmap 格式:mappings 直挂 mixin 类短路径;类键 = mixin 类全路径斜杠式
-        // (对应 mixins.json 的 package+name);方法键 = 纯 mojmap 名(@Inject method 的写法);
-        // 值 = Lowner;SRG名+desc(与 TaCZ 的 refmap 同形)。
+        // refmap 格式终解(2026-09-04,TaCZ tacz.refmap.json 实物对照):
+        // mappings 直挂 mixin 类短路径(无 SEARGE 嵌套!之前套 SEARGE 层被生产服
+        // Invalid REFMAP JSON/查表 miss 两连拒,四轮实机试错)。类键 = mixin 类
+        // 全路径斜杠式(对应 mixins.json package+name);方法键 = 纯 mojmap 名
+        // (@Inject method 的写法);值 = Lowner;SRG名+desc(与 TaCZ 同形)。
+        // @Accessor 三字段同理(键=mojmap 名,值=Lowner;SRG 名)。此格式与
+        // RemappingReferenceMapper(顶层直查+回退 data 上下文)一致。
         def clsPlayer = 'dev/taclight/mixin/PlayerSynchedDataMixin'
         def clsDisp = 'dev/taclight/mixin/TpOffscreenRenderMixin'
         def clsRender = 'dev/taclight/mixin/LivingEntityRenderEntityMixin'
@@ -150,18 +228,20 @@ tasks.register('generateRefmap') {
         logger.lifecycle("[TacLight] refmap written: ${out} (define=${seargeDefine} should=${seargeShould} render=${seargeRender} lerp=${seargeLerpX},${seargeLerpY},${seargeLerpZ})")
     }
 }
-
-// 光影注入引擎的内联核心:单一真源 = pack/shaders/lib 下两个 glsl,构建期拷进 resources。
-// (运行时契约类 InlineCoreContract 以 SHA-256 对两份内容对账,防漂移。)
+// interop 注入引擎(方案C 里程碑2):pack/shaders/lib 两文件拷入 resources,
+// 单一真源 = pack/shaders/lib(InlineCoreContract 以 SHA-256 对账防两份漂移)
 tasks.register('copyInlineCore', Copy) {
     from file('pack/shaders/lib/taclight_math.glsl')
     from file('pack/shaders/lib/taclight_core.glsl')
     into file("$buildDir/generated/resources-extra/shader_patches/inline")
 }
 sourceSets.main.resources.srcDir file("$buildDir/generated/resources-extra")
+// D3b:dev 合并 mixin config 也走 resources(dev 运行只认一条 -mixin.config;发布变体在 jar 里排除它)
+sourceSets.main.resources.srcDir file("$buildDir/generated/dev-mixins")
 
 tasks.named('processResources', ProcessResources).configure {
     dependsOn tasks.named('copyInlineCore')
+    dependsOn tasks.named('generateDevMixinsJson')
     var replaceProperties = [
             minecraft_version: minecraft_version, minecraft_version_range: minecraft_version_range,
             forge_version: forge_version, forge_version_range: forge_version_range,
@@ -171,10 +251,12 @@ tasks.named('processResources', ProcessResources).configure {
     ]
     inputs.properties replaceProperties
     filesMatching(['META-INF/mods.toml', 'pack.mcmeta']) { expand replaceProperties + [project: project] }
-    // ==== 文本资源行尾归一(CRLF→LF),使产物与"检出 eol"无关(2026-09-26 task-22;v0.11.0 同步进本仓)====
-    // 动机:主树资源是 LF、而"干净 worktree"检出是 CRLF(core.autocrlf=true 且这些路径 text=auto 未钉 eol)
-    // ⇒ 同一个 commit 两次构建的 sha 不同(65 个文本条目只差换行符)⇒ "可跨机复现"当时是过度声称。
-    // 做法:打包前把**文本类**资源统一成 LF;逐**字节**处理(不解码),只把 CRLF 对里的 CR 丢掉。
+    // ==== 2026-09-26 task-22:文本资源行尾归一(CRLF→LF),使产物与"检出 eol"无关 ====
+    // 动机(reviewer R3 否证):主树资源是 LF、而"干净 worktree"检出是 CRLF(core.autocrlf=true
+    // 且这些路径 text=auto 未钉 eol)⇒ 同一个 commit 两次构建的 sha 不同(357,027 vs 357,259,
+    // 65 个文本条目只差换行符)⇒ "可跨机复现"当时是过度声称。
+    // 做法(选 A:构建侧归一,不动仓库行尾):打包前把**文本类**资源统一成 LF;
+    // 逐**字节**处理(不解码),只把 CRLF 对里的 CR 丢掉 ⇒ 不会碰坏任何编码/二进制。
     // 幂等:只在真的含 CR 时重写并计数;非文本扩展名(如 .png/.class)一律不动。
     doLast {
         def textExt = ['json', 'toml', 'mcmeta', 'glsl', 'vsh', 'fsh', 'frag', 'vert', 'patch',
@@ -202,42 +284,45 @@ tasks.named('processResources', ProcessResources).configure {
     }
 }
 
-tasks.named('compileJava', JavaCompile).configure {
-    dependsOn 'checkLocalDeps'
-    dependsOn 'generateBuildInfo'
-}
-
-// 版本号**单一真源**(v0.11.0):构建期由 gradle.properties 的 mod_version 生成一个 Java 常量类。
-// 背景:此前 TacLightMod.VERSION 是手写字面量,与打包元数据 mods.toml 各自为政 ⇒ 同一个 jar
-// 自报两个版本号(模组列表一个、日志横幅另一个),玩家报 bug 时两边对不上。
-// 生成物保持纯 ASCII,内容只随 mod_version 变 ⇒ 不破坏可复现构建。
-tasks.register('generateBuildInfo') {
-    def outDir = file("$buildDir/generated/buildinfo")
-    def outFile = file("$outDir/dev/taclight/TacLightBuildInfo.java")
-    inputs.property('modVersion', mod_version)
-    outputs.dir outDir
-    doLast {
-        outFile.parentFile.mkdirs()
-        // 用三引号 GString(单引号串之间的**行首 `+`** 在 Groovy 里会被解析成一元正号 ⇒ 构建直接炸)
-        outFile.text = """package dev.taclight;
-
-/** Generated at build time. Single source of truth = gradle.properties mod_version. Do not edit. */
-public final class TacLightBuildInfo {
-    public static final String VERSION = "${mod_version}";
-
-    private TacLightBuildInfo() {}
-}
-"""
-    }
-}
-sourceSets.main.java.srcDir "$buildDir/generated/buildinfo"
-
 tasks.named('jar', Jar).configure {
     dependsOn 'generateRefmap'
     from("$buildDir/generated/refmap") { include 'taclight.refmap.json' }
+    // D3b(2026-09-17,用户拍板):发布变体剔除调试面。
+    //  - dev 变体:= -PdevHarness=true,或本次调用任务名含 runClient(日常 build 不误带调试面);
+    //  - 发布包:debug/ + mixin/debug/ 类、**dev/taclight/devonly/**(2026-09-28 R12:dev-only 面的
+    //    第二命名空间 —— B3 `DevLanAuthHook` + N1 `KeyInject` + N2 `PackPatcherTool`)、
+    //    DebugCommandRelay(含 $1 内部类)、两份调试 config
+    //    全部剔除;manifest 只登记核心 config —— 而核心 config 已不含任何 debug. 条目,
+    //    故"required:true + 缺类 ⇒ MixinApplyError"的充分条件不成立(R1 一手源码口径)。
+    //  - B1 的 `/taclight` 命令族(2026-09-28 R12)走的是**既有** `dev/taclight/debug/**` 那条:
+    //    整族搬进 `dev/taclight/debug/command/**` 与 `dev/taclight/debug/tune/**`,不新增机制。
+    //    ⚠️ relayonly 变体(由 devharness jar 派生)继承全部 debug 类 ⇒ 真机 harness 的
+    //    `/taclight` 与 relay 通道**不受影响**(这是选"结构剔除"而非"默认关开关"的前提)。
+    def devHarness = findProperty('devHarness') != null
+            ? findProperty('devHarness').toString().toBoolean()
+            : gradle.startParameter.taskNames.any { it.toLowerCase().contains('runclient') }
+    // D12(2026-09-26 task-25):dev 变体**在命名上**不可能与发布件同名。
+    // 背景:`mod_version=0.11.0` 之后 `gradlew jar -PdevHarness=true` 也曾写成
+    // `build/libs/taclight-0.11.0.jar` ⇒ **静默覆盖发布件**;而 `InteropPackagingContract`
+    // 是**按名字**取 jar ⇒ 契约可能选到"别人未提交构建的产物"(测试已实测到同名 jar 被换掉)。
+    // 选 classifier(而不是 fail-loud):命名空间级别的隔离,连"忘记传版本后缀"都不会撞;
+    // 且 devharness 产物名 = `taclight-<ver>-devharness.jar`,发布件名只在 !devHarness 时出现。
+    if (devHarness) {
+        archiveClassifier = 'devharness'
+    }
+    if (!devHarness) {
+        exclude 'dev/taclight/debug/**'
+        exclude 'dev/taclight/mixin/debug/**'
+        exclude 'dev/taclight/client/DebugCommandRelay*.class'
+        exclude 'dev/taclight/devonly/**'
+        exclude 'taclight.debug.mixins.json'
+        exclude 'taclight.dev.mixins.json'
+    }
+    // 空目录条目兜底:exclude 'x/**' 是否连带排掉目录条目在 Ant 语义下无一手依据(R1 §3.3),
+    // 这里显式不写空目录,并让验收按"文件条目"计数。
     includeEmptyDirs = false
-    // 可复现构建(2026-09-26 B8;v0.11.0 同步进本仓):默认 preserveFileTimestamps=true 会把每个 jar
-    // 条目时间戳写成源文件 mtime ⇒ 同源码两次构建字节不同。关掉时间戳 + 固定条目顺序 ⇒ sha256 一致。
+    // B8 可复现构建(2026-09-26):默认 preserveFileTimestamps=true 会把每个 jar 条目的时间戳写成
+    // 源文件 mtime ⇒ 同源码两次构建字节不同。关掉时间戳 + 固定条目顺序 ⇒ sha256 一致。
     preserveFileTimestamps = false
     reproducibleFileOrder = true
     manifest {
@@ -248,20 +333,95 @@ tasks.named('jar', Jar).configure {
                 'Implementation-Title': project.name,
                 'Implementation-Version': project.jar.archiveVersion,
                 'Implementation-Vendor': mod_authors,
-                'MixinConfigs': 'taclight.mixins.json'
+                'MixinConfigs': devHarness ? 'taclight.dev.mixins.json' : 'taclight.mixins.json'
         ])
     }
     finalizedBy 'reobfJar'
 }
 
-// 光影包补丁工具 `patchIterationT` **自 v0.11.0 起不在本仓**:
-// 它的实现类 `dev.taclight.tools.PackPatcherTool`(v0.11.0 起改为 `dev.taclight.devonly.tools.PackPatcherTool`)
-// 属于**构建期 dev-only 工具**,已随 dev-only 面一起从公开发布件与公开源码树中移出
-// ⇒ 在公开仓保留一个指向不存在类的 Gradle 任务是"看起来能用其实必炸",故整段移除。
-// 需要它的开发者从开发树使用;本仓的发布物不依赖它(补丁模板仍在 src/main/resources/shader_patches/)。
+// D3b(2026-09-17,用户拍板"排调试 class + 按构建类型拆 mixin 配置"):
+// 发布包要干净(核心 config 只列核心混入),而 dev 运行需要"核心 + 调试"两份都生效。
+// 本仓 dev 只传一条 `-mixin.config=<file>`(该形式由哪一层解析未溯源),因此**不依赖**
+// "同名参数能否重复/逗号合并"这类未验证行为:这里把两份配置在构建期合并成
+// `taclight.dev.mixins.json`(名字不同、内容 = 核心 ∪ 调试),dev 运行照旧只传一条,
+// 只是指向合并件。发布变体不打包它,manifest 也不登记它。
+tasks.register('generateDevMixinsJson') {
+    group = 'taclight'
+    def coreJson = file('src/main/resources/taclight.mixins.json')
+    def dbgJson = file('src/main/resources/taclight.debug.mixins.json')
+    def out = file("$buildDir/generated/dev-mixins/taclight.dev.mixins.json")
+    inputs.file coreJson
+    inputs.file dbgJson
+    outputs.file out
+    doLast {
+        def core = new groovy.json.JsonSlurper().parse(coreJson, 'UTF-8')
+        def dbg = new groovy.json.JsonSlurper().parse(dbgJson, 'UTF-8')
+        ['mixins', 'client', 'server'].each { key ->
+            def merged = []
+            if (core[key]) { merged.addAll(core[key]) }
+            if (dbg[key]) { merged.addAll(dbg[key]) }
+            if (merged) { core[key] = merged } else { core.remove(key) }
+        }
+        out.parentFile.mkdirs()
+        out.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(core)) + '\n'
+        logger.lifecycle("[TacLight] dev mixin config written: ${out} (mixins=${core.mixins?.size() ?: 0}, client=${core.client?.size() ?: 0}, required=${core.required})")
+    }
+}
 
-// 光影包自检:Iris 的 #include 取整行作路径,行尾任何附加内容(如注释)会炸整包
-// (InvalidPathException)—— 同步/打包前强制检查。
+// 纯 JVM 契约测试(离线、无 JUnit 依赖,遵循项目【单一真源】纪律)
+tasks.register('taclightContracts', JavaExec) {
+    dependsOn tasks.named('testClasses')
+    dependsOn 'taclightToolsSelftest'
+    // 2026-09-28 U-1a(R11-1):构件层闸门 ⑥ 会读 build/libs/taclight-<mod_version>.jar。
+    //   **必须** dependsOn jar —— 否则 build\libs 里躺着一份**旧** jar 时,
+    //   "改了配置但不重建"会静默拿旧 jar 跑 ⑥,读到的不是本次构建的产物。
+    //   注意:**不要**在这里钉 jar 的 sha256/字节数(合法重建字节会变,钉字面量必然恒红);
+    //   "不能是旧件"由这条 dependsOn 保证,"不能是空壳"由 ⑥ 自己的正控保证。
+    dependsOn tasks.named('jar')
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.taclight.AllContracts'
+    // release-jar 选取确定化(2026-09-25,BACKLOG ⑯):InteropPackagingContract 不再按 mtime 取
+    // "最新的 jar"(残留 devtest/relayonly 变体会抢选择 ⇒ 假红;删掉又静默换包 ⇒ 假绿),
+    // 改为按名字取 build/libs/taclight-<mod_version>.jar;要指到别的产物(归档包 / 实例里的 jar)
+    // 就显式 -PreleaseJar=<path>,找不到即红。
+    if (findProperty('releaseJar')) {
+        systemProperty 'taclight.releaseJar', findProperty('releaseJar').toString()
+    }
+}
+
+// tools 自检(PS/Node 零依赖分析工具的已知答案测试;Windows 本机,需 node 在 PATH)
+tasks.register('taclightToolsSelftest', Exec) {
+    workingDir file('tools')
+    commandLine 'powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', 'selftest.ps1'
+}
+
+// 形状盒数离线 probe(2026-10-04 R57;台账 BACKLOG §2.168)。
+// 起因:§2.164 断言"4 面连接的栅栏 = 9 盒 > 上限 8 ⇒ 退回整格",而 §2.167 的 A/B 把它推翻
+// ⇒ 用**真 registry** 把"连接数 → 遮挡盒数"结算掉,以后不再靠推断。
+tasks.register('taclightFenceProbe', JavaExec) {
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.taclight.client.FenceShapeProbe'
+}
+
+// 光影包补丁(开发/构建期):输入原包目录,输出派生包目录,原包不动
+// 用法:gradlew patchIterationT [-PtaclightPackDir=...] [--args 覆盖]
+tasks.register('patchIterationT', JavaExec) {
+    dependsOn tasks.named('classes')
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'dev.taclight.devonly.tools.PackPatcherTool'
+    inputs.files(file('src/main/resources/shader_patches'))
+    args = [
+        file('../iterationT 3.2.0').absolutePath,
+        file('src/main/resources/shader_patches/iterationT-3.2.0-v3.patch.json').absolutePath,
+        file('run/shaderpacks/iterationT 3.2.0 (taclight)').absolutePath
+    ]
+}
+
+// 路线 S(M0):把自研包骨架同步进运行实例(doc06 §8·① 内包开发,M4 抽独立仓库)
+// 用法:gradlew syncShaderPack,然后游戏内选择光影包 taclight-shaders-dev
+// 契约守护:Iris 的 #include 取整行作路径,行尾任何附加内容(如注释)会炸整包
+// (InvalidPathException,doc06 §8.8)—— 同步前强制检查。
 tasks.register('checkShaderIncludes') {
     group = 'taclight'
     doLast {
@@ -280,24 +440,114 @@ tasks.register('checkShaderIncludes') {
     }
 }
 
-// 开发期:把光影包同步进运行实例(run/shaderpacks/taclight-shaders-dev)
 tasks.register('syncShaderPack', Copy) {
     dependsOn tasks.named('checkShaderIncludes')
     from file('pack/shaders')
     into file('run/shaderpacks/taclight-shaders-dev/shaders')
 }
 
-// 发布:光影包 zip —— shaders/ 目录 + pack.png 图标(zip 根),版本号与模组一致
-// 用法:gradlew packShaderZip;产物 build/distributions/taclight-shaders-<版本>.zip
+// M5 多人:dev 包同步进观察者实例(run-observer),双客户端看同一份光影
+tasks.register('syncShaderPackObserver', Copy) {
+    dependsOn tasks.named('checkShaderIncludes')
+    from file('pack/shaders')
+    into file('run-observer/shaderpacks/taclight-shaders-dev/shaders')
+}
+// interop 实例(方案C):worktree 自有实例,同步本分支包(与主仓 run/ 隔离)
+tasks.register('syncShaderPackInterop', Copy) {
+    dependsOn tasks.named('checkShaderIncludes')
+    from file('pack/shaders')
+    into file('run-interop/shaderpacks/taclight-shaders-dev/shaders')
+}
+tasks.named('syncShaderPack') { dependsOn 'syncShaderPackObserver' }
+
+// M5 多人测试环境预置:eula/专服属性(离线+RCON)/观察者目录(低配 options + oculus 选包)
+tasks.register('taclightMpSetup') {
+    group = 'taclight'
+    doLast {
+        file('run-server').mkdirs()
+        def eula = file('run-server/eula.txt')
+        if (!eula.exists()) eula.text = 'eula=true\n'
+        def props = file('run-server/server.properties')
+        if (!props.exists()) props.text = [
+            'online-mode=false',
+            'enable-rcon=true',
+            'rcon.port=25575',
+            'rcon.password=taclight',
+            'spawn-protection=0',
+            'level-type=minecraft\\:flat',
+            'generate-structures=false',
+            'view-distance=6',
+            'max-players=4',
+            'white-list=false',
+            'motd=taclight-mp'
+        ].join(System.lineSeparator()) + System.lineSeparator()
+        file('run-observer').mkdirs()
+        def opt = file('run-observer/options.txt')
+        if (!opt.exists()) opt.text = [
+            'renderDistance:8',
+            'maxFps:60',
+            'enableVsync:false',
+            'pauseOnLostFocus:false'
+        ].join(System.lineSeparator()) + System.lineSeparator()
+        else {
+            // 坑101(09-04 B 失焦弹菜单):已存在文件也强制关失焦暂停——MC 缺键/
+            // 版本不对会回写默认 true(true=失焦即弹 GameMenu,联机端同样触发;
+            // session.ps1 对 run/ 同款强制,见其 OPTIONS 步)。
+            // 显式 UTF-8 无 BOM 读写(坑24:写 BOM 吃首行 version,整份作废)。
+            def ob = java.nio.file.Files.readAllBytes(opt.toPath())
+            def t = new String(ob, 'UTF-8')
+            if (t.contains('pauseOnLostFocus:true')) {
+                t = t.replace('pauseOnLostFocus:true', 'pauseOnLostFocus:false')
+            } else if (!t.contains('pauseOnLostFocus:')) {
+                if (!t.endsWith('\n')) t += System.lineSeparator()
+                t += 'pauseOnLostFocus:false' + System.lineSeparator()
+            }
+            java.nio.file.Files.write(opt.toPath(), t.getBytes('UTF-8'))
+        }
+        // 坑位:Oculus 1.8.0 读 Forge 配置目录 config/oculus.properties(不是 run 根);
+        // 旧版写 run-observer/oculus.properties 是死文件 → 全新环境观察者 B 静默无光影包。
+        def cfgDir = file('run-observer/config')
+        cfgDir.mkdirs()
+        def oculus = file('run-observer/config/oculus.properties')
+        if (!oculus.exists()) oculus.text = [
+            'colorSpace=SRGB',
+            'disableUpdateMessage=false',
+            'enableDebugOptions=false',
+            'maxShadowRenderDistance=32',
+            'shaderPack=taclight-shaders-dev',
+            'enableShaders=true'
+        ].join(System.lineSeparator()) + System.lineSeparator()
+        def staleOculus = file('run-observer/oculus.properties')
+        if (staleOculus.exists()) staleOculus.delete()
+    }
+}
+
+// M4 发布(doc06 §4 M4):光影包 zip —— shaders/ 目录 + pack.png 图标(zip 根),
+// 版本号与模组一致(mod_version,单一来源 gradle.properties)。
+// 一键发布:gradlew build packShaderZip → jar 在 build/libs,zip 在 build/distributions。
 tasks.register('packShaderZip', Zip) {
     dependsOn tasks.named('checkShaderIncludes')
     archiveFileName = "taclight-shaders-${project.mod_version}.zip"
     destinationDirectory = layout.buildDirectory.dir('distributions')
-    // 可复现(2026-09-29 v0.11.0 发布途中发现并修):Zip 任务默认 preserveFileTimestamps=true 会把
-    // 每个条目时间戳写成源文件 mtime ⇒ **同源码两次构建同尺寸同条目但 sha 不同**
-    // (实测 100,777 B / 44 条目 / 两个不同 sha)。关掉时间戳 + 固定条目顺序 ⇒ 与 jar 一样可复现。
+    // 可复现(2026-09-29 R12b 发布途中发现并修):Zip 默认 preserveFileTimestamps=true 会把每个条目
+    // 时间戳写成源文件 mtime ⇒ **同源码两次构建同尺寸(100,777 B)/同条目(44)但 sha 不同**。
+    // 关掉时间戳 + 固定条目顺序 ⇒ 与 jar 一样可复现(public 树同步同一条)。
     preserveFileTimestamps = false
     reproducibleFileOrder = true
     from('pack/shaders') { into 'shaders' }
     from('pack/pack.png')
 }
+
+// BUILTIN 2026-10-05: pack/ is the single source; build-time fixed-name zip into generated resources.
+// Runtime BuiltinPackInstaller extracts it to shaderpacks/TacLight-Builtin.
+// generated/resources-extra is already a resources srcDir (see copyInlineCore above).
+tasks.register('builtinPackZip', Zip) {
+    dependsOn tasks.named('checkShaderIncludes')
+    archiveFileName = 'builtin-pack.zip'
+    destinationDirectory = layout.buildDirectory.dir('generated/resources-extra/builtin_shaderpack')
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+    from('pack/shaders') { into 'shaders' }
+    from('pack/pack.png')
+}
+tasks.named('processResources') { dependsOn 'builtinPackZip' }

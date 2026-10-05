@@ -1,83 +1,120 @@
 # TacLight
 
-**Forge 1.20.1 战术聚光/手电模组**:锥形聚光灯 + 手电筒物品 + 与 *Timeless and Classics Zero (TaCZ)* 的枪挂灯联动,并为 Iris/Oculus 光影包提供一个**运行时灯光注入引擎**(把模组里的灯以真实光源的方式喂给光影的体积累加/遮挡管线)。
+给 Minecraft 加"真正会投射锥形光照的灯"。
 
-本仓是**公开发布仓**(由开发仓整理导出):
-- 只包含**产品代码**(`src/main/java`、`src/main/resources`)、**光影包源码**(`pack/shaders`,41 个文件)、构建脚本与许可/致谢文件。
-- **不包含**:第三方 jar(见下「依赖许可与再分发」)、内部调试/自动化面、内部开发记录与历史。
-- 发布日期:2026-09-29 ｜ 版本:**v0.11.2** ｜ 许可:**GPL-3.0-or-later**
+原版和多数灯光模组的灯是套在玩家身上的一圈球形光，照到墙上就是一块圆斑。TacLight 让手电筒和枪挂灯投射真实的锥形光：有明确的光锥边界、有距离衰减、在雾和尘埃里能看到光柱，被墙挡住的地方不漏光。灯本身是游戏里的物品，拿在手上和装在枪上都会跟着动。
 
-> TacLight — a Forge 1.20.1 mod adding cone spotlights / flashlights and a gun-mounted light that integrates with Timeless and Classics Zero (TaCZ). It also ships a runtime **light-injection engine** for Iris/Oculus shader packs (feeds mod lights into the volumetric light/occlusion pipeline) plus the full source of the companion shader pack. This is a curated public release repo: product code + shader sources only, no third-party jars, no internal tooling.
+配合 Iris/Oculus 光影包使用时，光直接进入光影包的照明和体积光管线，所以观感跟光影包自己的光照是一致的，不会被原版光照模型拖低。
 
----
+**当前版本 0.11.2（预览版）**。核心功能可用，观感仍在打磨。
 
-## 1. 安装
+## 特性
 
-| # | 组件 | 版本 | 必需? | 说明 |
+- 手持手电筒：真实锥形光，可调内外锥角、照距、亮度、衰减。
+- 枪挂照明附件：装到 TaCZ 枪械上，光从枪口出，跟随枪的朝向和第三人称姿态。
+- 体积光：雾、尘埃、水下能看到光柱（丁达尔效应）。
+- 遮挡阴影：墙后不漏光，遮挡由体素栅格判定，取向偏保守（宁可多挡，不肯漏光）。
+- 多人游戏：别人能看到你的灯，开关状态随实体同步，远程灯的姿态由对端客户端重建，不新增网络包。
+- 光影包兼容：运行时把灯注入到你已经装好的光影包里，模组不重新分发任何改版光影包。
+- 内置备用光影包：首次启动自动装一份到 `shaderpacks/TacLight-Builtin`，没有装其他光影包时也能看到锥形光。
+
+## 运行需求
+
+| 组件 | 版本 | 放哪 | 必需 | 说明 |
 |---|---|---|---|---|
-| 1 | Minecraft Forge | 1.20.1-47.1.3(范围 `[47.1,48)`) | **必需** | 服务端/客户端 |
-| 2 | TacLight | v0.11.2 | **必需** | 把 `taclight-0.11.2.jar` 放进 `mods/` |
-| 3 | Timeless and Classics Zero (TaCZ) | 1.1.8-hotfix | 可选 | 提供枪挂灯联动;缺失时降级(见 `META-INF/mods.toml`,全部 optional + 能力探测) |
-| 4 | Oculus | 1.8.0 | 可选(客户端) | Iris Forge 移植;装光影必需 |
-| 5 | Embeddium | 0.3.31 | 可选(客户端) | Sodium Forge 移植,提升帧率 |
-| 6 | Player Animator | 1.0.2-rc1+1.20 | 可选 | TaCZ 第三人称动画依赖的第三方库;本模组零代码引用 |
-| 7 | Freecam | 1.2.1+1.20 | 可选 | 观战/观察用;本模组零代码引用 |
+| Minecraft Forge | 1.20.1-47.1.3（范围 `[47.1,48)`） | 启动器 | 必需 | 客户端与服务端 |
+| TacLight | 0.11.2 | `mods/` | 必需 | 本模组 |
+| Oculus | 1.8.0 | `mods/` | 客户端必需 | Iris 的 Forge 移植。锥形光依赖光影管线，没装就没有锥形光 |
+| Embeddium | 0.3.31 | `mods/` | 推荐 | Sodium 的 Forge 移植，明显提升帧率 |
+| 光影包 Complementary Reimagined | r5.9 | `shaderpacks/` | 建议 | 主线适配的光影包，推荐优先用它 |
+| 光影包 iterationT | 3.2.0 | `shaderpacks/` | 可选 | 另一套已适配模板 |
+| Timeless and Classics Zero (TaCZ) | 1.1.8-hotfix | `mods/` | 可选 | 枪挂灯联动。没装时手感正常，只是没有枪灯 |
+| Player Animator | 1.0.2-rc1+1.20 | `mods/` | 可选 | TaCZ 的第三人称动画依赖它。本模组零代码引用 |
 
-**光影包**:把 `taclight-shaders-0.11.2.zip`(发布件)整个放进 `.minecraft/shaderpacks/`,在 *视频设置 → 光影* 里选择 `taclight-shaders-0.11.2`。它是构建自本仓 `pack/shaders/` 的派生包(补丁模板见 `src/main/resources/shader_patches/`)。
+几点要说清楚的：
 
-> ⚠️ 光影只在**客户端**生效;无 Oculus/Iris 时模组本体仍可用,但没有体积光效果。
+- **光影包是锥形光生效的前提。** 只装模组不装光影包，物品和开关都正常，但看不到锥形光和光柱。
+- **光影包不用打补丁，也不要改。** 模组在运行时把自研 GLSL 注入到你的包实例里。你用的是自己那份原版光影包，模组不附带也不分发任何第三方光影包的副本。
+- 已适配注入模板的是 Complementary Reimagined r5.9 与 iterationT 3.2.0。换其他包或换版本可能注入不进去，此时模组会在聊天栏提示。
 
-## 2. 性能说明(实测数字,如实标注口径)
+## 安装
 
-以下为**开发机实测**(2026-09,旧测试台),**各条按各自注明的机位/灯数**;**不是**发布验收数字;数值随硬件/光影包/场景变化:
+1. 装 Forge 1.20.1。
+2. 把 `taclight-0.11.2.jar` 放进 `.minecraft/mods/`。
+3. 客户端再放 Oculus（建议顺手放 Embeddium）。
+4. 把光影包解压或直接放 zip 到 `.minecraft/shaderpacks/`。
+5. 进游戏，`视频设置 → 光影` 里选中 Complementary Reimagined。
+6. 首次启动时模组会往 `shaderpacks/` 装一份备用包 `TacLight-Builtin`，你不用管它。
 
-| 优化 | 状态 | 实测口径 |
-|---|---|---|
-| ① **灯全灭早退**(所有有效灯体积密度为 0 时跳过整支体积光 raymarch) | **已随本版发布** | 上界 **≈35 FPS(≈9.8%)**:`a2`(密度 0,8 灯)=365.7 ≈ `a`(全灭)=366.3 ≫ `b`(8 灯 64 步)=330.5。**是上界**,不是承诺值 |
-| ②a **体积光遮挡查表**(方案二,`!occl`) | **已随本版光影包发布** | 2026-09-06 开发机 4K 双灯实测:最坏视角 38.4→65.4 FPS(**+70%**,−10.7 ms/帧;1%low 30.2→56.8)、其他视角 +5.9~+9.3 帧;画面差异 0.16% 像素(meanDiff 0.894/255)。**是特定机位实测,非普适承诺**。出处 `docs/evidence/2026-09-06-occl-table/README.md:39,45-49,58` |
-| ②b **体积光时间复用**(`!tm`,默认开) | **已随本版光影包发布** | 2026-09-06 开发机实测(tm off→on、**occl 固定 on**):**+58%(116.2→183.5 FPS;灯光开销 6.24→3.08 ms,减半)**;2026-09-17 会话复测:**+21.9 FPS(下界)**。方向正确;量级随场景变化,不作承诺。出处 `docs/evidence/2026-09-06-temporal-bilinear/README.md:8,48-61` |
-| ③ **8 灯遮挡查表**(`row_b1`) | **未随本版发布** | 收益未证实:ms 口径 N=8 从 2.880 → 2.949 ms/帧(**+0.069 ms,即慢 2.4%**);N=6 仅 +0.006 ms;N=4/5 在噪声内。判定为小负收益,故不进本版 |
+## 使用
 
-## 3. 从源码构建
+按键（可在 `选项 → 控制 → TacLight` 里改）：
+
+| 按键 | 作用 |
+|---|---|
+| `J` | 手电筒开关 |
+| `M` | 枪灯开关 |
+
+- 手电筒的开关状态存在**这支手电筒自己的物品数据**里。切到别的物品再切回来，状态还在。
+- 枪灯是逐把枪独立的，每把枪有自己的开关状态。
+- 光效参数在 `config/taclight-client.toml`：半径、强度、内外锥角、光束密度、枪灯倍率。
+- 多人游戏里，你开关灯，同服务器的其他人能看到；远程玩家的灯姿态由你自己的客户端重建，不需要额外同步。
+
+## 已知限制
+
+如实列出，避免你按预期之外的效果去判断它坏了：
+
+1. **复杂形状方块的遮挡是保守的。** 栅栏、楼梯、雪层、半砖这类非满方块的遮挡用体素栅格判定，遇到"灯线擦着横杆底边过去"这种几何关系，会宁可判成被挡住。结果是可能偏暗，做不到像素级形状精度。这是当前技术路线的上限，不是调参能消除的。
+2. **只在 Oculus/Iris 加光影包时才有锥形光。** 没有光影管线时模组本体照常工作，但没有光锥和光柱。
+3. **光影注入依赖补丁模板匹配包版本。** 包里换了版本或换了另一套包，注入可能不生效，聊天栏会提示。
+4. **参数是手动调参**，没有按场景自动适配。
+5. **仓库里带着内部调试面与验证台**：`src/main/java/dev/taclight/debug` 与 `devonly` 是开发期工具，打包时会被剔除，不进发布件；`src/test` 的契约测试需要显式运行（见下）。
+6. 预览版定位：核心功能可用，观感仍在打磨。
+
+## 性能
+
+开发机实测（2026-09，旧测试台，4K，双灯；不是验收数字，随硬件和场景变化）：
+
+- 体积光遮挡查表：最坏视角 38.4 → 65.4 FPS（约 +70%），画面差异 0.16% 像素。
+- 体积光时间复用：116.2 → 183.5 FPS，灯侧开销 6.24 → 3.08 ms。
+
+这两项都已随本版发布。详细口径与原始数据见开发者文档。
+
+## 从源码构建
+
+前置：JDK 17。
 
 ```bash
-# 依赖(JDK 17):
-#   1) Minecraft Forge 1.20.1-47.1.3(由 ForgeGradle 自动获取)
-#   2) 自行下载 TaCZ 与 Oculus 的 jar 放入 libs/(本项目不重分发,原因见 THIRD_PARTY.md)
-#      libs/tacz-1.1.8-hotfix.jar
-#      libs/oculus-1.8.0.jar
-#      (运行游戏时另需: embeddium-0.3.31.jar / player-animation-lib-forge-1.0.2-rc1+1.20.jar / freecam-forge-1.2.1+1.20.jar)
-
-./gradlew jar              # 产物: build/libs/taclight-0.11.2.jar
-./gradlew packShaderZip    # 产物: build/distributions/taclight-shaders-0.11.2.zip
+./gradlew jar              # 产物 build/libs/taclight-<version>.jar
+./gradlew packShaderZip    # 产物 build/distributions/taclight-shaders-<version>.zip
 ./gradlew build            # 全量构建
+./gradlew taclightContracts # 跑契约测试（注意：没有接进 build，必须显式运行）
 ```
-- `libs/` 下缺 jar 时,构建会在 `checkLocalDeps` 阶段给出**明确的缺件报错**,而不是编译期的 "package does not exist"。
-- 本仓 `libs/` 只有一份说明(`libs/README.md`),**没有任何第三方 jar**。
 
-## 4. 已知限制(如实)
+TaCZ 与 Oculus 的 jar 需要你自己下载后放进 `libs/`（本项目不重分发，理由见 `THIRD_PARTY.md`）。缺件时构建会在 `checkLocalDeps` 阶段明确报出缺哪个文件，而不是丢一个编译错误。
 
-1. **像素级"灯亮"未做机器验证**:本模组的可见性/亮度结论来自实机肉眼与结构化日志,没有像素级自动化断言。
-2. **未与官方启动器逐字节对照**:发布 jar 在开发环境(dev 与生产映射)实机运行通过,但没有与官方启动器的分发链路做逐字节对照。
-3. **③(8 灯遮挡查表)未发布**:见上表 —— 8 灯下反而慢约 2.4%,收益未证实。
-4. **体积光参数为手动调参**(亮度/距离/衰减等),没有自动适配方差。
-5. **内部验证台未随源码发布**:`src/test/**` 与内部契约测试属于开发验证台(其中还覆盖了未发布的③),**不在本仓**;因此本仓没有可直接运行的自动化测试。
-6. 光影包仅在 **Oculus/Iris** 下有效;不同光影包的补丁模板需要匹配版本(本仓提供 iterationT 3.2.0 与 Complementary r5.9 模板)。
+## 许可与致谢
 
-## 5. 许可与致谢
+- 本模组与自带光影包源码：**GPL-3.0-or-later**（`LICENSE`，全文 `LICENSE-GPL-3.0.txt`）。
+- 不重分发任何第三方 jar，依赖的许可与再分发口径见 `THIRD_PARTY.md`。
+- 不重分发任何改版光影包。光影包的注入由用户的本地环境在运行时完成。
+- 上游思想借鉴（均未逐字复制代码）与 Minecraft/Forge 的链接使用，见 `THIRD_PARTY.md`。
 
-- 本项目:**GPL-3.0-or-later**(`LICENSE`;全文见 `LICENSE-GPL-3.0.txt`)。
-- 光影包(`pack/shaders/**`)与模组本体同一许可;发布 zip 内不附许可正文,许可与署名以本 README 与发布页(Modrinth)说明为准。
-- **本项目不重分发任何第三方 jar**;5 个依赖的许可与再分发口径见 `THIRD_PARTY.md` 的「依赖许可与再分发」一节。
-- 上游思想借鉴(均**零逐字复制**)、Minecraft/Forge 的链接使用:见 `THIRD_PARTY.md`。
-
-## 6. 目录结构
+## 目录
 
 ```
-src/main/java/dev/taclight/     产品代码(71 个 .java;= 开发树的**发布侧面**,已剔除全部开发/调试面)
-src/main/resources/             资源:mixin 配置、枪灯枪包、光影补丁模板与内联 core(77 个文件)
-pack/shaders/                   光影包源码(41 个文件,含 lib/taclight_core.glsl 等单一真源)
-pack/pack.png                   光影包图标(packShaderZip 用)
-gradle/wrapper/ + gradlew*      标准 Gradle Wrapper(8.1.1)
-build.gradle                    构建脚本(已按公开仓改编:移除内部调试面相关机制;版本号单一真源 = gradle.properties 的 mod_version,构建期生成常量类)
+src/main/java/dev/taclight/   模组源码（debug/ 与 devonly/ 是开发期工具，打包时剔除）
+src/main/resources/           资源：mixin 配置、枪灯枪包、光影补丁模板与内联 GLSL
+src/test/                     契约测试（显式运行 taclightContracts）
+pack/shaders/                 自带光影包源码
+tools/                        开发期工具：场景、机位、像素比对
+docs/开发纪律与路线图.md        面向开发者：分支模型、纪律、状态、路线图
+CHANGELOG.md                  变更历史
+THIRD_PARTY.md                第三方致谢与许可
 ```
+
+## 文档
+
+- `CHANGELOG.md`：版本变更历史。
+- `docs/开发纪律与路线图.md`：开发纪律、当前状态、路线图与验证方式。
+- `THIRD_PARTY.md`：第三方依赖、许可与署名。

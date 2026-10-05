@@ -1,6 +1,7 @@
 package dev.taclight.client;
 
 import dev.taclight.channel.BoundedIdentityCache;
+import dev.taclight.channel.ShapePalette;
 import dev.taclight.channel.SpotlightData;
 import dev.taclight.channel.VoxelClassifier;
 import dev.taclight.channel.VoxelDda;
@@ -195,8 +196,64 @@ public final class VoxelGrid {
     private static final BoundedIdentityCache<VoxelShape, ShapeCode> SHAPE_CACHE =
             new BoundedIdentityCache<>(SHAPE_CACHE_CAP);
 
-    /** 形状分档缓存值:碰撞形实例(校验用)+ 分类码。仅未命中时分配一次。 */
-    private record ShapeCode(VoxelShape coll, int code) {}
+    /**
+     * 形状分档缓存值:碰撞形实例(校验用)+ 基础码 + <b>规范化后的格内盒</b>(形状调色板的输入),
+     * 以及"本构建代数下解析出的调色板槽"(2026-10-03 R21)。
+     *
+     * <p>槽号必须按<b>构建代数</b>打戳:{@link #PAL} 每帧重建,槽号会复用;缓存里的旧槽号
+     * 一旦跨帧沿用就会指向别的形状。踩戳机制让"一个形状实例每帧只解析一次"成立(逐格
+     * 只做一次 long 比较),既省掉逐格的字符串键构造,又不引入跨帧串味。</p>
+     */
+    private static final class ShapeCode {
+        final VoxelShape coll;
+        final int code;
+        /** 规范化后的格内盒(6 float/盒,0..1);null = 该码没有形状盒(空/树叶/植被/流体)。 */
+        final float[] boxes;
+        int slot = -1;
+        long slotStamp = Long.MIN_VALUE;
+
+        ShapeCode(VoxelShape coll, int code, float[] boxes) {
+            this.coll = coll;
+            this.code = code;
+            this.boxes = boxes;
+        }
+    }
+
+    /** 单格分类的回填(仅形状分支非空;渲染线程单线程复用,避免逐格分配)。 */
+    private static final class CellOut {
+        float[] boxes;
+        ShapeCode sc;
+
+        void reset() {
+            boxes = null;
+            sc = null;
+        }
+    }
+
+    private static final CellOut CELL_OUT = new CellOut();
+
+    /**
+     * 形状调色板(2026-10-03 R21):每帧重建,码 16+slot 指向它。
+     * 见 {@link ShapePalette} 的类注释(为什么需要、容量与降级)。
+     */
+    private static final ShapePalette PAL = new ShapePalette();
+    /** 调色板构建代数(每次重建自增;用于给 {@link ShapeCode#slot} 打戳)。 */
+    private static long paletteStamp;
+    /** 上一次重建里"基础码带形状"(≥4)的格数 —— 场景口径的形状占比(性能判据)。 */
+    private static int lastShapeCells;
+    /** 上一次重建里真正吃到调色板槽的格数。 */
+    private static int lastPalCells;
+
+    /**
+     * 调色板槽数上限覆写(S4a2 实验旋钮,2026-10-05,devonly 经 `!voxel palcap` 到达):
+     * 默认 = {@link ShapePalette#MAX_SLOTS}(与生产行为逐位一致);
+     * 设 0 ⇒ 全形状退回基础码(= 调色板溢出时的最坏臂,用于"depth 能否打出回退臂堵死的孔洞"
+     * 的鉴别实验)。只影响"新占槽",不改已占槽;改值即作废快照。
+     */
+    private static volatile int paletteCapOverride = ShapePalette.MAX_SLOTS;
+
+    /** S4a2 旋钮读写(契约/诊断用)。 */
+    static int paletteCapOverride() { return paletteCapOverride; }
 
     /** 碰撞形 AABB 暂存(渲染线程单线程;避免逐格分配;不足时按需扩容)。 */
     private static double[] COLL_SCRATCH = new double[VoxelClassifier.BOX_STRIDE * 8];
@@ -270,6 +327,22 @@ public final class VoxelGrid {
             if (rest.equals("on")) { coneBox = true; snap = null; return "voxel cone=on"; }
             if (rest.equals("off")) { coneBox = false; snap = null; return "voxel cone=off"; }
             return "voxel cone=" + (coneBox ? "on" : "off") + " (usage: !voxel cone on|off)";
+        }
+        else if (a.startsWith("palcap")) {
+            // S4a2 实验旋钮(2026-10-05,devonly):调色板槽上限覆写。默认 240 = 生产行为;
+            // 0 = 全退回基础码(溢出最坏臂)。改值即作废快照 ⇒ 下一帧按新上限重建。
+            String rest = a.length() > 6 ? a.substring(6).trim() : "";
+            if (rest.isEmpty()) return "voxel palcap=" + paletteCapOverride + " (usage: !voxel palcap 0..240)";
+            int v;
+            try {
+                v = Integer.parseInt(rest);
+            } catch (NumberFormatException e) {
+                return "voxel palcap bad arg '" + rest + "'";
+            }
+            if (v < 0 || v > ShapePalette.MAX_SLOTS) v = ShapePalette.MAX_SLOTS;
+            paletteCapOverride = v;
+            snap = null;
+            return "voxel palcap=" + v;
         }
         else if (a.startsWith("lagmax")) {
             // !voxel lagmax <deg>:转动节流阈值(0 = 不节流 = 逐帧重建;见 maxBoxLagDeg 注释)。
@@ -345,14 +418,25 @@ public final class VoxelGrid {
                 : "pack=n/a n=0";
         return String.format(java.util.Locale.ROOT,
                 "voxel profile: builds=%d box=%.2f last: clear=%.2fms loop=%.2fms total=%.2fms "
-                        + "cells=%d packed=%d sections=%d air=%d filled=%d | perCell %s %s | "
+                        + "cells=%d packed=%d shape=%d pal=%d palSlots=%d sections=%d air=%d filled=%d | "
+                        + "perCell %s %s | "
                         + "avg: clear=%.2fms loop=%.2fms | sum cells=%d packed=%d cone=%s lagmax=%.1f "
                         + "classcache=%s cat=%d/%d",
                 builds, boxFraction, lastClearMs, lastLoopMs, lastBuildMs,
-                lastCells, lastPacked, lastSecTotal, lastSecAir, lastSecFilled,
+                lastCells, lastPacked, lastShapeCells, lastPalCells, PAL.count(),
+                lastSecTotal, lastSecAir, lastSecFilled,
                 perRc, perPack, avgClear, avgLoop, sumCells, sumPacked, (coneBox ? "on" : "off"), maxBoxLagDeg,
                 (classCacheEnabled ? "on" : "off"), catHits, catMisses);
     }
+
+    /** 上一次重建的"带形状格"数与"吃到调色板槽的格数"(场景口径性能判据;契约用)。 */
+    static int lastShapeCells() { return lastShapeCells; }
+
+    /** 上一次重建的调色板槽数。 */
+    static int lastPaletteSlots() { return PAL.count(); }
+
+    /** 上一次重建里吃到调色板槽的格数。 */
+    static int lastPaletteCells() { return lastPalCells; }
 
     // ------------------------------------------------------------------
     // 契约/诊断钩子(包私有:只给同包的契约与 !voxel profile 用,生产路径不调用)
@@ -404,7 +488,27 @@ public final class VoxelGrid {
                              double bx, double by, double bz, int maxCells) {
         return VoxelProbe.rayReport(ax, ay, az, bx, by, bz, maxCells,
                 cell -> liveCode(mc, cell.x(), cell.y(), cell.z()),
-                cell -> gridCode(cell.x(), cell.y(), cell.z()));
+                cell -> gridCode(cell.x(), cell.y(), cell.z()),
+                VoxelGrid::gridBoxes);
+    }
+
+    /**
+     * 已上传调色板里该码的盒列表(2026-10-03 R21)—— 诊断走的是<b>与着色器同一份数据</b>
+     * (已上传的槽),不是"重新算一遍",否则 {@code !voxray} 报的 gridT 又不是渲染看到的那个。
+     */
+    private static float[] gridBoxes(VoxelDda.Cell cell, int code) {
+        VoxelField.Snapshot s = snap;
+        if (s == null || s.palette() == null || !VoxelField.isPalette(code)) return null;
+        int slot = code - VoxelField.CODE_PALETTE_BASE;
+        if (slot < 0 || slot >= s.palette().count()) return null;
+        int n = s.palette().boxesInSlot(slot);
+        if (n <= 0) return null;
+        float[] out = new float[n * ShapePalette.FLOATS_PER_BOX];
+        for (int i = 0; i < out.length; i++) {
+            out[i] = s.palette().boxComponent(slot, i / ShapePalette.FLOATS_PER_BOX,
+                    i % ShapePalette.FLOATS_PER_BOX);
+        }
+        return out;
     }
 
     /** 现场对真实世界求分类码(与逐格填充同一条 {@link #classify},不做 state 级缓存污染)。 */
@@ -433,7 +537,7 @@ public final class VoxelGrid {
         }
         java.util.List<VoxelProbe.Row> leaky = new java.util.ArrayList<>();
         java.util.List<VoxelProbe.Row> rest = new java.util.ArrayList<>();
-        int nonAir = 0, emptyNonAir = 0, veg = 0, leaf = 0, slab = 0, solid = 0;
+        int nonAir = 0, emptyNonAir = 0, veg = 0, leaf = 0, slab = 0, solid = 0, pal = 0;
         for (int y = ay; y <= by; y++) {
             for (int z = az; z <= bz; z++) {
                 for (int x = ax; x <= bx; x++) {
@@ -442,6 +546,7 @@ public final class VoxelGrid {
                     nonAir++;
                     int live = classify(mc.level, state, x, y, z);
                     int grid = gridCode(x, y, z);
+                    if (VoxelField.isPalette(grid)) pal++;   // 该格实际吃了调色板槽(R21)
                     boolean isLeaky = live == VoxelField.CODE_EMPTY;
                     if (isLeaky) emptyNonAir++;
                     else if (live == VoxelField.CODE_VEG) veg++;
@@ -459,7 +564,7 @@ public final class VoxelGrid {
                 }
             }
         }
-        return VoxelProbe.scanReport(leaky, rest, nonAir, emptyNonAir, veg, leaf, slab, solid);
+        return VoxelProbe.scanReport(leaky, rest, nonAir, emptyNonAir, veg, leaf, slab, solid, pal);
     }
 
     /** 已上传网格里的码;无快照或盒外 ⇒ -1(OUT,着色器按"占用未知"处理)。 */
@@ -520,7 +625,7 @@ public final class VoxelGrid {
         sumCells += lastCells; sumPacked += lastPacked;
         builds++;
         version++;
-        snap = new VoxelField.Snapshot(box.ox, box.oy, box.oz, box.dx, box.dy, box.dz, DATA, version);
+        snap = new VoxelField.Snapshot(box.ox, box.oy, box.oz, box.dx, box.dy, box.dz, DATA, PAL, version);
         lastTick = tick;
         lastLevel = level;
         lastBox = box;
@@ -556,6 +661,12 @@ public final class VoxelGrid {
 
     /** 逐 chunk-section 填充:纯天空段整段跳过,其余段逐块分类打包。 */
     private static void fill(Level level, VoxelField.Box box) {
+        // 形状调色板每帧重建(2026-10-03 R21):清计数与去重表 + 代数控戳,
+        // 使"一个形状实例每代只解析一次"成立(逐格只做一次 long 比较)。
+        PAL.clear();
+        paletteStamp++;
+        lastShapeCells = 0;
+        lastPalCells = 0;
         int x1 = box.ox + box.dx - 1, y1 = box.oy + box.dy - 1, z1 = box.oz + box.dz - 1;
         int minSecY = level.getMinSection();
         int maxSecY = (level.getMaxBuildHeight() - 1) >> 4;
@@ -584,7 +695,11 @@ public final class VoxelGrid {
                                 long ta = sRc ? System.nanoTime() : 0L;
                                 BlockState st = sec.getBlockState(wx & 15, wy & 15, wz & 15);
                                 long tb = sRc ? System.nanoTime() : 0L;
-                                int code = classify(level, st, wx, wy, wz);
+                                // 分类(基础码) + 调色板解析(2026-10-03 R21)合成同一相位;
+                                // CELL_OUT 只在形状分支被填,resolvePacked 对非形状码直接返回。
+                                CELL_OUT.reset();
+                                int code = resolvePacked(
+                                        classifyInto(level, st, wx, wy, wz, CELL_OUT), CELL_OUT);
                                 long tc = sRc ? System.nanoTime() : 0L;
                                 if (sRc) {
                                     sReadNs += tb - ta;
@@ -634,8 +749,20 @@ public final class VoxelGrid {
      * 全 registry 穷举逐状态对账(语义不变的可判定证据)。</p>
      */
     static int classify(BlockGetter level, BlockState state, int x, int y, int z) {
+        return classifyInto(level, state, x, y, z, null);
+    }
+
+    /**
+     * 分类 + 形状回填(2026-10-03 R21 形状调色板的接线点)。
+     *
+     * <p>{@code out == null} 时<b>完全不碰调色板</b> —— 这是刻意的:{@code classify} 是
+     * 契约(golden / {@code VoxelRealRegistryContract})与诊断用的稳定口径,只报基础码;
+     * 让它去占调色板槽会把"分类"和"打包"两件事混在一起,还会让穷举 24135 个状态的那条
+     * 契约白白撑爆调色板。调色板只在 {@link #fill} 里、且只对形状码解析。</p>
+     */
+    static int classifyInto(BlockGetter level, BlockState state, int x, int y, int z, CellOut out) {
         // !voxel classcache off = 改动前的旧路径(classifyLegacy 一字不改地保留)
-        if (!classCacheEnabled) return classifyLegacy(level, state, x, y, z);
+        if (!classCacheEnabled) return classifyLegacy(level, state, x, y, z, out);
         // 空气:**逐 state** 判定,不按方块身份冻结 —— isAir 是 state 谓词
         // (BlockStateBase.isAir() → Block.isAir(BlockState),模组可按状态覆写),
         // 而逐格判的成本只是一次虚调用 + 布尔读,与查表同量级。旧路径同样先判空气。
@@ -662,9 +789,16 @@ public final class VoxelGrid {
             CURSOR.set(x, y, z);
             VoxelShape coll = state.getCollisionShape(level, CURSOR);
             VoxelShape occ = state.getOcclusionShape(level, CURSOR);
-            // 缓存主键 = occ 实例(占比真源);命中还需 coll 身份一致(守卫 1/2 读 coll)。
+            // 缓存主键 = occ 实例(占比真源);命中还需 coll 身份一致(守卫 2 读 occ,
+            // 但 "occ 空 + coll 变化" 的模组方块在守卫 1 的例外档上仍可能分歧 ⇒ 保留校验)。
             ShapeCode hit = SHAPE_CACHE.get(occ);
-            if (hit != null && hit.coll() == coll) return hit.code();
+            if (hit != null && hit.coll == coll) {
+                if (out != null) {
+                    out.sc = hit;
+                    out.boxes = hit.boxes;
+                }
+                return hit.code;
+            }
             List<AABB> collBoxes = coll.toAabbs();
             List<AABB> occBoxes = occ.toAabbs();
             int collN = collBoxes.size();
@@ -678,10 +812,67 @@ public final class VoxelGrid {
             fill(collBoxes, COLL_SCRATCH);
             fill(occBoxes, OCC_SCRATCH);
             int shapeCode = VoxelClassifier.codeForShapes(COLL_SCRATCH, collN, OCC_SCRATCH, occN);
-            SHAPE_CACHE.put(occ, new ShapeCode(coll, shapeCode));
+            float[] shapeBoxes = normalizeOcc(occBoxes);
+            ShapeCode fresh = new ShapeCode(coll, shapeCode, shapeBoxes);
+            SHAPE_CACHE.put(occ, fresh);
+            if (out != null) {
+                out.sc = fresh;
+                out.boxes = shapeBoxes;
+            }
             return shapeCode;
         }
         return code;
+    }
+
+    /** 遮挡形盒列表 → 平铺 float[6*n](0..1 格内坐标);无盒 ⇒ null。调色板的输入口径。 */
+    private static float[] normalizeOcc(List<AABB> boxes) {
+        if (boxes.isEmpty()) return null;
+        float[] out = new float[boxes.size() * ShapePalette.FLOATS_PER_BOX];
+        for (int i = 0; i < boxes.size(); i++) {
+            AABB b = boxes.get(i);
+            int o = i * ShapePalette.FLOATS_PER_BOX;
+            out[o] = (float) b.minX;
+            out[o + 1] = (float) b.minY;
+            out[o + 2] = (float) b.minZ;
+            out[o + 3] = (float) b.maxX;
+            out[o + 4] = (float) b.maxY;
+            out[o + 5] = (float) b.maxZ;
+        }
+        return out;
+    }
+
+    /**
+     * 基础码 + 该格形状 ⇒ <b>实际打包进栅格的码</b>(2026-10-03 R21)。
+     *
+     * <p>顺序刻意如此:先问"16 档码能不能精确表达"(能 ⇒ 不占槽,零成本),再问调色板。
+     * 超容量 / 超盒数 / 无有效盒 ⇒ 退回基础码(= 今天的行为)。每个形状实例每代只解析一次。</p>
+     *
+     * <p><b>⚠ 2026-10-04 R21 真机订正(第一版就错在这里,必须留档)</b>:门控原来是
+     * {@code baseCode >= CODE_SLAB_BOTTOM_BASE(4)},理由是"只有 4..15 带形状"。
+     * 但<b>非满方块走形状分支落的是 {@code CODE_VEG}(1)</b> —— 栅栏/墙/楼梯/脚手架
+     * 逐个实测都是 {@code live=VEG},于是<b>调色板恰好对它该服务的形状全部不生效</b>
+     * (真机 r21-1 实测:整排 9 个测试方块里只有活板门吃到槽 {@code PAL[0]},因为它落的是
+     * 薄板码 5)。正确门控是 <b>{@code out.boxes != null}</b>:它<b>只</b>在形状分支被填,
+     * ID 表档(树叶/软植被)与空气/流体都走不到那里 ⇒ "按方块 ID 决定的材质档"永远不会被
+     * 调色板改写(那是刻意的设计),而"按真实形状判出来的档"一律参与。</p>
+     */
+    private static int resolvePacked(int baseCode, CellOut out) {
+        if (out.boxes == null || out.sc == null) return baseCode;
+        lastShapeCells++;
+        ShapeCode sc = out.sc;
+        if (sc.slotStamp != paletteStamp) {
+            // S4a2 旋钮:槽满(或被覆写为 0)⇒ -1 = 退回基础码(与 slotFor 的超容量分支同语义)。
+            if (PAL.count() >= paletteCapOverride) {
+                sc.slot = -1;
+            } else {
+                int n = sc.boxes.length / ShapePalette.FLOATS_PER_BOX;
+                sc.slot = VoxelClassifier.baseCodeExpresses(sc.boxes, n) ? -1 : PAL.slotFor(sc.boxes, n);
+            }
+            sc.slotStamp = paletteStamp;
+        }
+        if (sc.slot < 0) return baseCode;
+        lastPalCells++;
+        return VoxelField.CODE_PALETTE_BASE + sc.slot;
     }
 
     /**
@@ -698,7 +889,7 @@ public final class VoxelGrid {
      * <p>行为与 {@link #classify} 的唯一差别是速度:语义(判定顺序 空气 → 树叶 → 软植被 →
      * 流体 → 形状)与产物逐字相同。</p>
      */
-    static int classifyLegacy(BlockGetter level, BlockState state, int x, int y, int z) {
+    static int classifyLegacy(BlockGetter level, BlockState state, int x, int y, int z, CellOut out) {
         Integer cached = CLASS_CACHE.get(state);
         if (cached != null) return cached;
         int code;
@@ -714,9 +905,16 @@ public final class VoxelGrid {
                 CURSOR.set(x, y, z);
                 VoxelShape coll = state.getCollisionShape(level, CURSOR);
                 VoxelShape occ = state.getOcclusionShape(level, CURSOR);
-                // 缓存主键 = occ 实例(占比真源);命中还需 coll 身份一致(守卫 1/2 读 coll)。
+                // 缓存主键 = occ 实例(占比真源);命中还需 coll 身份一致(守卫 2 读 occ,
+                // 但 "occ 空 + coll 变化" 的模组方块在守卫 1 的例外档上仍可能分歧 ⇒ 保留校验)。
                 ShapeCode hit = SHAPE_CACHE.get(occ);
-                if (hit != null && hit.coll() == coll) return hit.code();
+                if (hit != null && hit.coll == coll) {
+                    if (out != null) {
+                        out.sc = hit;
+                        out.boxes = hit.boxes;
+                    }
+                    return hit.code;
+                }
                 List<AABB> collBoxes = coll.toAabbs();
                 List<AABB> occBoxes = occ.toAabbs();
                 int collN = collBoxes.size();
@@ -730,7 +928,13 @@ public final class VoxelGrid {
                 fill(collBoxes, COLL_SCRATCH);
                 fill(occBoxes, OCC_SCRATCH);
                 int shapeCode = VoxelClassifier.codeForShapes(COLL_SCRATCH, collN, OCC_SCRATCH, occN);
-                SHAPE_CACHE.put(occ, new ShapeCode(coll, shapeCode));
+                float[] shapeBoxes = normalizeOcc(occBoxes);
+                ShapeCode fresh = new ShapeCode(coll, shapeCode, shapeBoxes);
+                SHAPE_CACHE.put(occ, fresh);
+                if (out != null) {
+                    out.sc = fresh;
+                    out.boxes = shapeBoxes;
+                }
                 return shapeCode;
             }
         }

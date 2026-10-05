@@ -38,12 +38,25 @@ public final class SpotlightBufferLayout {
     public static final int OFF_VOX_ORIGIN = HEADER_BYTES + MAX_LIGHTS * LIGHT_STRIDE_BYTES; // 784
     /** voxMeta:xyz=各轴格数,w 保留。 */
     public static final int OFF_VOX_META = OFF_VOX_ORIGIN + 16;   // 800
-    /** 4bit 打包数据起点。 */
-    public static final int OFF_VOX_DATA = OFF_VOX_META + 16;     // 816
+    /**
+     * voxPalMeta(2026-10-03 R21 形状调色板):x=已用槽数(0=本帧无调色板);y=每槽 float 数
+     * (={@link ShapePalette#SLOT_STRIDE});z/w 保留。
+     */
+    public static final int OFF_VOX_PAL_META = OFF_VOX_META + 16; // 816
+    /** 形状调色板盒区:float[{@link ShapePalette#TOTAL_FLOATS}](每槽 [盒数, 8×(6 个格内 0..1 坐标)])。 */
+    public static final int OFF_VOX_PAL_BOX = OFF_VOX_PAL_META + 16; // 832
+    /** 8bit 打包数据起点(2026-10-03:4bit→8bit,调色板段插在其前)。 */
+    public static final int OFF_VOX_DATA = OFF_VOX_PAL_BOX + ShapePalette.TOTAL_FLOATS * 4; // 47872
     /** 单轴最大格数(与 VoxelField.MAX_DIM 同值;不引用以防包间循环无谓耦合,契约钉等值)。 */
     public static final int VOX_MAX_DIM = 128;
-    /** 128³ × 4bit / 32bit(2026-09-25 高度感知遮挡:2bit→4bit,512KB→1MB)。 */
-    public static final int VOX_MAX_UINTS = VOX_MAX_DIM * VOX_MAX_DIM * VOX_MAX_DIM / 8; // 262144
+    /** 128³ × 8bit / 32bit(2026-10-03 形状调色板:4bit→8bit ⇒ 1MB→2MB;更早:2bit→4bit)。 */
+    public static final int VOX_MAX_UINTS = VOX_MAX_DIM * VOX_MAX_DIM * VOX_MAX_DIM / 4; // 524288
+    /**
+     * 每帧 CPU 侧暂存/上传的头段长度(头 + 8 灯 + voxOrigin/voxMeta/voxPalMeta)。
+     * <b>刻意不含调色板盒区与体素数据</b>:那两段只在 version 变化时单独上传
+     * (否则每帧要写 47KB+2MB 的直接缓冲,白白制造 GC 与总线压力)。
+     */
+    public static final int HEAD_STAGE_BYTES = OFF_VOX_PAL_BOX;   // 832
     /** SSBO 总长(定长)。 */
     private static final int FIXED_BYTES = OFF_VOX_DATA + VOX_MAX_UINTS * 4;
 
@@ -79,9 +92,9 @@ public final class SpotlightBufferLayout {
         return HEADER_BYTES + index * LIGHT_STRIDE_BYTES;
     }
 
-    /** 头 + 8 灯区(体素尾段由 {@link #writeVoxHeader}/数据区单独写)。 */
+    /** 头 + 8 灯区 + 体素头(调色板盒区与体素数据由 {@link #writeVoxHeader} 之后的单独上传写)。 */
     public static ByteBuffer newBuffer(int lightCount) {
-        return ByteBuffer.allocateDirect(OFF_VOX_DATA).order(ByteOrder.nativeOrder());
+        return ByteBuffer.allocateDirect(HEAD_STAGE_BYTES).order(ByteOrder.nativeOrder());
     }
 
     public static void writeHeader(ByteBuffer buf, int lightCount, float vlIntensity, int flags) {
@@ -103,9 +116,18 @@ public final class SpotlightBufferLayout {
         buf.putInt(OFF_VOX_META + 12, 0);
     }
 
+    /** 形状调色板头:x=已用槽数,y=每槽 float 数。0 槽 ⇒ GLSL 不会读盒区(与栅格无效等价)。 */
+    public static void writeVoxPalMeta(ByteBuffer buf, int slotCount) {
+        buf.putInt(OFF_VOX_PAL_META, slotCount);
+        buf.putInt(OFF_VOX_PAL_META + 4, ShapePalette.SLOT_STRIDE);
+        buf.putInt(OFF_VOX_PAL_META + 8, 0);
+        buf.putInt(OFF_VOX_PAL_META + 12, 0);
+    }
+
     /** 体素栅格无效位(GLSL 检查 voxOrigin.w≤0 回退 SSO)。 */
     public static void writeVoxInvalid(ByteBuffer buf) {
         buf.putFloat(OFF_VOX_ORIGIN + 12, -1.0f);
+        writeVoxPalMeta(buf, 0);
     }
 
     public static void writeLight(ByteBuffer buf, int index, SpotlightData l) {

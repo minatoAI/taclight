@@ -1,11 +1,10 @@
 # Gradle / build
-.gradle/
 .gradle-user-home/
+.gradle/
 build/
-out/
 run/
 run-*/
-
+out/
 # IDE
 .idea/
 *.iml
@@ -13,16 +12,23 @@ run-*/
 .project
 .settings/
 .vscode/
-
-# logs / crash dumps
+# misc
 *.log
-*.log.gz
 hs_err_pid*
-build-log.txt
 
-# local third-party dependency jars: this project does NOT redistribute them
+# accidental tooling output
+net/
+err-lines.txt
+jar-list.txt
+
+# dev-instance runtime logs
+logs/
+*.log.gz
+build-log.txt
+tools/.session/
+
+# 第三方依赖库(里程碑③用)不入库:红线1 零分发
 libs/*.jar
 
-# OS
-.DS_Store
-Thumbs.db
+# 证据图已移出历史(Phase 1 option D,2026-09-17):原件在仓外归档 + ARCHIVE-INDEX.md;禁止再入库
+docs/evidence/**/*.png

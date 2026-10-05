@@ -53,6 +53,8 @@ uniform float viewHeight;
 // depthtex1 声明来自 lib/taclight_common.glsl(F1 起表面查找用它,不再采样 depthtex0)
 
 in vec2 texcoord;
+// Unlit-interior readability floor (linear pre-tonemap units; tune against vanilla).
+#define TACLIGHT_CAVE_FLOOR 0.030
 layout(location = 0) out vec4 taclightCompositeOut;
 layout(location = 1) out vec4 taclightOcclOut;   // -> colortex8 遮挡距离表(方案二)
 
@@ -131,6 +133,21 @@ void main() {
     taclightCompositeOut = vec4(0.0, 0.0, 0.0, 1.0);
     return;
 #endif
+
+    // CAVE-FLOOR 2026-10-05: unlit interiors must stay readable without lamps.
+    // Vanilla (no pack) shows caves as dark gray, not pitch black; the linear+AgX
+    // chain crushes the toe. Small albedo-scaled floor where sky light is absent;
+    // daylight untouched ((1-sky)^2 gate). Runs with or without lamps.
+    if (depth < 1.0) {
+        vec4 flG1 = texture(colortex1, texcoord);
+        vec4 flG2 = texture(colortex2, texcoord);
+        float flSky = clamp(flG1.w, 0.0, 1.0);
+        float flGate = (1.0 - flSky) * (1.0 - flSky);
+        if (flGate > 0.001) {
+            vec3 flAlb = pow(max(flG2.rgb, vec3(0.0)), vec3(2.2));
+            color += flAlb * (TACLIGHT_CAVE_FLOOR * flGate);
+        }
+    }
 
     if (depth < 1.0 && lightCount > 0u) {
         vec3 fragView = taclight_depth_to_view(texcoord, depth);

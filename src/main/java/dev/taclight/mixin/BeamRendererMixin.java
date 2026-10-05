@@ -30,13 +30,6 @@ import java.util.List;
 @Mixin(value = BeamRenderer.class, remap = false)
 public abstract class BeamRendererMixin {
 
-    @Inject(method = "renderLaserBeam", at = @At("HEAD"), require = 1)
-    private static void taclight$anchor(ItemStack holder, PoseStack poseStack,
-                                        ItemDisplayContext context, List<BedrockPart> path,
-                                        CallbackInfo callback) {
-        probeHead(holder, context, path, "head");
-    }
-
     @Inject(method = "renderLaserBeam",
             at = @At(value = "INVOKE",
                     target = "Lcom/tacz/guns/util/LaserColorUtil;getLaserColor(Lnet/minecraft/world/item/ItemStack;Lcom/tacz/guns/client/resource/pojo/display/LaserConfig;)I"),
@@ -55,25 +48,6 @@ public abstract class BeamRendererMixin {
                                                     ItemDisplayContext context, List<BedrockPart> path,
                                                     CallbackInfoReturnable<Boolean> callback) {
         capture(holder, poseStack, context, path);
-    }
-
-    // ---- 诊断探针(2026-09-02 TP 无束/无捕获定位):无条件记录前几次调用 ----
-    private static int probeLeft = 5;
-
-    private static void probeHead(ItemStack holder, ItemDisplayContext context,
-                                  List<BedrockPart> path, String via) {
-        if (probeLeft <= 0) {
-            return;
-        }
-        probeLeft--;
-        var holderEntity = dev.taclight.client.RenderedEntityTracker.current();
-        dev.taclight.TacLightMod.LOGGER.info(
-                "[TacLight] BEAM-HEAD via={} ctx={} gun={} att={} pathSize={} entity={}",
-                via, context,
-                dev.taclight.tacz.TaczClientLightProbe.isGunStack(holder),
-                dev.taclight.tacz.TaczClientLightProbe.isAttachmentStack(holder),
-                path == null ? -1 : path.size(),
-                holderEntity == null ? "none" : holderEntity.getName().getString() + "#" + holderEntity.getId());
     }
 
     private static void capture(ItemStack holder, PoseStack poseStack,

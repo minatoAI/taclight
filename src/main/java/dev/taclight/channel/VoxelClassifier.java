@@ -119,12 +119,21 @@ public final class VoxelClassifier {
     }
 
     /**
-     * C 口径总规则(守卫顺序写死，勿调换——两条守卫各自防一个漏光/误挡方向)：
+     * 分档总规则(守卫顺序写死，勿调换——两条守卫各自防一个漏光/误挡方向)：
      * <ol>
-     *   <li>{@code coll} 空 ⇒ EMPTY；</li>
-     *   <li>{@code coll} 最高盒顶 &gt; 1.0 ⇒ SOLID；</li>
+     *   <li>{@code coll} 空 ⇒ EMPTY(带"贴地最薄一档"例外)；</li>
+     *   <li>{@code occ} 最高盒顶 &gt; 1.0 ⇒ SOLID；</li>
      *   <li>否则按 {@code occ} 实心占比分档。</li>
      * </ol>
+     *
+     * <p><b>2026-10-03 R18 订正(用户按方块类型实测 + 真机逐格读码)：守卫 2 由 {@code coll} 改读 {@code occ}。</b>
+     * 碰撞形是<b>玩法</b>需要，不是遮光需要：栅栏/栅栏门的碰撞柱是 1.5 格高
+     * (字节码实测 {@code FenceBlock} 向 {@code CrossCollisionBlock} 传
+     * {@code nodeHeight=16, extensionHeight=16, collisionHeight=24}，而 {@code getOcclusionShape}
+     * 委托的 {@code getShape} 读的是 16/16 = <b>1.0</b> 那一组)，旧式据此判"整格实心"
+     * ⇒ 栅栏影子是一个满方块、栅栏门中间的洞在数据里不存在(用户实测：影子像满方块、门洞透不过光)。
+     * 改读 {@code occ} 后栅栏顶高 1.0 不触发该守卫，落占比档 ⇒ VEG。
+     * 依据 {@code BACKLOG §2.132/§2.133}。</p>
      */
     public static int codeForShapes(double[] coll, int collCount, double[] occ, int occCount) {
         if (collCount <= 0) {
@@ -137,7 +146,10 @@ public final class VoxelClassifier {
             if (VoxelField.isSlab(thin) && VoxelField.slabHigh(thin) <= NOCOLL_SLAB_MAX_TOP) return thin;
             return VoxelField.CODE_EMPTY;
         }
-        if (maxTopY(coll, collCount) > TALL_TOP_Y) return VoxelField.CODE_SOLID;
+        // 守卫 2(2026-10-03 R18):读**遮挡形 occ**,不读碰撞形 coll。
+        // 碰撞形只反映"玩家能不能穿过去"(栅栏柱 1.5 格),拿它判遮光会把栅栏/栅栏门/墙
+        // 判成整格实心 ⇒ 影子是满方块、门洞不存在。改读 occ 后这些方块落占比档 ⇒ VEG。
+        if (occCount > 0 && maxTopY(occ, occCount) > TALL_TOP_Y) return VoxelField.CODE_SOLID;
         double fraction = solidFraction(occ, occCount);
         if (fraction >= FULL_MIN_FRACTION) return VoxelField.CODE_SOLID;
         int slab = slabCodeFor(occ, occCount);
@@ -184,6 +196,44 @@ public final class VoxelClassifier {
         if (fraction >= FULL_MIN_FRACTION) return VoxelField.CODE_SOLID;
         return VoxelField.CODE_VEG;
     }
+
+    /**
+     * <b>0..15 基础码能否精确表达这组盒</b>(2026-10-03 R21 形状调色板的入口判据)。
+     *
+     * <p>精确 = <b>单一盒</b> + <b>占满 XZ 足印</b> + y 端点落在 <b>1/8 网格</b>上。
+     * 三条缺一不可,分别对应三种近似:</p>
+     * <ol>
+     *   <li>多盒(楼梯/栅栏/墙/门/告示牌…)只有 VEG 的"整格 25% 衰减"可用 ⇒ 丢水平足印;</li>
+     *   <li>不占满足印(栅栏柱/红石线/火/锁链…)连薄板码都不能用 —— 薄板判据自陈
+     *       "只带高度、不带水平形状"(见 {@link #slabCodeFor});</li>
+     *   <li>y 端点不在 1/8 网格 ⇒ 薄板码的 {@code round(maxY*8)} 会把它挪到最近的一档
+     *       (例如 0.1875 → 0.25),而顶薄板还有 {@code eighths < 4 ⇒ 4} 的 clamp
+     *       (例如 [0.25,1] 会被写成 [0.5,1])。<b>这是本条最容易被漏掉的一档</b> ——
+     *       只查足印与"是否贴 y=0/1"会把这类形状误判成"基础码已能精确表达"。</li>
+     * </ol>
+     *
+     * <p>返回 true ⇒ 该形状<b>不占</b>调色板槽(码 0..15 已逐位精确,零成本);
+     * false ⇒ 交给 {@link ShapePalette}(超容量时退回基础码,即今天的行为)。</p>
+     */
+    public static boolean baseCodeExpresses(float[] boxes, int n) {
+        if (n != 1) return false;
+        float x0 = boxes[0], y0 = boxes[1], z0 = boxes[2];
+        float x1 = boxes[3], y1 = boxes[4], z1 = boxes[5];
+        if (x0 != 0f || z0 != 0f || x1 != 1f || z1 != 1f) return false;
+        if (y0 == 0f) {
+            float eighths = y1 * 8f;
+            return eighths >= 1f && eighths <= 8f && eighths == Math.round(eighths);
+        }
+        if (y1 == 1f) {
+            float eighths = y0 * 8f;
+            return eighths >= (float) TOP_SLAB_MIN_EIGHTHS && eighths <= 8f
+                    && eighths == Math.round(eighths);
+        }
+        return false;
+    }
+
+    /** 顶薄板码的底高下限(1/8 档):{@link #slabCodeFor} 里 {@code eighths < 4 ⇒ 4} 的那条 clamp。 */
+    public static final int TOP_SLAB_MIN_EIGHTHS = 4;
 
     /**
      * 盒列表在单位格内的实心体积占比 = Σ (maxX−minX)(maxY−minY)(maxZ−minZ) / 1。
