@@ -244,6 +244,17 @@ public final class VoxelGrid {
     /** 上一次重建里真正吃到调色板槽的格数。 */
     private static int lastPalCells;
 
+    /**
+     * 调色板槽数上限覆写(S4a2 实验旋钮,2026-10-05,devonly 经 `!voxel palcap` 到达):
+     * 默认 = {@link ShapePalette#MAX_SLOTS}(与生产行为逐位一致);
+     * 设 0 ⇒ 全形状退回基础码(= 调色板溢出时的最坏臂,用于"depth 能否打出回退臂堵死的孔洞"
+     * 的鉴别实验)。只影响"新占槽",不改已占槽;改值即作废快照。
+     */
+    private static volatile int paletteCapOverride = ShapePalette.MAX_SLOTS;
+
+    /** S4a2 旋钮读写(契约/诊断用)。 */
+    static int paletteCapOverride() { return paletteCapOverride; }
+
     /** 碰撞形 AABB 暂存(渲染线程单线程;避免逐格分配;不足时按需扩容)。 */
     private static double[] COLL_SCRATCH = new double[VoxelClassifier.BOX_STRIDE * 8];
     /** 遮挡形 AABB 暂存(占比真源)。 */
@@ -316,6 +327,22 @@ public final class VoxelGrid {
             if (rest.equals("on")) { coneBox = true; snap = null; return "voxel cone=on"; }
             if (rest.equals("off")) { coneBox = false; snap = null; return "voxel cone=off"; }
             return "voxel cone=" + (coneBox ? "on" : "off") + " (usage: !voxel cone on|off)";
+        }
+        else if (a.startsWith("palcap")) {
+            // S4a2 实验旋钮(2026-10-05,devonly):调色板槽上限覆写。默认 240 = 生产行为;
+            // 0 = 全退回基础码(溢出最坏臂)。改值即作废快照 ⇒ 下一帧按新上限重建。
+            String rest = a.length() > 6 ? a.substring(6).trim() : "";
+            if (rest.isEmpty()) return "voxel palcap=" + paletteCapOverride + " (usage: !voxel palcap 0..240)";
+            int v;
+            try {
+                v = Integer.parseInt(rest);
+            } catch (NumberFormatException e) {
+                return "voxel palcap bad arg '" + rest + "'";
+            }
+            if (v < 0 || v > ShapePalette.MAX_SLOTS) v = ShapePalette.MAX_SLOTS;
+            paletteCapOverride = v;
+            snap = null;
+            return "voxel palcap=" + v;
         }
         else if (a.startsWith("lagmax")) {
             // !voxel lagmax <deg>:转动节流阈值(0 = 不节流 = 逐帧重建;见 maxBoxLagDeg 注释)。
@@ -834,8 +861,13 @@ public final class VoxelGrid {
         lastShapeCells++;
         ShapeCode sc = out.sc;
         if (sc.slotStamp != paletteStamp) {
-            int n = sc.boxes.length / ShapePalette.FLOATS_PER_BOX;
-            sc.slot = VoxelClassifier.baseCodeExpresses(sc.boxes, n) ? -1 : PAL.slotFor(sc.boxes, n);
+            // S4a2 旋钮:槽满(或被覆写为 0)⇒ -1 = 退回基础码(与 slotFor 的超容量分支同语义)。
+            if (PAL.count() >= paletteCapOverride) {
+                sc.slot = -1;
+            } else {
+                int n = sc.boxes.length / ShapePalette.FLOATS_PER_BOX;
+                sc.slot = VoxelClassifier.baseCodeExpresses(sc.boxes, n) ? -1 : PAL.slotFor(sc.boxes, n);
+            }
             sc.slotStamp = paletteStamp;
         }
         if (sc.slot < 0) return baseCode;

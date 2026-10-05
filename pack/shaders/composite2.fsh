@@ -28,6 +28,8 @@ layout(location = 1) out vec4 taclightExposure; // -> colortex7
 // 白天整个天空(0.7-0.9)都进 bloom → 画面泛白雾;玻璃/亮天被 bloom 打成死白块。
 // 线性域 1.0 软阈 ±0.4 只提取真正的高光(光斑核心/太阳直射),天空不再起雾。
 #define TACLIGHT_BLOOM_TH      1.0   // 亮部提取阈值(线性域,软边 ±0.4)
+// BUILTIN 2026-10-05: 源码默认保持 LOCK=1(供 A/B 取证确定性);玩家面的 TacLight-Builtin
+// 由 BuiltinPackInstaller 按 taclight-client.toml [exposure] 烘焙(默认自适应开/目标 0.16/上限 4.0)。
 #define TACLIGHT_EXPOSURE_LOCK 1     // 1=固定曝光(A/B 截图防亮度漂移,值见下) 0=自适应眼适应
 #define TACLIGHT_EXPOSURE_LOCK_VALUE 1.0  // 锁定时的曝光值
 #define TACLIGHT_EXPOSURE_TARGET 0.12 // 目标全屏平均亮度(夜景基调,偏暗)

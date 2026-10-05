@@ -74,9 +74,6 @@ public class TacLightCommand {
                                 .then(Commands.argument("player", net.minecraft.commands.arguments.EntityArgument.player())
                                         .executes(ctx -> lightSet(ctx.getSource(), StringArgumentType.getString(ctx, "state"),
                                                 net.minecraft.commands.arguments.EntityArgument.getPlayer(ctx, "player"))))))
-                .then(Commands.literal("snap")
-                        .requires(s -> s.hasPermission(0))
-                        .executes(ctx -> snapRun(ctx.getSource())))
                 // tune(2026-09-19):八旋钮正式入口。name/value 用 string() 而非 word()
                 // —— 数值 "0.35"/"-0.1" 含 '.',word() 拒收(同 cam name 含 '@' 的教训)。
                 .then(Commands.literal("tune")
@@ -195,39 +192,6 @@ public class TacLightCommand {
                 "cmd:" + state + (target != null ? "@target" : "@self"));
         source.sendSuccess(() -> Component.literal("[TacLight] light " + next + " -> "
                 + player.getGameProfile().getName()), false);
-        return 1;
-    }
-
-    // ---- snap:一键调试快照(2026-09-19 最小闭环,与 F9/!snap 同一 saveSnapshot 入口) ----
-
-    /**
-     * MP 守卫(snap):专用服无客户端可拍(截图/pose/覆盖层全在客户端;且 client 类在
-     * 专用服加载即炸,故守卫必须在任何 client 引用之前,同 tuneMpGuard 的类加载安全)。
-     * 集成服(SP/LAN 主机同 JVM,gameDir 与客户端同根):放行。
-     */
-    private static boolean snapMpGuard(CommandSourceStack source) {
-        var server = source.getServer();
-        if (server != null && !server.isDedicatedServer()) return false;
-        String msg = "[TacLight] snap 仅单人/客户端生效:专用服务器无截图与客户端状态目标,本次未执行。"
-                + "联机客机请在各自客户端按 F9 或写 !snap 文件命令。";
-        source.sendFailure(Component.literal(msg));
-        TacLightMod.LOGGER.info("[TacLight] SNAP mp-guard reject (dedicated or no-server)");
-        return true;
-    }
-
-    /** /taclight snap —— 调同一 saveSnapshot(命令线程;截图若上下文不在位由其 try/catch 接住记 outcome)。 */
-    private static int snapRun(CommandSourceStack source) throws CommandSyntaxException {
-        if (snapMpGuard(source)) return 0;
-        source.getPlayerOrException(); // 单人玩家存在性校验(与 light 分支同规)
-        java.nio.file.Path dir = dev.taclight.client.DebugSnapshotter.saveSnapshot("cmd");
-        if (dir == null) {
-            source.sendFailure(Component.literal("[TacLight] snap 失败(见日志)"));
-            TacLightMod.LOGGER.warn("[TacLight] SNAP cmd FAILED");
-            return 0;
-        }
-        String msg = "[TacLight] snap -> " + dir;
-        source.sendSuccess(() -> Component.literal(msg), false);
-        TacLightMod.LOGGER.info("[TacLight] SNAP cmd {}", dir);
         return 1;
     }
 

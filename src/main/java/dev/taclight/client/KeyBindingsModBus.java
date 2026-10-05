@@ -34,8 +34,7 @@ public final class KeyBindingsModBus {
                 KeyBindings.GUNLIGHT_TOGGLE,
                 KeyBindings.DEBUG_TOGGLE,
                 KeyBindings.DIAG_DUMP,
-                KeyBindings.BENCH,
-                TacSnapshotKeys.SNAPSHOT
+                KeyBindings.BENCH
         };
         for (KeyMapping k : keys) {
             event.register(k);

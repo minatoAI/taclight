@@ -163,6 +163,11 @@ public class VoxelGridWiringContract {
         check(packed.contains("if (out.boxes == null || out.sc == null) return baseCode;")
                         && !packed.contains("CODE_SLAB_BOTTOM_BASE"),
                 "门控 = 形状分支是否填了 boxes(不是\"基础码≥4\";真机实测栅栏/墙/楼梯落 VEG ⇒ 旧门控让调色板永不生效)");
+        // S4a2 旋钮(2026-10-05):槽上限可覆写,但默认必须 = MAX_SLOTS(发布行为逐位一致)。
+        check(packed.contains("PAL.count() >= paletteCapOverride"),
+                "S4a2 旋钮接在占槽前(满/覆写 0 ⇒ -1 退回基础码)");
+        check(grid.contains("paletteCapOverride = ShapePalette.MAX_SLOTS"),
+                "S4a2 旋钮默认值 = MAX_SLOTS(默认关闭,发布零行为变更)");
         String fillBody = methodBody(grid, "private static void fill(Level level, VoxelField.Box box)");
         check(fillBody.contains("PAL.clear();") && fillBody.contains("paletteStamp++;"),
                 "每帧重建:fill 开头清调色板并推进代数(旧槽号立即失效)");

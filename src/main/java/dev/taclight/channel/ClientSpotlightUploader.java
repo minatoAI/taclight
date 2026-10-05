@@ -186,6 +186,7 @@ public final class ClientSpotlightUploader {
         if (LightTuneOverride.numProbe()) extraFlags |= SpotlightBufferLayout.FLAG_NUM_PROBE;
         long tP3 = perf ? System.nanoTime() : 0;
         LightBuffer.upload(lights, extraFlags, voxelGrid);
+        noteLastLight0(lights);
         if (perf) {
             long tP4 = System.nanoTime();
             PerfStats.notePhases((tP1 - tP0) / 1e6, (tP2 - tP1) / 1e6, (tP3 - tP2) / 1e6,
@@ -216,6 +217,15 @@ public final class ClientSpotlightUploader {
     private static long recFrame;
 
     public static long currentRenderFrame() { return recFrame; }
+
+    /** S4a 用:上一帧上传列表的 light0 快照(烘焙按它 frozen;null = 无灯)。渲染线程写、读。 */
+    private static volatile SpotlightData lastLight0;
+
+    public static SpotlightData lastLight0() { return lastLight0; }
+
+    static void noteLastLight0(java.util.List<SpotlightData> lights) {
+        lastLight0 = lights.isEmpty() ? null : lights.get(0);
+    }
 
     /** 消融探针胶水(09-01):!looktrace 激活时逐帧记录最近非自身 LivingEntity 的角度链路;
      *  09-01 晚兼作 MotionCapture 门控输入(布防时每帧喂位姿,会话开/关联动 LookTrace 门控模式)。 */

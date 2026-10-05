@@ -28,10 +28,10 @@ uniform float far;
 varying vec2 texcoord;
 
 #define TACLIGHT_TONEMAP     0      // 0=AgX(默认,2026-08-30) 1=ACES(旧,保留作 A/B)
-#define TACLIGHT_TONE_GAIN   3.0    // 色调映射前标定增益(显示参照输入 → EV 窗口置中)
+#define TACLIGHT_TONE_GAIN   1.6    // 色调映射前标定增益(2026-10-05 去灰:3.0 把全帧推进 AgX 高段+去饱和=整幅发灰发白)
 #define TACLIGHT_SATURATION  1.05   // 后置饱和(色调映射会压饱和,映射后补偿)
-#define TACLIGHT_BLOOM1_GAIN 0.18   // 一级辉光强度(colortex1,轻模糊;线性域)
-#define TACLIGHT_BLOOM2_GAIN 0.30   // 二级辉光强度(colortex2,大半径;线性域)
+#define TACLIGHT_BLOOM1_GAIN 0.12   // 一级辉光强度(2026-10-05 去灰:全屏叠辉光是雾感主源之一)
+#define TACLIGHT_BLOOM2_GAIN 0.18   // 二级辉光强度(2026-10-05 去灰:大半径模糊全屏铺开,0.30 太雾)
 #define TACLIGHT_SPLITTONE   0.35   // 0=关,1=默认;消融显示 1.0 抬饱和+蓝移(0.29/0.08),压到 0.35
 #define TACLIGHT_VIGNETTE    0.85   // 四角亮度(1=无暗角)
 #define TACLIGHT_GRAIN       0.025  // 胶片颗粒幅度

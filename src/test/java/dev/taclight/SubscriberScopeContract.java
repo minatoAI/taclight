@@ -80,7 +80,7 @@ public final class SubscriberScopeContract {
         check(!sites.isEmpty(), "扫到订阅站点(代码内,已屏蔽注释)");
         check(violations.isEmpty(),
                 "[★必红] 不存在\"嵌套类携带 @Mod.EventBusSubscriber\"(任何 bus);违反处=" + violations);
-        check(sites.size() >= 8, "订阅站点数 ≥8(顶层 7 + 顶层注册类 1);实际 " + sites.size());
+        check(sites.size() >= 7, "订阅站点数 ≥7(顶层 6 + 顶层注册类 1);实际 " + sites.size());
     }
 
     /** ② 有副作用的站点必须有标记;类内无日志者查**两条**边界标记。 */
@@ -98,8 +98,8 @@ public final class SubscriberScopeContract {
         }
         Path modbus = MAIN.resolve("java/dev/taclight/client/KeyBindingsModBus.java");
         String mb = Files.readString(modbus, StandardCharsets.UTF_8);
-        check(mb.contains("event.register(") && mb.contains("TacSnapshotKeys.SNAPSHOT"),
-                "顶层注册类用显式 event.register(...)(含快照键)");
+        check(mb.contains("event.register("),
+                "top-level registry uses explicit event.register for keys");
     }
 
     /** 注释与字符串替换为等长空白(索引不变)。 */

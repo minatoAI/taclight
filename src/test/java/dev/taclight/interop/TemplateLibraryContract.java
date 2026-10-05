@@ -18,7 +18,6 @@ public class TemplateLibraryContract {
         noPlaceholderResidue();
         inlineCoreThroughTemplate();
         paletteInjectionCoverage();
-        shadowDepthForwardCoverage();
         malformedRejected();
         missingFieldsRejected();
         missingResource();
@@ -215,20 +214,6 @@ public class TemplateLibraryContract {
         check(!full.contains("#define TACLIGHT_VOX_PAL"), "完整版无调色板宏残留");
     }
 
-    // S4a 自渲 depth 前向覆盖(2026-10-06,用户实测栅栏门无影/孔洞不透后补):
-    // 内置包 composite 早有 binding=9,前向(Complementary/gbuffers)一直丢弃它
-    // (slim 只白名单 binding=7+8)⇒注入包里 depth 静默回退体素。
-    // 本方法钉死前向三件套:prelude 开关 + binding=9 声明与采样函数 + surface 对 light0 覆盖。
-    private static void shadowDepthForwardCoverage() {
-        String fwd = TemplateLibrary.inlineCoreTextForward();
-        check(fwd.contains("const uint TACLIGHT_FLAG_SHADOW_DEPTH = 128u"),
-                "前向 prelude 含 depth 开关 bit7(未置位短路零行为变更)");
-        check(fwd.contains("layout(std430, binding = 9)")
-                        && fwd.contains("float taclight_shadowdepth_vis("),
-                "前向含 binding=9 声明与 depth 采样函数(与内置核逐式镜像)");
-        check(fwd.contains("taclight_shadowdepth_vis(fragWorld)"),
-                "前向 surface 对 light0 走 depth 查表(<0 回退体素)");
-    }
 
     private static void malformedRejected() {
         check(!TemplateLibrary.fromJson("not json at all {").isPresent(), "非 JSON = 拒绝");

@@ -150,19 +150,16 @@ public class HandheldGateContract {
         Path uploader = Path.of("src/main/java/dev/taclight/channel/ClientSpotlightUploader.java");
         Path events = Path.of("src/main/java/dev/taclight/client/ClientEvents.java");
         Path relay = Path.of("src/main/java/dev/taclight/client/DebugCommandRelay.java");
-        Path snapshot = Path.of("src/main/java/dev/taclight/client/DebugSnapshotter.java");
         Path item = Path.of("src/main/java/dev/taclight/item/FlashlightItemIris.java");
         Path state = Path.of("src/main/java/dev/taclight/client/ClientLightState.java");
         Path net = Path.of("src/main/java/dev/taclight/network/TacLightNetwork.java");
         check(Files.isRegularFile(uploader) && Files.isRegularFile(events) && Files.isRegularFile(relay)
-                        && Files.isRegularFile(snapshot) && Files.isRegularFile(item) && Files.isRegularFile(state)
                         && Files.isRegularFile(net),
                 "找到七个受影响源文件");
         if (!Files.isRegularFile(uploader)) return;
         String up = Files.readString(uploader, StandardCharsets.UTF_8);
         String ev = Files.readString(events, StandardCharsets.UTF_8);
         String rl = Files.readString(relay, StandardCharsets.UTF_8);
-        String sn = Files.readString(snapshot, StandardCharsets.UTF_8);
         String it = Files.readString(item, StandardCharsets.UTF_8);
         String cs = Files.readString(state, StandardCharsets.UTF_8);
         String nw = Files.readString(net, StandardCharsets.UTF_8);
@@ -185,7 +182,6 @@ public class HandheldGateContract {
         check(cs.contains("FlashlightItem.TAG_ON"), "接线③d:ClientLightState 留痕指向新真源(可追)");
         check(ev.contains("holdingFlashlight("), "接线④:L 键走同一判据");
         check(rl.contains("ClientEvents.holdingFlashlight(mc.player)"), "接线⑤:中继 !light 走同一判据");
-        check(sn.contains("\"handheldEffective\""), "接线⑥:快照暴露有效值(与 gunEffective 对称)");
         check(it.contains("ClientLightState.handheldEffective()"), "接线⑦:Iris 物品光源用同一口径");
     }
 

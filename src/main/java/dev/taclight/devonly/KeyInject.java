@@ -19,9 +19,9 @@ import java.util.List;
  *       <b>tick 路径</b> —— {@code Minecraft.handleKeybinds()} 读 {@code keyHotbarSlots[i].isDown()}
  *       与 {@code keyUse/keyAttack.consumeClick()/isDown()},移动键由 {@code KeyboardInput} 读
  *       {@code isDown()}。{@code path = "tick"}。</li>
- *   <li><b>{@link #TACLIGHT}({@code flashlight/gunlight/debug/diag/bench/snapshot} = L/M/K/N/B/F9)</b>:
+ *   <li><b>{@link #TACLIGHT}({@code flashlight/gunlight/debug/diag/bench} = L/M/K/N/B)</b>:
  *       消费端挂在 <b>{@code InputEvent.Key}</b>({@code ClientEvents.onKeyInput}、
- *       {@code TacSnapshotKeys.onKeyInput},都是 {@code while (mapping.consumeClick()) …})。
+  * consumption loops (each mapping uses its own consume path).
  *       {@code consumeClick()} 读的是 {@code clickCount},**只有真实按下路径才递增** ⇒
  *       注入必须走"能 set + click + fire {@code InputEvent.Key}"的那条路,只 {@code setDown}
  *       会**静默无效**。{@code path = "event"}。</li>
@@ -47,10 +47,10 @@ public final class KeyInject {
     };
 
     /** TacLight 自己的按键(InputEvent.Key 路径消费;名字 = 语义名,顺序同 {@link #TACLIGHT_EQUIV})。 */
-    public static final String[] TACLIGHT = {"flashlight", "gunlight", "debug", "diag", "bench", "snapshot"};
+    public static final String[] TACLIGHT = {"flashlight", "gunlight", "debug", "diag", "bench"};
 
     /** 与 {@link #TACLIGHT} 一一对应的程序化等价命令(顺序必须一致;由契约钉)。 */
-    public static final String[] TACLIGHT_EQUIV = {"!light", "!gun", "!neon", "!diag", "!bench", "!snap"};
+    public static final String[] TACLIGHT_EQUIV = {"!light", "!gun", "!neon", "!diag", "!bench"};
 
     /** 全部可注入名字(顺序 = {@code !key list} 输出顺序)。 */
     public static final String[] INJECTABLE = concat(VANILLA, TACLIGHT);

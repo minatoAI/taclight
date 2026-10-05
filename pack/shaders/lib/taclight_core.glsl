@@ -48,6 +48,8 @@
                                        // **它是"是否访问 binding=8 探针缓冲"的唯一闸门**:
                                        // 未置位 ⇒ 下方 `&&` 短路 ⇒ 探针缓冲完全不被访问
                                        // ⇒ 生产包里 binding=8 无需绑定、零风险。
+                                       // light0 的 vis 改走 binding=9 depth 查表;
+                                       // 未置位 ⇒ 下方 `&&` 短路 ⇒ binding=9 完全不被访问。
 
 // ---- 每灯 96B · 6×vec4(std430,与 Java writeLight 写序一致)----
 struct TacLightSpot {
@@ -515,7 +517,9 @@ float taclight_vox_transmit(vec3 worldA, vec3 worldB) {
                 taclight_vox_pal_union(slot, ulo, uhi);
                 vec2 un = taclight_vox_box_span(a, dir, tNext, tExit, cell, ulo, uhi);
                 if (un.x <= 1e8) {
-                    for (int b = 0; b < 8; b++) {
+                    // 2026-10-05 R56 对齐:与 ShapePalette.MAX_BOXES=16 同步(4 面栅栏=9 盒,
+                    // 旧 8 只测前 8 盒,第 9 盒漏测=孔洞假遮挡;前向桩已同改,两处一致)。
+                    for (int b = 0; b < 16; b++) {
                         if (b >= nBox) break;
                         int o = palBase + TACLIGHT_VOX_PAL_BOX0 + b * 6;
                         vec3 blo = vec3(voxPalBox[o], voxPalBox[o + 1], voxPalBox[o + 2]);
@@ -681,6 +685,7 @@ float taclight_occl_table_vis(uint lampIdx, vec3 relWorld) {
     float dHit = row[int(lampIdx)] * TACLIGHT_OCCL_DIST_SCALE;
     return taclight_occl_vis_from_hit(dHit, length(relWorld));
 }
+
 
 /** F3(2026-08-30):spec 项能量钳制。GGX 分布项(d)在低 roughness 下峰值可到
  *  10+,× intensity 6 → 镜面尖峰独占 ~2.0 辐射,与 diffuse/bloom/体积多链叠加

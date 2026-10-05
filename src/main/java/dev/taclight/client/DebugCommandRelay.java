@@ -142,16 +142,6 @@ public final class DebugCommandRelay {
             }
             return;
         }
-        if (line.equals("!snap") || line.startsWith("!snap ")) {
-            // 一键调试快照(2026-09-19 最小闭环):pose/灯参/tune 体素/renderdoc 状态落盘
-            // <gameDir>/debug-snapshots/<时间戳>/,与 F9 与 /taclight snap 同一入口。
-            // 精确匹配防吞其它 !s* 分支(!synth/!selflight/!scat/!shot/!sweep 互不前缀包含)。
-            String arg = line.length() > 5 ? line.substring(5).trim() : "";
-            java.nio.file.Path dir = DebugSnapshotter.saveSnapshot(arg.isEmpty() ? "relay" : ("relay:" + arg));
-            TacLightMod.LOGGER.info("[TacLight] RELAY snap -> {}",
-                    dir == null ? "FAILED" : dir.toString());
-            return;
-        }
         if (line.startsWith("!reload")) {
             // Iris.reload() = 重载键绑(J)的最终入口,从磁盘重解析+重编译整包。
             // 反射调用:oculus 是 runtimeOnly 可选依赖;Iris 为模组自有类,方法名不经 SRG 重映射。
@@ -1023,7 +1013,6 @@ public final class DebugCommandRelay {
                 case "debug": return KeyBindings.DEBUG_TOGGLE;
                 case "diag": return KeyBindings.DIAG_DUMP;
                 case "bench": return KeyBindings.BENCH;
-                case "snapshot": return TacSnapshotKeys.SNAPSHOT;
                 default:
                     int i = KeyInject.hotbarIndex(name);
                     return i >= 0 && i < mc.options.keyHotbarSlots.length ? mc.options.keyHotbarSlots[i] : null;

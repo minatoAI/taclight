@@ -95,6 +95,11 @@ public class ShaderCoreContract {
         check(style.contains("#include \"/lib/taclight_math.glsl\"") && !style.contains("float taclight_ign(vec2 p)"),
                 "style 经 include 复用 math(传递可见给 final),不再重复定义");
 
+        // ---- 边界 7b:调色板盒循环与 Java 上限同值(R56=16;旧 8 让 9 盒栅栏孔洞假遮挡) ----
+        check(core.contains("for (int b = 0; b < 16; b++)")
+                        && !core.contains("for (int b = 0; b < 8; b++)"),
+                "core 调色板盒循环 16 盒且无 8 盒残留(与 ShapePalette.MAX_BOXES 同步)");
+
         // ---- 边界 7:消费 pass 不残留灯循环本体 ----
         check(core.contains("taclight_soft_knee3(") && core.contains("L.cone.w"),
                 "surface 主循环消费 cone.w(!knee 经 SSBO 透传,0=恒等回退)");

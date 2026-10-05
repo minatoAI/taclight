@@ -48,9 +48,9 @@ public final class KeyInjectContract {
                 "未知名/大小写不符/hotbar.0/hotbar.10/hotbar 均不可注入(→ 报错列可选项,测试当负对照)");
         check(KeyInject.isVanilla("use") && KeyInject.isVanilla("hotbar.9") && !KeyInject.isVanilla("flashlight"),
                 "VANILLA 判定:原版 5 键 + hotbar.1..9");
-        check(KeyInject.isTacLightKey("flashlight") && KeyInject.isTacLightKey("snapshot")
-                        && !KeyInject.isTacLightKey("use"),
-                "TACLIGHT 判定:L/M/K/N/B/F9 六个语义名");
+        check(KeyInject.isTacLightKey("flashlight") && !KeyInject.isTacLightKey("use")
+                        && !KeyInject.isTacLightKey("snapshot"),
+                "TACLIGHT names are five switch keys; snapshot removed with F9");
         check(KeyInject.TACLIGHT.length == KeyInject.TACLIGHT_EQUIV.length,
                 "TACLIGHT 与 TACLIGHT_EQUIV 一一对应(长度 " + KeyInject.TACLIGHT.length + ")");
         boolean eqOk = true;
@@ -71,8 +71,7 @@ public final class KeyInjectContract {
                         && KeyInject.PATH_EVENT.equals(KeyInject.consumptionPath("gunlight"))
                         && KeyInject.PATH_EVENT.equals(KeyInject.consumptionPath("debug"))
                         && KeyInject.PATH_EVENT.equals(KeyInject.consumptionPath("diag"))
-                        && KeyInject.PATH_EVENT.equals(KeyInject.consumptionPath("bench"))
-                        && KeyInject.PATH_EVENT.equals(KeyInject.consumptionPath("snapshot")),
+                        && KeyInject.PATH_EVENT.equals(KeyInject.consumptionPath("bench")),
                 "TacLight 键 = event 路径(InputEvent.Key 里 consumeClick ⇒ 必须 set+click+fire 事件)");
         check(KeyInject.PATH_UNKNOWN.equals(KeyInject.consumptionPath("nope"))
                         && KeyInject.PATH_UNKNOWN.equals(KeyInject.consumptionPath(null)),
@@ -162,7 +161,7 @@ public final class KeyInjectContract {
                 "usage 串含 !key / list / clear / 名字样例");
         String unk = KeyInject.unknownName("bogus");
         check(unk.contains("bogus") && unk.contains("use") && unk.contains("hotbar.1")
-                        && unk.contains("flashlight") && unk.contains("snapshot"),
+                        && unk.contains("flashlight"),
                 "未知名报错必须点名 + 列出全部可选项(测试当负对照): " + unk);
 
         // ================= 8. 文本级:dev 中继接线(路径选择 + 无卡键 + 诊断) =================
@@ -204,7 +203,6 @@ public final class KeyInjectContract {
                 {"debug", "KeyBindings.DEBUG_TOGGLE"},
                 {"diag", "KeyBindings.DIAG_DUMP"},
                 {"bench", "KeyBindings.BENCH"},
-                {"snapshot", "TacSnapshotKeys.SNAPSHOT"},
         };
         for (String[] m : mappings) {
             check(relay.contains("case \"" + m[0] + "\": return " + m[1] + ";"),

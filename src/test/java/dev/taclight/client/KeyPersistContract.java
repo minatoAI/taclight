@@ -26,7 +26,6 @@ public final class KeyPersistContract {
     private static final String EVENTS = "src/main/java/dev/taclight/client/ClientEvents.java";
     private static final String PURE = "src/main/java/dev/taclight/client/KeyPersist.java";
     private static final String MODBUS_SRC = "src/main/java/dev/taclight/client/KeyBindingsModBus.java";
-    private static final String SNAPSHOT_SRC = "src/main/java/dev/taclight/client/TacSnapshotKeys.java";
     private static final List<String> OURS = List.of(
             "key.taclight.flashlight_toggle", "key.taclight.gunlight_toggle", "key.taclight.debug_toggle",
             "key.taclight.diag_dump", "key.taclight.bench");
@@ -107,16 +106,12 @@ public final class KeyPersistContract {
         String ev = Files.readString(Path.of(EVENTS), StandardCharsets.UTF_8);
         // (1) 注册搬进**顶层**类(task-32 v2);两个嵌套 MOD 订阅都不再存在
         String reg = Files.readString(Path.of(MODBUS_SRC), StandardCharsets.UTF_8);
-        String snap = Files.readString(Path.of(SNAPSHOT_SRC), StandardCharsets.UTF_8);
         check(reg.contains("Bus.MOD"), "顶层 KeyBindingsModBus 是 MOD 总线订阅类");
-        check(reg.contains("event.register(") && reg.contains("TacSnapshotKeys.SNAPSHOT"),
-                "顶层类同时注册五个 TacLight 键与快照键 SNAPSHOT(两个嵌套订阅的活儿都搬来了)");
+        check(reg.contains("event.register("),
+                "top-level KeyBindingsModBus registers keys with explicit event.register");
         check(reg.contains("keybind register:") && reg.contains("registered="),
                 "注册处理器自带可观测行 keybind register: registered=(task-34 的判据)");
         check(!ev.contains("Bus.MOD"), "[旧结构必红] ClientEvents 里不再有嵌套 MOD 总线订阅");
-        check(!snap.contains("Bus.MOD"),
-                "[旧结构必红] TacSnapshotKeys 里不再有嵌套 MOD 总线订阅(否则 F9 同样'没有可观测副作用')");
-        // (2) 应用点必须在**确定存活**的路径上:onClientTick 方法体内(作用域内检查)
         String tick = methodBody(ev, "public static void onClientTick(TickEvent.ClientTickEvent event)");
         check(tick != null, "取到 onClientTick 的方法体");
         check(tick != null && tick.contains("applySavedKeysOnceAtFirstTick()"),

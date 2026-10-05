@@ -1,5 +1,50 @@
 > 本文所述 commit id 为 2026-09-17 历史重写前的旧 id；映射见 `docs/COMMIT-ID-REMAP-2026-09-17.md`
 
+## 10-06 凌晨 S4a 结案+项目限北冻结(未 push)
+
+- 用户拍板:复杂方块在体素 DDA 路线下到头,Complementary 优先,内置包冻结。
+- S4a 结论:CPU 烘焙 frozen 永远跟不上移动灯(moved=1.86m 实钤+ageFrames 斜切+
+  半烘错影),depth 数学核/forward 注入/F9 诊断已通但产品零分;depth 封存待 S4b
+  (GPU 每帧,8968光辉里 sampler 墙未拆前做不出来);F9 纯快照不骚扰。
+- 栅栏洞黑定案:两套独立算法同黑⇒几何真挡(灯低于梁顶几釐米,
+  梁影蓋洞,底豁口见光);保守偏暗是设计取向(宁误挡不漏光),非 bug。
+- 责任:AI 带偏 S4a 验证循环(F9 ritual 转嫁成本),5 版本一夜毫了用户耐心。
+- 下一步:voxel 冻结现状;Complementary 亮度/观感对齐为唯一主线;枪灯跟随开关已交付(9260c51)。
+
+## 10-05 主核 16 盒对齐(未 push)
+
+- 用户实测木栅栏孔洞两边都不透。根因:R56 只改了 Java 上限与前向桩,主核 transmit 仍 b<8,9 盒栅栏第 9 盒漏测=孔洞假遮挡。不是版本错位,是真缺口。已改 16,ShaderCoreContract 加边界断言,全契约绿。
+- 待真机复测栅栏孔洞。
+
+## 10-05 调色板进注入双路径(未 push)
+
+- 结论:贴墙钳制是 Java 侧 SSBO 上游,注入早已吃到,零工作。调色板前向(Complementary) R21 已进,完整版(iterationT)随整核内联自带。
+- 缺口:R56 盒数 16 后前向仍只测 8 盒,栅栏类 9..16 盒在注入包假遮挡。已改 16,TemplateLibraryContract 加 6 项双路径断言,全契约绿。
+- 待真机:Complementary 下多面栅栏孔洞透光是否与内置包一致。
+
+## 10-05 去灰去雾(未 push)
+
+- 用户实测整幅发灰发白。根因:TONE_GAIN 3.0 把全帧推进 AgX 高段并去饱和,两级 bloom 全屏叠辉光。改为 1.6/0.12/0.18。包内无 LUT、无截图像素 baked,全程序化,可排除 baked 假设。
+- 待真机:灰雾是否消退、灯斑是否仍够亮。
+
+## 10-05 撤太阳光加洞穴保底(未 push)
+
+- 用户实测:太阳项无感,环境光太暗。taclight_sun.glsl 与 composite 接入全部回退(jar 内 0 残留)。
+- 新增 TACLIGHT_CAVE_FLOOR 0.030:无天空光处 albedo 等比保底,白天恒等。口径=无灯洞穴可读,对标原版无包。
+- 待真机:无灯洞穴是否深灰可读、白天是否无变化。
+
+## 10-05 内置包太阳光氛围(已回退)
+
+- 新增 pack/shaders/lib/taclight_sun.glsl(原创):太阳直射色温曲线加天空半球环境加天空辉光;composite 接入,无灯也生效,洞穴恒等。G-Buffer 与契约不动。
+- 待真机对比 Complementary:方向明暗、黄昏橙、月光蓝、太阳盘。
+
+## 10-05 内置包进JAR加自动切换加自动曝光(未 push)
+
+- 构建期 builtinPackZip 把 pack 打成固定名 zip 进 generated resources;clientSetup 里 BuiltinPackInstaller 首次启动解压到 shaderpacks/TacLight-Builtin,按 exposure 配置烘焙曝光,版本跟随 mod 版本刷新。
+- 新增 BuiltinPackRouter 纯判定:第三方包激活时内置定义上被禁用,照明责任切注入或降级;BuiltinPackContract 32 项离线全绿。
+- 自动曝光:安装器默认烘焙自适应开目标 0.16 上限 4.0;pack 源码默认 LOCK=1 不动,保 A/B 取证确定性。
+- 待真机 E2E,见 taclight-audit 实施记录 11。
+
 ## 09-25 上午(续 4) · P2 帧内数值探针 + ★"生效路径"陷阱(未 push)
 
 - **帧内数值探针(P2)**:把光照**项**的数值(`vis`/`atten`/`spot`/`ndl`)导出,而不是只看像素色。

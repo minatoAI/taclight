@@ -441,6 +441,7 @@ public class ClientEvents {
         // 本帧终值,且先于 Iris composite 执行;社区同型案例共识 = 每帧更新数据。
         dev.taclight.channel.ClientSpotlightUploader.onFrame();
         dev.taclight.channel.LightBuffer.rebindBase();
+        // (2026-10-06 预览版剥离:S4a depth 已删除,体素为唯一遮挡路径。)
         dev.taclight.channel.PerfStats.tickFrame();
         benchTickFrame();
     }
