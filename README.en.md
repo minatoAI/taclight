@@ -19,24 +19,27 @@ When used with an Iris/Oculus shader pack, the light enters the pack's own light
 - Multiplayer: other players see your light. The on/off state syncs with the entity, and remote light poses are rebuilt on the receiving client. No extra network packets.
 - Shader pack compatibility: lights are injected into the pack you already have at runtime. The mod does not redistribute modified shader packs.
 
-## Requirements
+## Tested with
 
-| Component | Version | Where | Required | Notes |
-|---|---|---|---|---|
-| Minecraft Forge | 1.20.1-47.1.3 (range `[47.1,48)`) | launcher | Required | Client and server |
-| TacLight | 0.11.3 | `mods/` | Required | This mod |
-| Oculus | 1.8.0 | `mods/` | Required on client | The Forge port of Iris. The light cone needs the shader pipeline; without it there is no cone |
-| Embeddium | 0.3.31 | `mods/` | Recommended | The Forge port of Sodium, a clear frame rate win |
-| Shader pack: Complementary Reimagined | r5.9 | `shaderpacks/` | Required | The main supported pack. The mod ships no pack, so without one there is no cone |
-| Shader pack: iterationT | 3.2.0 | `shaderpacks/` | Optional | A second supported template, pick either this or Complementary |
-| Timeless and Classics Zero (TaCZ) | 1.1.8-hotfix | `mods/` | Optional | Gun light integration. Without it everything works except the gun light |
-| Player Animator | 1.0.2-rc1+1.20 | `mods/` | Optional | Required by TaCZ for third-person animation. This mod has zero code references to it |
+This is the version combination the release was tested against. It is not a hard limit. Other versions will most likely work, they just were not tested. If you hit a problem, go back to this combination first.
 
-Three things worth stating plainly:
+| Component | Version | Where | Role |
+|---|---|---|---|
+| Minecraft Forge | 1.20.1-47.1.3 | launcher | Platform, client and server |
+| TacLight | 0.11.3 | `mods/` | This mod |
+| Oculus | 1.8.0 | `mods/` | The shader pipeline; the light cone needs it |
+| Embeddium | 0.3.31 | `mods/` | Frame rate |
+| Shader pack: Complementary Reimagined | r5.9 | `shaderpacks/` | What makes the cone visible; the main supported pack |
+| Shader pack: iterationT | 3.2.0 | `shaderpacks/` | A second supported template, pick either this or Complementary |
+| Timeless and Classics Zero (TaCZ) | 1.1.8-hotfix | `mods/` | Gun light integration |
+| Player Animator | 1.0.2-rc1+1.20 | `mods/` | Required by TaCZ for third-person animation |
 
-- **A shader pack is what makes the cone visible.** With the mod but no shader pack, the items and the toggles all work, but you will not see a cone or a beam. This mod does not bundle a shader pack; use one of the supported packs below.
+A few things worth stating plainly:
+
+- The mod itself only asks for Forge 1.20.1. Other Forge versions were not tested.
+- **A shader pack is what makes the cone visible.** This mod ships no pack. With the mod but no pack, the items and the toggles all work, but you will not see a cone or a beam.
 - **Do not patch or edit your shader pack.** The mod injects its own GLSL into your pack instance at runtime. You keep your own copy of the original pack, and the mod neither bundles nor distributes a copy of any third-party pack.
-- Injection templates exist for Complementary Reimagined r5.9 and iterationT 3.2.0. Other packs or other versions may not inject; the mod says so in chat when that happens.
+- Injection templates exist for Complementary Reimagined r5.9 and iterationT 3.2.0 only. Other packs or other versions may not inject; the mod says so in chat when that happens.
 
 ## Installation
 
