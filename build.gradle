@@ -156,6 +156,12 @@ dependencies {
 // jar 任务依赖它,产物打进 jar 根。SRG 行证据见任务内注释。
 tasks.register('generateRefmap') {
     group = 'taclight'
+    // 2026-10-05 修:本任务 inputs.file 指向 build/createSrgToMcp/output.srg,却没声明谁生成它
+    //   ⇒ **干净检出**上 `jar` / `build` 直接失败,只在"该文件早已存在"的开发机上能过。
+    //   RELEASE.md 一直写 `clean build`,而这条路径从未在干净树上验证过 —— 补上真依赖。
+    //   不用 optional/懒读绕开:缺 SRG 时 refmap 会静默写不出去,发布件丢 remap 是更坏的失败方式
+    //   (fail-loud 是本项目既有取向)。
+    dependsOn tasks.named('createSrgToMcp')
     def srg = file('build/createSrgToMcp/output.srg')
     def out = file("$buildDir/generated/refmap/taclight.refmap.json")
     inputs.file srg
