@@ -47,10 +47,10 @@ public final class KeyInject {
     };
 
     /** TacLight 自己的按键(InputEvent.Key 路径消费;名字 = 语义名,顺序同 {@link #TACLIGHT_EQUIV})。 */
-    public static final String[] TACLIGHT = {"flashlight", "gunlight", "debug", "diag", "bench"};
+    public static final String[] TACLIGHT = {"flashlight", "gunlight"};
 
     /** 与 {@link #TACLIGHT} 一一对应的程序化等价命令(顺序必须一致;由契约钉)。 */
-    public static final String[] TACLIGHT_EQUIV = {"!light", "!gun", "!neon", "!diag", "!bench"};
+    public static final String[] TACLIGHT_EQUIV = {"!light", "!gun"};
 
     /** 全部可注入名字(顺序 = {@code !key list} 输出顺序)。 */
     public static final String[] INJECTABLE = concat(VANILLA, TACLIGHT);

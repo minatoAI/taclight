@@ -109,8 +109,9 @@ public final class PerfStatsContract {
                 "dumpLight0 的 count= 从 GPU 头第 0 字回读,与上传写进去的是同一个数");
         check(lightbuf.contains("含") && lightbuf.contains("合成灯") && lightbuf.contains("不得互相校验"),
                 "LightBuffer 源码写明 count 口径 = 含合成灯、不得与 PERF lights 互校");
-        check(events.contains("| ssbo {} |") && events.contains("LightBuffer.dumpLight0()"),
-                "日志字段 `ssbo count=` 与生产者 dumpLight0 绑定(驱动 grep 的目标有定义)");
+        // (B2) 预览版移除诊断行(2026-10-06):ssbo count 日志字段随 dumpDiag 消失;count 口径断言(上两条)保留。
+        check(!events.contains("| ssbo {} |"),
+                "ClientEvents 不再打 ssbo count 诊断行(仅 env 门控探针保留 dumpLight0 回读)");
 
         // ---- (C) 轮预算字段真源在 harness 报告,不在 mod 侧(位置断言 + 双字段口径留档) ----
         // 2026-09-26 task-13:harness 侧改名为 roundBudgetCapSec(上限) + 新增 roundBudgetElapsedSec

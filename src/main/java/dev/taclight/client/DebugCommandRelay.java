@@ -34,7 +34,6 @@ import java.nio.file.StandardCopyOption;
  * "零 RELAY 行"是预期而非故障</b>(反回归断言见 {@code InteropPackagingContract})。
  * 理由:该通道是"任何本地程序可写、写了即驱动客户端命令"的无守卫写入口,
  * 与 modtest-mcp 令牌+审计的设计取向冲突;将来若要开放,只许放行只读子集
- * ({@code !interop}/{@code !diag} 类 status 查询)并另设开关/变体。</p>
  *
  * <p>2026-09-19 八旋钮晋升:{@code !bright/!dist/!atten/!knee/!beam/!scat/!beamcap/!cone} +
  * {@code !voxel} 另有一条正式路径 <b>{@code /taclight tune}</b>(服务端命令树,发布包可用,
@@ -56,15 +55,12 @@ import java.nio.file.StandardCopyOption;
  *       CMDS root children=68);服务端执行结果经聊天回显入 latest.log。</li>
  *   <li>{@code !reload} —— 触发客户端资源重载(Oculus 会在资源重载时连带重载光影包,
  *       旧项目 T0 判据④即以 Reloading Resource 计数验证)。</li>
- *   <li>{@code !diag} —— 与 N 键等价:一行结构化诊断入日志。</li>
- *   <li>{@code !bench} —— 与 B 键等价:3 秒帧率基准。</li>
  *   <li>{@code !back} —— 程序化关界面(2026-09-04:ESC 菜单挡帧以往只能手点关,
  *       违反程序化纪律;本命令=setScreen(null),与菜单“回到游戏”同入口)。</li>
-  *   <li>{@code !light} / {@code !neon} / {@code !gun} —— 手电 / 霓虹调试锥 / 枪灯开关
   *       (L/K 键的程序化等价;场景照明状态的唯一可靠控制通道)。
   *       <b>{@code !light}</b> 自 2026-09-26(task-14)起参数有明确语义:无参/{@code toggle} = 切换,
   *       <b>{@code on}/{@code off} = 置位且幂等</b>,{@code status} = 只读,未知名报 usage 且不改状态;
-  *       回执串直接写明"toggle 还是 set"({@code LightCommand.describe})。{@code !neon} 仍是纯切换。</li>
+  *   <li>{@code !light} / {@code !gun} —— 手电筒 / 枪灯开关。
   *   <li>{@code !bright} / {@code !dist} / {@code !atten} —— 手电三旋钮(2026-09-04,
   *       用户体感自助调参):绝对亮度 / 绝对照距 / 衰减系数 K。内存覆盖,重启清零;
   *       无参=status,{@code off}=回默认(用法见各命令日志回显)。</li>
@@ -291,10 +287,6 @@ public final class DebugCommandRelay {
             mc.stop();
             return;
         }
-        if (line.startsWith("!diag")) {
-            ClientEvents.dumpDiag();
-            return;
-        }
         if (line.startsWith("!interop")) {
             // 2026-09-19 interop 注入自助诊断(用户"光影包没生效"的唯一可操作通道):
             // 原始包名 → 归一化匹配键 → 包根 → 模板/通道 → 逐文件结果;另附模板清单与哈希对照。
@@ -333,10 +325,6 @@ public final class DebugCommandRelay {
             } catch (Throwable t) {
                 TacLightMod.LOGGER.warn("[TacLight] RELAY lan failed: {}", t.toString());
             }
-            return;
-        }
-        if (line.startsWith("!bench")) {
-            ClientEvents.startBench();
             return;
         }
         if (line.equals("!perf") || line.startsWith("!perf ")) {
@@ -400,7 +388,7 @@ public final class DebugCommandRelay {
                 return;
             }
             // 持物门对齐开灯键(2026-09-25):未持手电筒且非霓虹调试时不改状态,回显原因(不假成功)。
-            if (!ClientEvents.holdingFlashlight(mc.player) && !ClientLightState.debugMode()) {
+            if (!ClientEvents.holdingFlashlight(mc.player)) {
                 TacLightMod.LOGGER.info("[TacLight] RELAY light -> ignored (not holding flashlight)");
                 return;
             }
@@ -434,12 +422,6 @@ public final class DebugCommandRelay {
             }
             mc.options.hideGui = HudCommand.targetHideGui(act);
             TacLightMod.LOGGER.info("[TacLight] RELAY {}", HudCommand.describe(mc.options.hideGui));
-            return;
-        }
-        if (line.startsWith("!neon")) {
-            // 说明:!neon(K 键的等价通道)仍是**纯切换**(无参数)；要置位请用两次或先 !diag 看状态。
-            ClientLightState.toggleDebug();
-            TacLightMod.LOGGER.info("[TacLight] RELAY neon(debug cone) toggle -> {}", ClientLightState.debugMode());
             return;
         }
         if (line.startsWith("!lv")) {
@@ -1010,9 +992,6 @@ public final class DebugCommandRelay {
                 case "advancements": return mc.options.keyAdvancements;
                 case "flashlight": return KeyBindings.FLASHLIGHT_TOGGLE;
                 case "gunlight": return KeyBindings.GUNLIGHT_TOGGLE;
-                case "debug": return KeyBindings.DEBUG_TOGGLE;
-                case "diag": return KeyBindings.DIAG_DUMP;
-                case "bench": return KeyBindings.BENCH;
                 default:
                     int i = KeyInject.hotbarIndex(name);
                     return i >= 0 && i < mc.options.keyHotbarSlots.length ? mc.options.keyHotbarSlots[i] : null;
@@ -1025,7 +1004,6 @@ public final class DebugCommandRelay {
                 switch (name) {
                     case "flashlight": return "flash=" + ClientLightState.isOn();
                     case "gunlight": return "gun=" + ClientLightState.gunLightEffective();
-                    case "debug": return "neon=" + ClientLightState.debugMode();
                     default: return null;
                 }
             } catch (Throwable t) {

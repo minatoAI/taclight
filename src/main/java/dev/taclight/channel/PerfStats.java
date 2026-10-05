@@ -128,7 +128,7 @@ public final class PerfStats {
         return "usage: !perf start [2..60] | stop | status | reset";
     }
 
-    /** 每渲染帧调用(与 benchTickFrame 同点)。记录帧间隔;到 deadline 自动收尾打日志。 */
+    /** 每渲染帧调用(渲染帧调用点)。记录帧间隔;到 deadline 自动收尾打日志。 */
     public static void tickFrame() {
         long now = System.nanoTime();
         String auto = null;
@@ -262,7 +262,7 @@ public final class PerfStats {
         return sb.toString();
     }
 
-    /** worstFrac 比例最慢帧的调和平均(1% low 惯例;与 ClientEvents.bench 同式)。 */
+    /** worstFrac 比例最慢帧的调和平均(1% low 惯例)。 */
     static double percentileFps(double[] sortedAsc, double worstFrac) {
         int n = Math.max(1, (int) Math.ceil(sortedAsc.length * worstFrac));
         double sum = 0;

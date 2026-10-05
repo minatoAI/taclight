@@ -159,7 +159,7 @@ public final class ClientSpotlightUploader {
             }
         }
         collectRemoteLights(mc, eye, cfg, lights, slotKeys);
-        int extraFlags = ClientLightState.debugMode() ? SpotlightBufferLayout.FLAG_DEBUG : 0;
+        int extraFlags = 0;
         if (LightTuneOverride.beamOnly()) extraFlags |= SpotlightBufferLayout.FLAG_BEAM_ONLY;
         // 体素遮挡栅格(09-01 深夜④ DDA):墙后漏光立项,与灯数据同缓冲上传;
         // 禁用/无灯 → null,GLSL 逐光线回退屏幕空间 SSO。
@@ -210,7 +210,6 @@ public final class ClientSpotlightUploader {
             }
         }
         lookTraceTick(mc);
-        dumpDiagOnce();
     }
 
     /** Monotonic render-hook frame number used by all C/L/R/P/S/F/D rows. */
@@ -637,19 +636,6 @@ public final class ClientSpotlightUploader {
                 dir.x, dir.y, dir.z, cfg, intensityMult);
     }
 
-    private static boolean diagDumped;
-
-    /** 诊断:打印相机与灯参数(确认 Java 侧上传值)。 */
-    private static void dumpDiagOnce() {
-        if (diagDumped) return;
-        diagDumped = true;
-        if (!"1".equals(System.getenv("TACLIGHT_PROBE"))) return;
-        var cam = Minecraft.getInstance().gameRenderer.getMainCamera();
-        var l = cam.getLookVector();
-        dev.taclight.TacLightMod.LOGGER.info("[TacLight] LIGHT0 eye=({},{},{}) dir=({},{},{}) r={} cos=({},{},{}) i={}",
-            cam.getPosition().x, cam.getPosition().y, cam.getPosition().z,
-            l.x(), l.y(), l.z(), radius(), cosOuter(), intensity(), intensity());
-    }
 
     private static float radius() { return dev.taclight.config.TacLightConfig.RADIUS.get().floatValue(); }
     private static float cosOuter() { return dev.taclight.config.TacLightConfig.cosDeg(dev.taclight.config.TacLightConfig.CONE_OUTER_DEG.get()); }

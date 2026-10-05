@@ -16,7 +16,6 @@ public final class ClientLightState {
      * 现在与枪灯同构:开关偏好 × 持物门,并且"离手"会**自动关**。</p>
      */
     private static volatile boolean handheldProbeOn = false;
-    private static boolean debugMode = false;
     /** 自身灯运行时覆写(null=跟随配置 SELF_LIGHT_ENABLED;!selflight 可翻转)。 */
     private static volatile Boolean selfLightOverride = null;
 
@@ -28,7 +27,6 @@ public final class ClientLightState {
      */
     public static boolean isOn() { return handheldOn; }
     /** 强制开启(调试模式自动开灯时用)。 */
-    public static void forceHandheldOn() { handheldOn = true; }
     public static void toggle() { handheldOn = !handheldOn; }
     /** 服务端真源回写(S2C SyncLightS2C;命令改灯时本人客户端跟随)。 */
     public static void setHandheld(boolean on) { handheldOn = on; }
@@ -42,10 +40,9 @@ public final class ClientLightState {
     /**
      * 有效手持灯 = 开关 × (持物门 ∪ 霓虹调试旁路)。
      *
-     * <p>霓虹(K / {@code !neon})**故意豁免**持物门:它的用途是"证明 SSBO 通道可见",
      * 与手里拿什么无关(否则调试模式会因未持手电筒而失效)。</p>
      */
-    public static boolean handheldEffective() { return effective(handheldOn, handheldProbeOn, debugMode); }
+    public static boolean handheldEffective() { return effective(handheldOn, handheldProbeOn, false); }
 
     /**
      * 纯函数(离线契约钉死):开关 × (门 ∪ 调试旁路)。
@@ -121,8 +118,4 @@ public final class ClientLightState {
         return next;
     }
 
-    /** 霓虹调试模式(K 键):GLSL 输出纯色锥形光,与内置手电一眼区分。 */
-    public static boolean debugMode() { return debugMode; }
-    public static void toggleDebug() { debugMode = !debugMode; }
-    public static void setDebug(boolean on) { debugMode = on; }
 }

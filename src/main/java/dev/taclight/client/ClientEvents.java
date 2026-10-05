@@ -52,7 +52,6 @@ public class ClientEvents {
     private static boolean probeConfirmed;
     private static int diagTick;
     private static ShaderPackDiagLogic.Status lastDiagStatus;
-    private static boolean diagAutoApplied;
     private static int boardTick;
     private static final String DERIVED_PACK = "iterationT 3.2.0 (taclight)";
 
@@ -100,9 +99,6 @@ public class ClientEvents {
                 java.util.Map<String, net.minecraft.client.KeyMapping> ours = new java.util.LinkedHashMap<>();
                 ours.put("key.taclight.flashlight_toggle", KeyBindings.FLASHLIGHT_TOGGLE);
                 ours.put("key.taclight.gunlight_toggle", KeyBindings.GUNLIGHT_TOGGLE);
-                ours.put("key.taclight.debug_toggle", KeyBindings.DEBUG_TOGGLE);
-                ours.put("key.taclight.diag_dump", KeyBindings.DIAG_DUMP);
-                ours.put("key.taclight.bench", KeyBindings.BENCH);
                 String before = describeKeys(ours);
                 java.nio.file.Path file = net.minecraftforge.fml.loading.FMLPaths.GAMEDIR.get()
                         .resolve("options.txt");
@@ -141,7 +137,7 @@ public class ClientEvents {
             }
         }
 
-        /** 把 5 个映射的当前键压成一行(诊断用;键名去掉 {@code key.taclight.} 前缀)。 */
+        /** 把映射的当前键压成一行(诊断用;键名去掉 {@code key.taclight.} 前缀)。 */
         private static String describeKeys(java.util.Map<String, net.minecraft.client.KeyMapping> ours) {
             StringBuilder sb = new StringBuilder();
             for (java.util.Map.Entry<String, net.minecraft.client.KeyMapping> e : ours.entrySet()) {
@@ -159,7 +155,7 @@ public class ClientEvents {
         while (KeyBindings.FLASHLIGHT_TOGGLE.consumeClick()) {
             // 持物门(2026-09-25 用户设计):①先看手里是不是拿着手电筒 ②再看开关。
             // 未持有且不在霓虹调试时**不改状态**,只给可操作提示(避免"关了但看着还亮"的假成功)。
-            if (!holdingFlashlight(Minecraft.getInstance().player) && !ClientLightState.debugMode()) {
+            if (!holdingFlashlight(Minecraft.getInstance().player)) {
                 Minecraft mcL = Minecraft.getInstance();
                 if (mcL.player != null) {
                     // 键名不写死:从 KeyMapping 现取(2026-09-26 task-16 默认键由 L 改 J,
@@ -172,7 +168,7 @@ public class ClientEvents {
                 continue;
             }
             // 2026-10-04:开关写进**手上那支电筒自己的 NBT**(旧版写全局 static)。
-            // 未手持(仅霓虹调试可到这)时保留旧行为:翻全局偏好,让调试能点灯。
+            // 未手持时保留旧行为:翻全局偏好。
             net.minecraft.world.item.ItemStack heldFlash =
                     dev.taclight.item.FlashlightItem.heldStack(Minecraft.getInstance().player);
             boolean now;
@@ -218,27 +214,6 @@ public class ClientEvents {
             dev.taclight.network.TacLightNetwork.sendSetLight(ClientLightState.handheldEffective(), eff);
             TacLightMod.LOGGER.info("[TacLight] gun light {} (key, per-gun tag, effective={})", next ? "ON" : "OFF", eff ? "ON" : "OFF");
         }
-        while (KeyBindings.DEBUG_TOGGLE.consumeClick()) {
-            ClientLightState.toggleDebug();
-            boolean dbg = ClientLightState.debugMode();
-            boolean autoOn = false;
-            if (dbg && !ClientLightState.isOn()) {
-                ClientLightState.forceHandheldOn();
-                autoOn = true;
-            }
-            TacLightMod.LOGGER.info("[TacLight] debug neon mode {}{}", dbg ? "ON" : "OFF", autoOn ? " (auto-ON flashlight)" : "");
-            Minecraft mc = Minecraft.getInstance();
-            if (mc.player != null) {
-                mc.player.displayClientMessage(Component.literal("[TacLight] 霓虹调试 "
-                        + (dbg ? "ON —— 应看到绿色锥形光(=我们的SSBO通道)" : "OFF") + (autoOn ? "(手电筒已自动开启)" : "")), false);
-            }
-        }
-        while (KeyBindings.DIAG_DUMP.consumeClick()) {
-            dumpDiag();
-        }
-        while (KeyBindings.BENCH.consumeClick()) {
-            startBench();
-        }
     }
 
     /**
@@ -256,120 +231,7 @@ public class ClientEvents {
     }
 
     /** N 键:一行结构化诊断(调试自动化 grep 用;字段顺序=契约,tools/session 依赖;新增字段只追加尾部)。 */
-    static void dumpDiag() {
-        Minecraft mc = Minecraft.getInstance();
-        if (mc.player == null) { TacLightMod.LOGGER.info("[TacLight] DIAG no-world"); return; }
-        var cam = mc.gameRenderer.getMainCamera();
-        var p = cam.getPosition();
-        // 客户端命令树取证(计划文档坑位 9:P0 发现聊天框命令全被客户端预览拒绝,疑树为空)
-        String cmdtree = "no-conn";
-        if (mc.getConnection() != null) {
-            var root = mc.getConnection().getCommands().getRoot();
-            cmdtree = root.getChildren().size() + " taclight=" + (root.getChild("taclight") != null);
-        }
-        TacLightMod.LOGGER.info("[TacLight] DIAG {} | cam=({}) yRot={} xRot={} flash={} neon={} pack={}({}) | ssbo {} | cmdtree {}",
-                dev.taclight.TacLightMod.VERSION,
-                String.format("%.2f,%.2f,%.2f", p.x, p.y, p.z),
-                String.format("%.1f", mc.player.getYRot()), String.format("%.1f", mc.player.getXRot()),
-                ClientLightState.isOn(), ClientLightState.debugMode(),
-                ShaderPackDiag.activeStatus(), ShaderPackDiag.activePackName(),
-                dev.taclight.channel.LightBuffer.dumpLight0(),
-                cmdtree);
-        // 08-31 远程同步探针:读侧(syncReady/accessor id/各玩家标志)一行一玩家
-        if (mc.level != null) {
-            TacLightMod.LOGGER.info("[TacLight] DIAG-REMOTE syncReady={} accIds=(flash={},gun={})",
-                    dev.taclight.sync.PlayerLightAccess.syncReady,
-                    dev.taclight.sync.PlayerLightAccess.FLASHLIGHT.getId(),
-                    dev.taclight.sync.PlayerLightAccess.GUNLIGHT.getId());
-            // 里程碑①排障插桩(2026-09-02):白名单匹配的决定性证据
-            try {
-                var ak47 = new net.minecraft.resources.ResourceLocation("tacz", "ak47");
-                var hk = new net.minecraft.resources.ResourceLocation("tacz", "hk416d");
-                var att = new net.minecraft.resources.ResourceLocation("taclight", "gun_light");
-                var prov = (com.tacz.guns.resource.ICommonResourceProvider)
-                        com.tacz.guns.resource.CommonAssetsManager.get();
-                var tagsAk = prov.getAllowAttachmentTags(ak47);
-                var tagsHk = prov.getAllowAttachmentTags(hk);
-                TacLightMod.LOGGER.info(
-                        "[TacLight] DIAG-ALLOW ak47tags={} hk416dtags={} matchAk={} matchHk={}",
-                        tagsAk == null ? "null" : tagsAk.size(),
-                        tagsHk == null ? "null" : tagsHk.size(),
-                        com.tacz.guns.util.AllowAttachmentTagMatcher.match(ak47, att),
-                        com.tacz.guns.util.AllowAttachmentTagMatcher.match(hk, att));
-            } catch (Throwable t) {
-                TacLightMod.LOGGER.info("[TacLight] DIAG-ALLOW error: {}", t.toString());
-            }
-            for (var pl : mc.level.players()) {
-                TacLightMod.LOGGER.info("[TacLight] DIAG-REMOTE player={} self={} flash={} gun={} pos=({})",
-                        pl.getGameProfile().getName(), pl == mc.player,
-                        dev.taclight.sync.PlayerLightAccess.flashlight(pl),
-                        dev.taclight.sync.PlayerLightAccess.gunLight(pl),
-                        String.format("%.1f,%.1f,%.1f", pl.getX(), pl.getY(), pl.getZ()));
-                // 里程碑②:第三人称枪口捕获状态;09-02 屏外连续性:直接读上传器解析
-                // 摘要(单一真源,含 state/weight/age/模式/原样读数;诊断只读不消费)。
-                if (pl != mc.player && dev.taclight.sync.PlayerLightAccess.gunLight(pl)) {
-                    var plLook = pl.getLookAngle();
-                    String probe = dev.taclight.channel.ClientSpotlightUploader.TP_PROBE.get(pl.getId());
-                    if (probe != null) {
-                        TacLightMod.LOGGER.info("[TacLight] DIAG-TP player={} look=({}) {} tpCount={}",
-                                pl.getGameProfile().getName(),
-                                String.format("%.3f,%.3f,%.3f", plLook.x, plLook.y, plLook.z),
-                                probe,
-                                dev.taclight.client.MuzzlePoseCapture.tpCapturedCount());
-                    } else {
-                        TacLightMod.LOGGER.info("[TacLight] DIAG-TP player={} capture=never tpCount={}",
-                                pl.getGameProfile().getName(),
-                                dev.taclight.client.MuzzlePoseCapture.tpCapturedCount());
-                    }
-                }
-            }
-        }
-    }
 
-    // ---- B 键:3 秒帧率基准(帧间 nanoTime 差;采样在渲染线程,开销为零) ----
-    private static boolean benchActive;
-    private static long benchStartNanos;
-    private static long benchLastFrameNanos;
-    private static final java.util.List<Long> BENCH_SAMPLES = new java.util.ArrayList<>();
-    private static final long BENCH_DURATION_NANOS = 3_000_000_000L;
-
-    static void startBench() {
-        BENCH_SAMPLES.clear();
-        benchStartNanos = System.nanoTime();
-        benchLastFrameNanos = 0;
-        benchActive = true;
-        TacLightMod.LOGGER.info("[TacLight] BENCH start (3s)");
-    }
-
-    private static void benchTickFrame() {
-        if (!benchActive) return;
-        long now = System.nanoTime();
-        if (benchLastFrameNanos > 0) BENCH_SAMPLES.add(now - benchLastFrameNanos);
-        benchLastFrameNanos = now;
-        if (now - benchStartNanos < BENCH_DURATION_NANOS) return;
-        benchActive = false;
-        if (BENCH_SAMPLES.isEmpty()) { TacLightMod.LOGGER.info("[TacLight] BENCH no-samples"); return; }
-        double[] sorted = new double[BENCH_SAMPLES.size()];
-        double total = 0;
-        for (int i = 0; i < sorted.length; i++) {
-            sorted[i] = BENCH_SAMPLES.get(i) / 1e9;
-            total += sorted[i];
-        }
-        java.util.Arrays.sort(sorted); // 升序:尾部=最慢帧
-        double avg = sorted.length / total;
-        double p1Low = percentileFps(sorted, 0.01);
-        double min = 1.0 / sorted[sorted.length - 1];
-        TacLightMod.LOGGER.info("[TacLight] BENCH frames={} avgFPS={} onePctLow={} minFPS={}",
-                sorted.length, String.format("%.1f", avg), String.format("%.1f", p1Low), String.format("%.1f", min));
-    }
-
-    /** worstFrac 比例的最慢帧的调和平均(1% low 惯例)。sorted 升序帧时长。 */
-    private static double percentileFps(double[] sortedAsc, double worstFrac) {
-        int n = Math.max(1, (int) Math.ceil(sortedAsc.length * worstFrac));
-        double sum = 0;
-        for (int i = 0; i < n; i++) sum += sortedAsc[sortedAsc.length - 1 - i];
-        return n / sum;
-    }
 
 
     /** 每 5 秒检查活动光影包;状态变化时聊天+日志提示(选错包是 90% 的问题)。 */
@@ -443,7 +305,6 @@ public class ClientEvents {
         dev.taclight.channel.LightBuffer.rebindBase();
         // (2026-10-06 预览版剥离:S4a depth 已删除,体素为唯一遮挡路径。)
         dev.taclight.channel.PerfStats.tickFrame();
-        benchTickFrame();
     }
 
     @SubscribeEvent
@@ -481,11 +342,6 @@ public class ClientEvents {
             }
         }
 
-        if (!diagAutoApplied && "1".equals(System.getenv("TACLIGHT_DIAG"))) {
-            diagAutoApplied = true;
-            ClientLightState.setDebug(true);
-            TacLightMod.LOGGER.info("[TacLight] DIAG auto: debug neon ON at login");
-        }
         // 手持灯持物门 + **每支手电筒自己的开关**(2026-10-04 用户定案):
         //   开关状态存在**物品自己的 NBT**里(FlashlightItem.TAG_ON),不在玩家身上。
         //   每 tick 从"手上那支电筒"读出来镜像进 ClientLightState ——
@@ -493,15 +349,12 @@ public class ClientEvents {
         //   ★ 取代旧设计的两条:① 全局 static 开关;② "离手自动关"(autoClear)把开关清掉
         //   ⇒ 用户实测"切走再切回来还得再开一次"。现在切走只是不亮(持物门),
         //   **开关偏好留在物品上**,切回来即复。
-        //   霓虹调试期间不镜像:调试要能自己把灯点着(forceHandheldOn),否则手里没电筒就灭。
         net.minecraft.world.item.ItemStack heldFlash =
                 dev.taclight.item.FlashlightItem.heldStack(mc.player);
         boolean holdingNow = !heldFlash.isEmpty();
         ClientLightState.setHandheldProbe(holdingNow);
-        if (!ClientLightState.debugMode()) {
             ClientLightState.setHandheld(holdingNow
                     && dev.taclight.item.FlashlightItem.isOn(heldFlash));
-        }
 
         GunLaserReader.Status status = GunLaserReader.Status.NONE;
         String detail = "no-tacz";
@@ -532,7 +385,7 @@ public class ClientEvents {
         if ("1".equals(System.getenv("TACLIGHT_PROBE")) && ++boardTick % 60 == 0) {
             TacLightMod.LOGGER.info("[TacLight] BOARD pack={} debug={} binding7={} reserved=0x{}",
                     dev.taclight.client.ShaderPackDiag.activeStatus(),
-                    ClientLightState.debugMode(),
+                    false,
                     dev.taclight.channel.LightBuffer.binding7(),
                     Integer.toHexString(dev.taclight.channel.LightBuffer.readReserved()));
         }
