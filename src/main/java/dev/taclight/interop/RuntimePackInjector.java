@@ -9,15 +9,14 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import dev.taclight.TacLightMod;
-import net.minecraft.network.chat.Component;
 import net.minecraftforge.fml.loading.FMLPaths;
 
 /**
  * 运行时注入编排(mixin 调用入口,方案C 里程碑2,计划文档 §3)。
  *
  * <p>流程:patchComposite/patchSodium/patchVanilla 的每个程序源文本流经 {@link #patchSource(String)};
- * 首次调用惰性解析(oculus.properties 包名 → 包根 → 模板候选 → 哈希快速通道),按包名缓存;
- * 模板不匹配 / 解析失败 = 原文返回(零注入)。不支持包做提示(聊天栏+日志)。
+ * 首次调用惰性解析(oculus.properties 包名 → 包根 → 候选模板 → 哈希快速通道),按包名缓存;
+ * 模板不匹配 / 解析失败 = 原文返回(零注入)。
  * patchComposite 仅在管线(重)构建时被调用,非每帧;oculus.properties 每次调用
  * 重新读取一次(几十次小文件读/reload,可忽略),保证换包/改配置后正确重解析。</p>
  *
@@ -37,20 +36,28 @@ import net.minecraftforge.fml.loading.FMLPaths;
  *       —— 锚点不中 = 零注入(不给模糊匹配留口子)。</li>
  *   <li><b>失败可操作</b>:报"哪个文件、哪个算子、试过哪些锚点";{@code !interop} 命令
  *       ({@link #statusReport()})输出原始名→归一化键→包根→模板→逐文件结果。</li>
- *   <li><b>提示时机</b>:首次 + 每次 reload 各一次(2s 去抖;同一轮管线构建内的多次调用只提示一次)。</li>
  *   <li><b>F5</b>:指纹键改为<b>模板自己声明的键</b>({@code t.packHash.keySet()}),
  *       不再用固定 5 文件清单 —— 旧清单含 Complementary 根本没有的 {@code shaders/composite.fsh},
  *       谁照着填进 packHash 就永远匹配不上。</li>
  * </ol>
+ *
+ * <p><b>2026-10-06 名字闸门降级(用户 e2e 实测:同一份包、只换了文件名就零注入)</b>:</p>
+ * <p>实测 {@code ComplementaryReimagined_r5.9.3(1).zip}(浏览器重复下载自动加的后缀)与
+ * {@code ComplementaryReimagined_r5.9.3.zip} <b>sha256 完全相同</b>,但旧码在
+ * {@code matchesPackName} 不命中时<b>直接返回"无候选模板"</b> ⇒ 内容闸门(哈希/锚点)从未被咨询
+ * ⇒ 零注入,并劝用户去选 {@code iterationT 3.2.0 (taclight)}(而发布 jar 不含任何光影包)。
+ * 名字匹配是<b>白名单</b>,文件名却由用户/浏览器决定 ⇒ <b>名字降级为排序提示</b>
+ * ({@link PackFingerprint#candidateOrder}):全部模板都进内容闸门,谁的内容逐字命中谁生效。
+ * 单包解析成本 = 每模板读几个声明文件(一次,按包名缓存),可忽略。</p>
+ *
+ * <p><b>用户可见提示的归属(2026-10-06)</b>:本类只写日志、不再发聊天栏提示 —— 聊天栏由
+ * {@code ClientEvents.checkShaderPackDiag}(每 5s 轮询状态变化)统一负责,避免同一次换包
+ * 收到两条口径不同的消息(实测:20:51:47 "暂不支持注入" + 20:51:48 "无 TacLight 注入")。</p>
  */
 public final class RuntimePackInjector {
-    /** 提示去抖:同一轮管线构建内 patchSource 会按程序源调用多次(ms 级),reload 间隔远大于此。 */
-    private static final long ANNOUNCE_DEBOUNCE_MS = 2000L;
 
-    /** 缓存:原始包名 → 解析结果(含"无模板"的失败原因)。 */
+    /** 缓存:原始包名 → 解析结果(含包根缺失等原因)。 */
     private static final Map<String, Resolution> RESOLVED = new ConcurrentHashMap<>();
-    /** 每包最近一次提示时间(reload 去抖)。 */
-    private static final Map<String, Long> LAST_ANNOUNCE = new ConcurrentHashMap<>();
 
     /** {@code !interop} 命令读的状态快照(不可变字符串,渲染线程/命令线程皆可读)。 */
     private static volatile String status = "(尚未解析:没有 shader 程序源流经 patchSource)";
@@ -79,22 +86,14 @@ public final class RuntimePackInjector {
 
     private RuntimePackInjector() {}
 
-    /** 一次解析的结论(除 fileOutcomes 外不可变)。 */
-    private static final class Resolution {
-        final String rawName;
-        final String matchKey;
-        final String root;
-        final TemplateLibrary.Template template; // null = 无候选模板
-        final boolean fastPath;                  // true = 名字+哈希快速通道
-        final boolean knownGood;                 // true = 已知良好清单命中(锚点验证过;仍走锚点闸门)
-        final String detail;                     // 哈希对照 / 失败原因
-        volatile String fileOutcomes = "(尚未有程序源流过)";
+    /** 一个候选模板 + 它的匹配依据(哈希快速通道 / 已知良好清单 / 内容 best-effort)。 */
+    private static final class Candidate {
+        final TemplateLibrary.Template template;
+        final boolean fastPath;   // true = 模板声明的哈希键全中
+        final boolean knownGood;  // true = 已知良好清单命中(锚点验证过;仍走锚点闸门)
+        final String detail;      // 哈希对照 / 漂移说明
 
-        Resolution(String rawName, String matchKey, String root, TemplateLibrary.Template template,
-                   boolean fastPath, boolean knownGood, String detail) {
-            this.rawName = rawName;
-            this.matchKey = matchKey;
-            this.root = root;
+        Candidate(TemplateLibrary.Template template, boolean fastPath, boolean knownGood, String detail) {
             this.template = template;
             this.fastPath = fastPath;
             this.knownGood = knownGood;
@@ -103,7 +102,37 @@ public final class RuntimePackInjector {
 
         String channel() {
             if (fastPath) return "fast:name+hash";
-            return knownGood ? "known-good:anchors" : "best-effort:hash-drift";
+            return knownGood ? "known-good:anchors" : "best-effort:anchors";
+        }
+    }
+
+    /** 一次解析的结论(除可变诊断字段外不可变)。 */
+    private static final class Resolution {
+        final String rawName;
+        final String matchKey;
+        final String root;
+        /** 候选 = <b>模板库全量</b>,按"名字命中优先"排序(名字只排序,不筛选)。 */
+        final List<Candidate> candidates;
+        /** 候选为空 / 包根缺失时的原因(诊断文案)。 */
+        final String reason;
+        /** 诊断用:哈希全中的候选,否则第一个候选;可空。 */
+        final Candidate probe;
+        /** 名字命中的候选数(仅日志用)。 */
+        final int namedCount;
+        volatile Candidate hit;       // 首个注入成功的候选
+        volatile boolean recognized;  // 内容层面认出来了(hash 全中 / selector 命中 / 注入成功)
+        volatile boolean loggedNoHit; // "全候选未命中"日志只打一次
+        volatile String fileOutcomes = "(尚未有程序源流过)";
+
+        Resolution(String rawName, String matchKey, String root, List<Candidate> candidates,
+                   String reason, Candidate probe, int namedCount) {
+            this.rawName = rawName;
+            this.matchKey = matchKey;
+            this.root = root;
+            this.candidates = candidates;
+            this.reason = reason;
+            this.probe = probe;
+            this.namedCount = namedCount;
         }
     }
 
@@ -119,31 +148,63 @@ public final class RuntimePackInjector {
 
     private static String patchSourceInner(String sourceText) {
         if (sourceText == null || sourceText.isEmpty()) return sourceText;
+        // 内容优先幂等(2026-10-06):源文本已含 marker = 自研/派生包,或同一轮重复流过 ⇒
+        // 原样返回。放在模板尝试之前:既省掉无谓扫描,也让"派生包不再被注入一次"改由内容保证,
+        // 而不是靠名字不命中(名字已不再是否决权)。
+        if (sourceText.contains(PatchExecutor.MARKER)) {
+            Resolution cached = RESOLVED.get(currentPackName());
+            if (cached != null) {
+                cached.recognized = true;
+                cached.fileOutcomes = "(源文本已含 marker:自研/派生包或已注入)";
+            }
+            return sourceText;
+        }
         Resolution r = resolve();
-        if (r == null || r.template == null) return sourceText;
+        if (r == null || r.candidates.isEmpty()) return sourceText;
         List<String> outcomes = new ArrayList<>();
         boolean anyTarget = false;
-        for (TemplateLibrary.FileRule rule : r.template.files) {
-            PatchExecutor.Result res = PatchExecutor.applyDetailed(sourceText, rule.selector,
-                    rule.selectorCount, toOps(rule), r.template.requiredSymbols);
-            if (res.ok()) {
-                TacLightMod.LOGGER.info("[TacLight] interop injected family={} pack={} (+{} chars, {})",
-                        r.template.familyId, r.rawName, res.injectedChars, r.channel());
-                outcomes.add(rule.file + ": 注入成功 +" + res.injectedChars + " chars");
-                r.fileOutcomes = String.join("; ", outcomes);
-                publish(r, true);
-                return res.patched;
+        // 命中过的候选先试(顺序稳定);候选是模板库全量 ⇒ 名字不命中也照样进内容闸门。
+        for (Candidate c : ordered(r)) {
+            for (TemplateLibrary.FileRule rule : c.template.files) {
+                PatchExecutor.Result res = PatchExecutor.applyDetailed(sourceText, rule.selector,
+                        rule.selectorCount, toOps(rule), c.template.requiredSymbols);
+                if (res.ok()) {
+                    TacLightMod.LOGGER.info("[TacLight] interop injected family={} pack={} (+{} chars, {})",
+                            c.template.familyId, r.rawName, res.injectedChars, c.channel());
+                    outcomes.add(rule.file + ": 注入成功 +" + res.injectedChars + " chars");
+                    r.hit = c;
+                    r.recognized = true;
+                    r.fileOutcomes = String.join("; ", outcomes);
+                    publish(r, c, true);
+                    return res.patched;
+                }
+                if (res.selectorHit) {
+                    anyTarget = true;
+                    r.recognized = true;
+                }
+                outcomes.add(c.template.familyId + "/" + rule.file + ": " + res.failure);
             }
-            if (res.selectorHit) anyTarget = true; // 是目标文件但注入不了 ⇒ 必须报因
-            outcomes.add(rule.file + ": " + res.failure);
         }
         r.fileOutcomes = String.join("; ", outcomes);
         if (anyTarget) {
-            TacLightMod.LOGGER.warn("[TacLight] interop: 包 {} 命中模板 {} 但注入失败(零注入)。逐文件原因: {}",
-                    r.rawName, r.template.familyId, r.fileOutcomes);
+            TacLightMod.LOGGER.warn("[TacLight] interop: 包 {} 命中模板但注入失败(零注入)。逐文件原因: {}",
+                    r.rawName, r.fileOutcomes);
+        } else if (!r.recognized && !r.loggedNoHit) {
+            r.loggedNoHit = true;
+            TacLightMod.LOGGER.info("[TacLight] interop: 包 {} 与全部 {} 个候选模板的内容锚点均未命中 ⇒ "
+                            + "零注入(本包不生效)。逐文件原因: {}",
+                    r.rawName, r.candidates.size(), r.fileOutcomes);
         }
-        publish(r, false);
+        publish(r, r.hit, false);
         return sourceText;
+    }
+
+    /** 尝试顺序:已命中的候选最前,其余按名字命中优先。 */
+    private static List<Candidate> ordered(Resolution r) {
+        List<Candidate> out = new ArrayList<>(r.candidates.size());
+        if (r.hit != null) out.add(r.hit);
+        for (Candidate c : r.candidates) if (c != r.hit) out.add(c);
+        return out;
     }
 
     private static List<PatchExecutor.Op> toOps(TemplateLibrary.FileRule rule) {
@@ -167,18 +228,27 @@ public final class RuntimePackInjector {
             if (cached != null) return cached;
             Resolution r = matchTemplate(name);
             RESOLVED.put(name, r);
-            if (r.template == null) {
-                announce(name, r.detail);
+            if (r.candidates.isEmpty()) {
+                TacLightMod.LOGGER.info("[TacLight] interop: 包 {} 无候选模板(零注入)。原因: {}",
+                        name, r.reason);
             } else {
-                TacLightMod.LOGGER.info("[TacLight] interop: 包 {} 命中模板 family={} packName={} 通道={} ({})",
-                        name, r.template.familyId, r.template.packName, r.channel(), r.detail);
+                TacLightMod.LOGGER.info("[TacLight] interop: 包 {} 解析完毕:候选模板 {} 个(名字命中 {}),"
+                                + "hash 全中={},诊断模板={}",
+                        name, r.candidates.size(), r.namedCount,
+                        r.probe != null && r.probe.fastPath,
+                        r.probe == null ? "(无)" : r.probe.template.familyId);
             }
-            publish(r, false);
+            publish(r, null, false);
             return r;
         }
     }
 
-    /** 名字(归一化)匹配 + 哈希快速通道;失败也返回 Resolution(带可操作原因),不再返回裸 null。 */
+    /**
+     * 候选解析:<b>模板库全量</b>入列,按"名字命中优先"排序,再逐候选做哈希快速通道。
+     *
+     * <p>方法名保持 {@code matchTemplate}(离线契约按名定位本方法体,见
+     * {@code InteropStatusContract})。名字只排序、不筛选 —— 见类注释 2026-10-06 一节。</p>
+     */
     private static Resolution matchTemplate(String rawName) {
         try {
             Path gameDir = FMLPaths.GAMEDIR.get();
@@ -187,39 +257,51 @@ public final class RuntimePackInjector {
             Path root = PackFingerprint.resolvePackRoot(shaderpacks, rawName).orElse(null);
             String key = PackFingerprint.packMatchKey(rawName);
             if (root == null) {
-                return new Resolution(rawName, key, "(未找到)", null, false, false,
-                        "包根未找到:shaderpacks/" + rawName + " 不存在");
+                return new Resolution(rawName, key, "(未找到)", List.of(),
+                        "包根未找到:shaderpacks/" + rawName + " 不存在", null, 0);
             }
-            List<TemplateLibrary.Template> candidates = new ArrayList<>();
-            StringBuilder names = new StringBuilder();
-            for (TemplateLibrary.Template t : TemplateLibrary.loadAll()) {
-                if (names.length() > 0) names.append(", ");
-                names.append(t.familyId).append('→').append(t.packName);
-                if (PackFingerprint.matchesPackName(rawName, t.packName)) candidates.add(t);
+            List<TemplateLibrary.Template> all = TemplateLibrary.loadAll();
+            if (all.isEmpty()) {
+                return new Resolution(rawName, key, root.toString(), List.of(),
+                        "模板库为空(未登记任何模板)", null, 0);
             }
-            if (candidates.isEmpty()) {
-                return new Resolution(rawName, key, root.toString(), null, false, false,
-                        "无候选模板(归一化键 \"" + key + "\" 不匹配任何已登记 packName;已登记: " + names + ")");
+            boolean[] nameMatched = new boolean[all.size()];
+            List<Candidate> built = new ArrayList<>(all.size());
+            for (int i = 0; i < all.size(); i++) {
+                TemplateLibrary.Template t = all.get(i);
+                nameMatched[i] = PackFingerprint.matchesPackName(rawName, t.packName);
+                Map<String, String> fp =
+                        PackFingerprint.fingerprint(root, new ArrayList<>(t.packHash.keySet()));
+                boolean hashHit = PackFingerprint.matches(fp, t.packHash);
+                boolean known = PackFingerprint.isKnownGood(rawName, t.knownGoodPacks);
+                built.add(new Candidate(t, hashHit, known, hashHit
+                        ? "hash 全中(" + t.packHash.size() + " 键)"
+                        : (known ? "已知良好清单命中(锚点验证过;不存整文件哈希) | " : "")
+                                + describeDrift(fp, t.packHash)));
             }
-            // 快速通道:名字匹配 + 模板声明的键全中(键 = 模板自己声明的,F5)
-            for (TemplateLibrary.Template t : candidates) {
-                Map<String, String> fp = PackFingerprint.fingerprint(root, new ArrayList<>(t.packHash.keySet()));
-                if (PackFingerprint.matches(fp, t.packHash)) {
-                    return new Resolution(rawName, key, root.toString(), t, true, false,
-                            "hash 全中(" + t.packHash.size() + " 键)");
+            List<Candidate> candidates = new ArrayList<>(all.size());
+            int namedCount = 0;
+            for (int idx : PackFingerprint.candidateOrder(nameMatched)) {
+                candidates.add(built.get(idx));
+                if (nameMatched[idx]) namedCount++;
+            }
+            Candidate probe = null;
+            for (Candidate c : candidates) {
+                if (c.fastPath) {
+                    probe = c;
+                    break;
                 }
             }
-            // 哈希漂移:① 已知良好清单(锚点验证过,硬裁定②)⇒ 标 known-good;
-            // ② 否则 best-effort。两者都仍由锚点闸门(applyDetailed)决定是否注入。
-            TemplateLibrary.Template t = candidates.get(0);
-            Map<String, String> fp = PackFingerprint.fingerprint(root, new ArrayList<>(t.packHash.keySet()));
-            boolean known = PackFingerprint.isKnownGood(rawName, t.knownGoodPacks);
-            return new Resolution(rawName, key, root.toString(), t, false, known,
-                    (known ? "已知良好清单命中(锚点验证过;不存整文件哈希) | " : "") + describeDrift(fp, t.packHash));
+            if (probe == null) probe = candidates.get(0);
+            Resolution r = new Resolution(rawName, key, root.toString(), candidates,
+                    "(全部候选的锚点均未命中)", probe, namedCount);
+            // 哈希全中 = 内容层面已认出这个包(与名字闸门无关)。
+            r.recognized = probe.fastPath;
+            return r;
         } catch (Throwable th) {
             TacLightMod.LOGGER.warn("[TacLight] interop: 模板解析异常(零注入): {}", th.toString());
-            return new Resolution(rawName, PackFingerprint.packMatchKey(rawName), "(异常)", null, false, false,
-                    "模板解析异常: " + th);
+            return new Resolution(rawName, PackFingerprint.packMatchKey(rawName), "(异常)", List.of(),
+                    "模板解析异常: " + th, null, 0);
         }
     }
 
@@ -247,43 +329,6 @@ public final class RuntimePackInjector {
         }
     }
 
-    /**
-     * 不支持包的提示(计划 §1):日志恒有;聊天栏尽力而为。首次 + 每次 reload(2s 去抖)。
-     *
-     * <p><b>★ 文案可操作性(2026-09-19 修正)</b>:旧文案写"游戏内 !interop 看详情"——
-     * <b>根本不存在客户端命令路径</b>({@code !interop} 只能走 dev 的文件中继),这句把
-     * 我们自己的验收人 qa 都误导成"客户端命令路径"⇒ 现改为给出<b>可执行动作</b>:
-     * 日志搜 {@code interop} / 写 {@code <gameDir>/taclight-cmds.txt}(并注明该通道仅 dev 构建存在)。
-     * 发布 jar 里该文件通道被剔除(build.gradle exclude),故聊天栏必须写清"日志"这条人人可用的路径。</p>
-     */
-    private static void announce(String packName, String reason) {
-        long now = System.currentTimeMillis();
-        Long last = LAST_ANNOUNCE.get(packName);
-        if (last != null && now - last < ANNOUNCE_DEBOUNCE_MS) return;
-        LAST_ANNOUNCE.put(packName, now);
-        TacLightMod.LOGGER.info(
-                "[TacLight] interop: 包 \"{}\" 暂无注入模板,本包不生效 TacLight 照明(零改动)。原因: {}",
-                packName, reason);
-        try {
-            var mc = net.minecraft.client.Minecraft.getInstance();
-            mc.execute(() -> {
-                try {
-                    if (mc.player != null) {
-                        mc.player.displayClientMessage(Component.literal(
-                                "[TacLight] 光影包 \"" + packName + "\" 暂不支持锥形照明注入(本包不生效,零改动)。"
-                                        + "可做:①日志搜 interop 看原因;"
-                                        + "②dev 实例把 !interop 写入 <gameDir>/taclight-cmds.txt 看逐文件详情"),
-                                false);
-                    }
-                } catch (Throwable ignored) {
-                    // 提示失败不影响注入安全语义
-                }
-            });
-        } catch (Throwable ignored) {
-            // 游戏尚未就绪时仅留日志
-        }
-    }
-
     /** 状态快照(供 {@code !interop} 命令与日志)。 */
     public static String statusReport() {
         return status;
@@ -302,16 +347,20 @@ public final class RuntimePackInjector {
         return stickyInjected;
     }
 
-    private static void publish(Resolution r, boolean injected) {
-        String templateLine = r.template == null ? null
-                : "family=" + r.template.familyId + " packName=" + r.template.packName;
+    private static void publish(Resolution r, Candidate c, boolean injected) {
+        // 展示用模板:命中者为先,否则用诊断模板(哈希全中/第一个候选),让 !interop 与状态行有据可依。
+        Candidate shown = c != null ? c : r.probe;
+        String templateLine = shown == null ? null
+                : "family=" + shown.template.familyId + " packName=" + shown.template.packName;
+        String channel = c != null ? c.channel() : (shown == null ? null : "none:anchors");
+        String detail = c != null ? c.detail
+                : (shown == null ? r.reason : "全部候选的锚点均未命中 | " + r.fileOutcomes);
         // 结构化快照先行:客户端自检(ShaderPackDiag)读它,不看人读字符串。
-        lastOutcome = new Outcome(r.rawName, r.matchKey, r.template != null, injected,
-                r.template == null ? null : r.channel(), r.detail);
+        lastOutcome = new Outcome(r.rawName, r.matchKey, r.recognized, injected, channel, detail);
         // 粘性成功:同包后续单文件失败不得把整包翻回失败(2026-09-25 真机实测缺陷)。
         if (injected) stickyInjected = lastOutcome;
-        status = formatStatus(r.rawName, r.matchKey, r.root, templateLine,
-                r.template == null ? null : r.channel(), r.detail, r.fileOutcomes, injected);
+        status = formatStatus(r.rawName, r.matchKey, r.root, templateLine, channel, detail,
+                r.fileOutcomes, injected);
     }
 
     /**
@@ -357,13 +406,15 @@ public final class RuntimePackInjector {
     public static Map<String, String> hashComparison(String rawName) {
         Map<String, String> out = new LinkedHashMap<>();
         Resolution r = RESOLVED.get(rawName);
-        if (r == null || r.template == null) return out;
+        Candidate c = r == null ? null : (r.hit != null ? r.hit : r.probe);
+        if (c == null) return out;
         try {
             Path root = PackFingerprint.resolvePackRoot(
                     FMLPaths.GAMEDIR.get().resolve("shaderpacks"), rawName).orElse(null);
             if (root == null) return out;
-            Map<String, String> got = PackFingerprint.fingerprint(root, new ArrayList<>(r.template.packHash.keySet()));
-            for (Map.Entry<String, String> e : r.template.packHash.entrySet()) {
+            Map<String, String> got =
+                    PackFingerprint.fingerprint(root, new ArrayList<>(c.template.packHash.keySet()));
+            for (Map.Entry<String, String> e : c.template.packHash.entrySet()) {
                 out.put(e.getKey(), (got.get(e.getKey()) == null ? "(缺失)" : got.get(e.getKey()))
                         + " vs 模板 " + e.getValue());
             }

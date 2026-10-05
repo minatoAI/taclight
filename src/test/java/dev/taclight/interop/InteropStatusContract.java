@@ -94,6 +94,14 @@ public class InteropStatusContract {
                 "★ matchTemplate 内不得再出现精确相等 .equals(t.packName)(旧 bug 形态)");
         check(body.contains("PackFingerprint.resolvePackRoot(shaderpacks, rawName)"),
                 "★ F4:包根解析用原始名 rawName(不得传归一化键)");
+        // ★ 2026-10-06 名字闸门降级(用户 e2e:同一份包换文件名就零注入 —— sha256 完全相同)。
+        // 名字只排序、不筛选:候选必须来自模板库全量,且按 candidateOrder 排序。
+        check(body.contains("PackFingerprint.candidateOrder(nameMatched)"),
+                "★ 名字只排序:候选按 candidateOrder 排序,不再按名字筛掉模板");
+        check(body.contains("TemplateLibrary.loadAll()"),
+                "★ matchTemplate 遍历模板库全量(名字不命中的模板同样进内容闸门)");
+        check(body.contains("List<Candidate> candidates = new ArrayList<>(all.size())"),
+                "★ 候选集合大小 == 模板总数(没有名字过滤器把候选变少)");
     }
 
     /** 剥离 // 与 /* *\/ 注释(文本级检查前先剥离,避免注释里的旧写法造成假红/假绿)。 */

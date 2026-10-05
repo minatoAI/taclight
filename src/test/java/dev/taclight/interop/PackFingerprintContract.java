@@ -107,6 +107,19 @@ public class PackFingerprintContract {
                         && !PackFingerprint.matchesPackName(null, "ComplementaryReimagined")
                         && !PackFingerprint.matchesPackName("ComplementaryReimagined", ""),
                 "空名/null/空模板名 = 不命中");
+
+        // ★ 2026-10-06 名字闸门降级(用户 e2e 实测):名字不命中 ⇒ 只影响顺序,绝不减少候选。
+        check(!PackFingerprint.matchesPackName("ComplementaryReimagined_r5.9.3(1).zip", "ComplementaryReimagined"),
+                "实测形态:浏览器重复下载后缀 (1) 不命中名字(尾段规则不容纳括号)");
+        check(PackFingerprint.candidateOrder(new boolean[]{false, false}).size() == 2,
+                "★ 名字全不命中 ⇒ 候选仍是全部模板(名字不再一票否决)");
+        check(PackFingerprint.candidateOrder(new boolean[]{false, true, false}).equals(java.util.List.of(1, 0, 2)),
+                "★ 名字命中的排最前,其余按原序跟随(顺序稳定)");
+        check(PackFingerprint.candidateOrder(new boolean[]{}).isEmpty()
+                        && PackFingerprint.candidateOrder(null).isEmpty(),
+                "空/ null 输入 = 空候选(不抛异常)");
+        check(PackFingerprint.candidateOrder(new boolean[]{true, true}).equals(java.util.List.of(0, 1)),
+                "全命中 = 原序(无重复、无丢失)");
     }
 
     /**

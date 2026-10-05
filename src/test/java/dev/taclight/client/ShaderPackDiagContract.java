@@ -30,7 +30,11 @@ public class ShaderPackDiagContract {
     private static int checks;
 
     private static final String COMP = "ComplementaryReimagined_r5.9.3.zip";
-    private static final String DERIVED = "iterationT 3.2.0 (taclight)";
+    /** 已支持清单文案(2026-10-06 取代 {@code DERIVED_PACK="iterationT 3.2.0 (taclight)"}:
+     *  发布 jar 不含任何光影包,旧指引让用户去找本机不存在的文件)。 */
+    private static final String DERIVED = "Complementary Reimagined r5.9.x / iterationT 3.2.0";
+    /** 发布 jar 不含光影包 ⇒ 这句指引**绝不许**再出现在用户文案里。 */
+    private static final String GHOST_PACK = "iterationT 3.2.0 (taclight)";
 
     public static void main(String[] args) throws Exception {
         contentLayer();
@@ -78,10 +82,17 @@ public class ShaderPackDiagContract {
         check(ShaderPackDiagLogic.FLASHLIGHT_KEY_LABEL.equals(letterOf(KeyBindings.FLASHLIGHT_TOGGLE.getDefaultKey().getValue())),
                 "[防漂移] 文案标签 == KeyBindings 默认绑定(" + ShaderPackDiagLogic.FLASHLIGHT_KEY_LABEL + ")");
         String mOrig = ShaderPackDiagLogic.message(ShaderPackDiagLogic.Status.ORIGINAL_PACK, "X.zip", DERIVED);
-        check(mOrig.contains("无 TacLight 注入") && mOrig.contains(DERIVED), "ORIGINAL_PACK 文案仍给换包指引");
+        check(mOrig.contains("不在支持列表") && mOrig.contains(DERIVED),
+                "ORIGINAL_PACK 文案说'不在支持列表'并列出已支持清单");
+        // ★ 2026-10-06:发布 jar 不含任何光影包 ⇒ 文案里绝不能出现"去选某个包"的指引。
+        for (var st : ShaderPackDiagLogic.Status.values()) {
+            String m = ShaderPackDiagLogic.message(st, COMP, DERIVED);
+            check(!m.contains(GHOST_PACK), "[鬼包必红] " + st + " 文案不得劝用户选 " + GHOST_PACK);
+        }
         String mFail = ShaderPackDiagLogic.message(ShaderPackDiagLogic.Status.INTEROP_FAILED, COMP, DERIVED);
         check(mFail.contains("注入失败") && !mFail.contains("无 TacLight 注入"),
                 "INTEROP_FAILED 文案说'注入失败',不误报'无注入'");
+        check(mFail.contains(DERIVED), "INTEROP_FAILED 也指向已支持清单(而不是某个具体包)");
         check(ShaderPackDiagLogic.message(ShaderPackDiagLogic.Status.NO_PACK, null, DERIVED).contains("未激活光影包"),
                 "NO_PACK 文案不变");
         check(ShaderPackDiagLogic.message(ShaderPackDiagLogic.Status.UNKNOWN, null, DERIVED).contains("无法判定"),

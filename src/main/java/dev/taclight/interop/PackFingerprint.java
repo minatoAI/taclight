@@ -78,8 +78,11 @@ public final class PackFingerprint {
      *       <b>不</b>命中 ✓(派生包已内联,不该再注入一次)</li>
      * </ul>
      * 残余风险(如实):{@code ComplementaryReimagined_2} 这类"数字后缀但语义不同"的包会被判为
-     * 候选——但<b>闸门不在名字</b>:候选仍要过哈希快速通道或"锚点逐字全中 + 注后自检"的真闸门
-     * (见 {@code RuntimePackInjector}),锚点不中则零注入。</p>
+     * 名字命中——<b>但闸门从来不在名字</b>:候选仍要过哈希快速通道或"锚点逐字全中 + 注后自检"的真闸门
+     * (见 {@code RuntimePackInjector}),锚点不中则零注入。反过来,名字不命中<b>也不再一票否决</b>
+     * (2026-10-06):全部模板都会进内容闸门,名字只用来排序({@link #candidateOrder})。
+     * <p>又:{@code ComplementaryReimagined_r5.9.3(1).zip} 这类浏览器重复下载后缀<b>不</b>命中名字
+     * (尾段规则不容纳括号)——这正是"名字不能当闸门"的实例,已由排序化修复。</p>
      */
     public static boolean matchesPackName(String rawName, String templatePackName) {
         String a = packMatchKey(rawName);
@@ -89,6 +92,28 @@ public final class PackFingerprint {
         if (!a.startsWith(b)) return false;
         String rest = a.substring(b.length());
         return rest.matches(" ?[a-z]?\\d[\\w.\\- ]*");
+    }
+
+    /**
+     * 候选模板<b>排序</b>(纯函数,2026-10-06 闸门降级)。
+     *
+     * <p><b>本方法存在即是为了钉死一条不变量</b>:名字命中的排前面,<b>其余照样入列</b> ——
+     * 名字只影响顺序,不影响"是否尝试注入"。</p>
+     *
+     * <p><b>为什么必须这样</b>:名字匹配是白名单,而文件名由用户/浏览器决定。实测
+     * {@code ComplementaryReimagined_r5.9.3(1).zip}(浏览器重复下载自动加的后缀)与
+     * {@code ComplementaryReimagined_r5.9.3.zip} <b>sha256 完全相同</b>,旧码因名字不匹配
+     * 直接放弃 ⇒ 内容闸门(哈希/锚点)从未被咨询 ⇒ 零注入 + 劝用户换包(2026-10-06 用户实测)。</p>
+     *
+     * @param nameMatched 逐模板的"名字是否命中",下标即模板序号
+     * @return 全部下标,名字命中者优先(顺序稳定)
+     */
+    public static java.util.List<Integer> candidateOrder(boolean[] nameMatched) {
+        java.util.List<Integer> out = new java.util.ArrayList<>();
+        if (nameMatched == null) return out;
+        for (int i = 0; i < nameMatched.length; i++) if (nameMatched[i]) out.add(i);
+        for (int i = 0; i < nameMatched.length; i++) if (!nameMatched[i]) out.add(i);
+        return out;
     }
 
     /**

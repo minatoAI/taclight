@@ -340,11 +340,23 @@ public class InteropPackagingContract {
         String injCode = InteropStatusContract.stripComments(
                 new String(Files.readAllBytes(inj), StandardCharsets.UTF_8));
         check(!injCode.contains("游戏内 !interop"),
-                "★ 聊天文案不得再写\"游戏内 !interop\"(不存在客户端命令路径,曾误导验收人)");
-        check(injCode.contains("<gameDir>/taclight-cmds.txt"),
-                "★ 聊天文案给出可执行动作:写 <gameDir>/taclight-cmds.txt");
-        check(injCode.contains("日志搜 interop"),
+                "★ 文案不得再写\"游戏内 !interop\"(不存在客户端命令路径,曾误导验收人)");
+        // ★ 2026-10-06:用户可见文案的归属从 interop 移到 ShaderPackDiagLogic(interop 不再发聊天栏,
+        // 只因同一次换包连发两条口径不同的消息)。三条"文案口径"检查随之移到新归属,强度不变:
+        // 仍钉"给可执行动作(文件通道)""保留人人可用路径(日志)""不得写游戏内命令"。
+        Path ui = Path.of("src/main/java/dev/taclight/client/ShaderPackDiagLogic.java");
+        check(Files.isRegularFile(ui), "找到 ShaderPackDiagLogic(用户可见文案的归属)");
+        if (!Files.isRegularFile(ui)) return;
+        String uiCode = InteropStatusContract.stripComments(
+                new String(Files.readAllBytes(ui), StandardCharsets.UTF_8));
+        check(uiCode.contains("<gameDir>/taclight-cmds.txt"),
+                "★ 聊天文案给出可执行动作:写 <gameDir>/taclight-cmds.txt(dev 构建专用,已注明)");
+        check(uiCode.contains("日志搜 interop"),
                 "★ 聊天文案保留人人可用的路径:日志搜 interop(发布包不含文件通道)");
+        check(!uiCode.contains("游戏内 !interop"),
+                "★ 用户文案不得写\"游戏内 !interop\"");
+        check(!injCode.contains("player.displayClientMessage"),
+                "★ interop 不再自己发聊天栏提示(唯一通道 = ClientEvents.checkShaderPackDiag)");
     }
 
     /** 选取结果:{@code path == null} 表示选不到,{@code why} 说明原因(红色信息会带上它)。 */

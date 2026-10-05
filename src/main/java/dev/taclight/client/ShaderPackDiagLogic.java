@@ -64,21 +64,33 @@ public final class ShaderPackDiagLogic {
     }
 
     /**
-     * 用户可见文案(纯函数)。{@code derivedPack} 由调用方传入,避免纯类依赖
-     * {@code ClientEvents.DERIVED_PACK} 常量。
+     * 用户可见文案(纯函数)。{@code supportedPacks} 由调用方传入(已支持的光影包清单),
+     * 避免纯类依赖 {@code ClientEvents} 常量。
+     *
+     * <p><b>2026-10-06 文案修正</b>:旧文案在 {@code ORIGINAL_PACK}/{@code INTEROP_FAILED}
+     * 两处都劝用户"去光影界面选 {@code iterationT 3.2.0 (taclight)}" —— 那是开发机的路线 P 派生包,
+     * 而<b>发布 jar 不含任何光影包</b>(0 个 .zip 条目)⇒ 用户按指引在本机找不到该文件。
+     * 现改为给"已支持清单 + 指向 README 测试环境",不再指名一个用户机器上不存在的包。</p>
+     *
+     * <p><b>2026-10-06 语义</b>:{@code ORIGINAL_PACK} 现在等于"名字与内容都没在这个包上认出任何
+     * 已登记模板"(名字闸门已降级为排序,内容闸门对所有模板都会跑),所以说"不在支持列表"是准确的。</p>
      */
-    public static String message(Status st, String pack, String derivedPack) {
+    public static String message(Status st, String pack, String supportedPacks) {
         return switch (st) {
             case TACLIGHT_PACK -> "[TacLight] \u2714 配套包已激活: " + FLASHLIGHT_KEY_LABEL + "=手电筒开关, "
                     + DEBUG_KEY_LABEL + "=霓虹调试";
             case INTEROP_INJECTED -> "[TacLight] \u2714 已注入到 '" + pack
                     + "' (运行时 interop 注入)";
             case INTEROP_FAILED -> "[TacLight] \u2718 当前包 '" + pack
-                    + "' 命中注入模板但注入失败(见日志 interop 行)。可先在光影界面选 '" + derivedPack + "' 绕过";
-            case ORIGINAL_PACK -> "[TacLight] \u2718 当前包 '" + pack + "' 无 TacLight 注入。请到选项>视频设置>光影(shaders)选择 '"
-                    + derivedPack + "', 然后按 K";
+                    + "' 认得注入模板但注入失败(见日志 interop 行)。本包不生效,可换用已支持的包: "
+                    + supportedPacks;
+            case ORIGINAL_PACK -> "[TacLight] \u2718 当前包 '" + pack
+                    + "' 不在支持列表,本包不生效(零改动)。已支持: " + supportedPacks
+                    + " (见 README 测试环境);排查:日志搜 interop,"
+                    + "dev 构建可把 !interop 写入 <gameDir>/taclight-cmds.txt";
             case NO_PACK -> "[TacLight] \u2718 未激活光影包: 锥光仅为视觉模式, K 霓虹无效(需要光影包)";
-            default -> "[TacLight] ? 无法判定当前光影包。若按 K 无反应, 请在光影选择界面选 '" + derivedPack + "'";
+            default -> "[TacLight] ? 无法判定当前光影包,已支持: " + supportedPacks
+                    + " (按 K 无反应时查日志 interop 行)";
         };
     }
 

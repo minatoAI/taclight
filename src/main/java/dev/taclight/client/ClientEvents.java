@@ -52,8 +52,17 @@ public class ClientEvents {
     private static boolean probeConfirmed;
     private static int diagTick;
     private static ShaderPackDiagLogic.Status lastDiagStatus;
+    /** 上次提示时的活动包名:状态不变但换了包(换到另一个同样不支持的包)也要重新提示。 */
+    private static String lastDiagPack;
     private static int boardTick;
-    private static final String DERIVED_PACK = "iterationT 3.2.0 (taclight)";
+    /**
+     * 用户可见的"已支持光影包"清单(2026-10-06 取代 {@code DERIVED_PACK}）。
+     *
+     * <p>旧值是 {@code "iterationT 3.2.0 (taclight)"} —— 开发机的路线 P 派生包。发布 jar
+     * <b>不含任何光影包</b>(0 个 .zip 条目,见 {@code InteropPackagingContract}),所以那句指引
+     * 让用户去找一个本机不存在的文件。现在只报"支持哪些包",细节指向 README 测试环境。</p>
+     */
+    private static final String SUPPORTED_PACKS = "Complementary Reimagined r5.9.x / iterationT 3.2.0";
 
     /**
      * 应用逻辑的容器(2026-09-26 task-32 v2)。
@@ -234,16 +243,25 @@ public class ClientEvents {
 
 
 
-    /** 每 5 秒检查活动光影包;状态变化时聊天+日志提示(选错包是 90% 的问题)。 */
+    /**
+     * 每 5 秒检查活动光影包;状态变化(或换了包)时聊天+日志提示(选错包是 90% 的问题)。
+     *
+     * <p><b>2026-10-06</b>:这是<b>唯一</b>的用户可见光影包提示通道 —— interop 侧原本还会在
+     * "名字不命中"时另发一条聊天栏消息,实测同一次换包连收两条口径不同的消息
+     * (20:51:47 "暂不支持注入" + 20:51:48 "无 TacLight 注入"),已收敛到本方法。
+     * 因此这里必须在<b>包名变化</b>时也重新提示:状态同为 {@code ORIGINAL_PACK} 但换到另一个
+     * 不支持的包,用户同样需要知道。</p>
+     */
     private static void checkShaderPackDiag(Minecraft mc) {
         if (++diagTick % 100 != 0) return;
         ShaderPackDiagLogic.Status st = ShaderPackDiag.activeStatus();
-        if (st == lastDiagStatus) return;
-        lastDiagStatus = st;
         String pack = ShaderPackDiag.activePackName();
+        if (st == lastDiagStatus && java.util.Objects.equals(pack, lastDiagPack)) return;
+        lastDiagStatus = st;
+        lastDiagPack = pack;
         // 判定与文案同源(纯类):2026-09-25 之前 INTEROP_INJECTED 这类状态不存在,
         // 注入成功也被判成 ORIGINAL_PACK ⇒ 聊天栏 ✘ "无 TacLight 注入"(用户实测 bug)。
-        String msg = ShaderPackDiagLogic.message(st, pack, DERIVED_PACK);
+        String msg = ShaderPackDiagLogic.message(st, pack, SUPPORTED_PACKS);
         TacLightMod.LOGGER.info("[TacLight] diag: {}", msg);
         if (mc.player != null) mc.player.displayClientMessage(Component.literal(msg), false);
     }

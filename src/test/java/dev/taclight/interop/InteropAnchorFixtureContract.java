@@ -2,6 +2,7 @@ package dev.taclight.interop;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -107,6 +108,33 @@ public class InteropAnchorFixtureContract {
         check(!missingSym.ok() && missingSym.failure.contains("缺必需签名"),
                 "自检在真实文本上生效(缺签名被拒): " + missingSym.failure);
 
+        // ---- 2026-10-06 回归:同一份包、文件名带浏览器重复下载后缀 (1) ----
+        // 用户 e2e 实测(e2e 实例 20:51:47 日志):ComplementaryReimagined_r5.9.3(1).zip 零注入,
+        // 原因是名字闸门不命中即直接放弃 ⇒ 内容闸门从未被咨询;而该文件与 r5.9.3.zip
+        // **sha256 完全相同**。本段证明:字节相同 ⇒ 内容闸门给出同样的注入结果(与名字无关)。
+        Fixture dup = findDupSuffixFixture();
+        if (dup == null) {
+            System.out.println("  SKIP (1) 后缀回归:本机没有 *r5.9.3(1).zip"
+                    + "(该回归需要用户实测包;不是静默跳过 —— 见本行)");
+        } else {
+            String dupName = dup.root.getFileName().toString();
+            String dupTerrain = expand(dup.root, "shaders/world0/gbuffers_terrain.fsh");
+            check(!PackFingerprint.matchesPackName(dupName, "ComplementaryReimagined"),
+                    "复现 bug 前提:" + dupName + " 不命中名字闸门");
+            check(PackFingerprint.candidateOrder(new boolean[]{false}).contains(0),
+                    "★ 名字不命中仍进候选(名字只排序 ⇒ 内容闸门会被咨询)");
+            checkRule("(1)后缀 terrain", t, TERRAIN, dupTerrain);
+            checkRule("(1)后缀 entities", t, ENTITIES,
+                    expand(dup.root, "shaders/world0/gbuffers_entities.fsh"));
+            checkRule("(1)后缀 hand", t, HAND,
+                    expand(dup.root, "shaders/world0/gbuffers_hand.fsh"));
+            if (fx != null && Files.isRegularFile(dup.root) && Files.isRegularFile(fx.root)) {
+                check(sha256File(dup.root).equals(sha256File(fx.root)),
+                        "★ 两份文件字节相同(sha256 " + sha256File(dup.root).substring(0, 16)
+                                + "…)⇒ 旧码的'名字不同=不注入'纯属闸门错位");
+            }
+        }
+
         System.out.println("InteropAnchorFixtureContract: ALL PASS (" + checks + " checks) [FIXTURE=" + label + "]");
     }
 
@@ -186,6 +214,36 @@ public class InteropAnchorFixtureContract {
             }
         }
         return null;
+    }
+
+    /** 带浏览器重复下载后缀 (1) 的<b>同一份</b>包;定位口径与 {@link #findFixture()} 同构。 */
+    private static Fixture findDupSuffixFixture() {
+        String prop = System.getProperty("taclight.fixture.complementary.dup");
+        if (prop != null && !prop.isBlank()) {
+            Path p = Path.of(prop);
+            if (Files.exists(p)) return new Fixture(p, "sysprop:" + p);
+        }
+        String[] candidates = {
+                "E:\\temp\\mc-test\\.minecraft\\versions\\e2e\\shaderpacks\\ComplementaryReimagined_r5.9.3(1).zip",
+                "E:\\temp\\ComplementaryReimagined_r5.9.3(1).zip",
+        };
+        for (String c : candidates) {
+            Path p = Path.of(c);
+            if (Files.exists(p)) return new Fixture(p, p + " (zip,r5.9.3 用户实测副本)");
+        }
+        return null;
+    }
+
+    /** 整文件 sha256(十六进制);读不到 = 空串。 */
+    private static String sha256File(Path p) {
+        try {
+            byte[] d = MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(p));
+            StringBuilder sb = new StringBuilder(d.length * 2);
+            for (byte b : d) sb.append(String.format("%02x", b));
+            return sb.toString();
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     /**
