@@ -72,8 +72,7 @@ public final class ShaderPackDiagLogic {
             case TACLIGHT_PACK -> "[TacLight] \u2714 配套包已激活: " + FLASHLIGHT_KEY_LABEL + "=手电筒开关, "
                     + DEBUG_KEY_LABEL + "=霓虹调试";
             case INTEROP_INJECTED -> "[TacLight] \u2714 已注入到 '" + pack
-                    + "' (运行时 interop 注入): " + FLASHLIGHT_KEY_LABEL + "=手电筒开关, "
-                    + DEBUG_KEY_LABEL + "=霓虹调试";
+                    + "' (运行时 interop 注入)";
             case INTEROP_FAILED -> "[TacLight] \u2718 当前包 '" + pack
                     + "' 命中注入模板但注入失败(见日志 interop 行)。可先在光影界面选 '" + derivedPack + "' 绕过";
             case ORIGINAL_PACK -> "[TacLight] \u2718 当前包 '" + pack + "' 无 TacLight 注入。请到选项>视频设置>光影(shaders)选择 '"

@@ -71,9 +71,8 @@ public class ShaderPackDiagContract {
         check(mInterop.contains("已注入到"), "INTEROP_INJECTED 文案明确说'已注入到'");
         check(mInterop.contains(COMP), "INTEROP_INJECTED 文案带当前包名");
         check(!mInterop.contains("无 TacLight 注入"), "[旧码必红] INTEROP_INJECTED 文案不得出现'无 TacLight 注入'");
-        // 键名不写死:文案里的标签必须与 KeyBindings 的默认绑定一致(task-16:默认键 L→J)。
-        check(mInterop.contains(ShaderPackDiagLogic.FLASHLIGHT_KEY_LABEL + "=手电筒开关"),
-                "INTEROP_INJECTED 文案给出开灯键用法(标签=" + ShaderPackDiagLogic.FLASHLIGHT_KEY_LABEL + ")");
+        check(!mInterop.contains("=手电筒开关") && !mInterop.contains("=霓虹调试"),
+                "INTEROP_INJECTED 文案不再带按键提示(2026-10-06 用户要求:只保留已注入到)");
         // 注意不能用 getDisplayName():它是**可翻译组件**,headless(无语言表)时 getString() 得到
         // 的是原始键名 "key.keyboard.j" 而不是 "J" ⇒ 用 GLFW_KEY_A..Z 的纯算术换算。
         check(ShaderPackDiagLogic.FLASHLIGHT_KEY_LABEL.equals(letterOf(KeyBindings.FLASHLIGHT_TOGGLE.getDefaultKey().getValue())),
