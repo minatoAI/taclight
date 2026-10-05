@@ -60,7 +60,15 @@
 - 依赖注意：TaCZ = GPL-3.0 / CC BY-NC-ND 4.0；Oculus = LGPL-3.0-only；Embeddium = LGPL-3.0-only
 - 参考：Photon 禁止改版分发；HandheldMoon 为 ARR，仅参考行为
 
-## 6. 发布前检查
+## 6. Release 正文口径
+
+GitHub Release 的正文只写**版本之间的变更点**（不兼容变更 / 修复 / 清理），从 `CHANGELOG.md` 顶部条目提炼，控制在十几行内。
+
+不要在这里重复 README 已经写好的内容：安装步骤、运行需求表、许可、目录说明、从源码构建。那些只维护一份，放在 README；Release 正文末尾一句"安装与运行需求见 README"即可。
+
+理由：这些信息在 Release 里再抄一遍，就会在改版本时出现两处不一致，而且页面过长反而看不到真正的变更。
+
+## 7. 发布前检查
 
 - [ ] `clean build` 通过
 - [ ] `taclightContracts` 全绿（注意它不在 `build` 里，要显式运行）
@@ -68,5 +76,6 @@
 - [ ] `mods.toml` 版本 == `gradle.properties` 的 `mod_version` == 清单 `Implementation-Version`
 - [ ] 发布件里没有调试类与孤儿语言键（`InteropPackagingContract` 会拦）
 - [ ] 更新 `CHANGELOG.md`
+- [ ] Release 正文只写变更点，不重复 README 内容（见第 6 节）
 - [ ] `git tag vX.Y.Z`
 - [ ] 推送后确认远端只有一条主分支
