@@ -31,10 +31,7 @@ public final class KeyBindingsModBus {
     public static void onRegisterKeys(RegisterKeyMappingsEvent event) {
         KeyMapping[] keys = {
                 KeyBindings.FLASHLIGHT_TOGGLE,
-                KeyBindings.GUNLIGHT_TOGGLE,
-                KeyBindings.DEBUG_TOGGLE,
-                KeyBindings.DIAG_DUMP,
-                KeyBindings.BENCH
+                KeyBindings.GUNLIGHT_TOGGLE
         };
         for (KeyMapping k : keys) {
             event.register(k);
