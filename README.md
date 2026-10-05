@@ -86,7 +86,7 @@
 
 ```bash
 ./gradlew jar              # 产物 build/libs/taclight-<version>.jar
-./gradlew packShaderZip    # 产物 build/distributions/taclight-shaders-<version>.zip
+./gradlew packShaderZip    # 旧自研光影包的打包任务，已不作为产品路径发布（见下）
 ./gradlew build            # 全量构建
 ./gradlew taclightContracts # 跑契约测试（注意：没有接进 build，必须显式运行）
 ```
@@ -106,7 +106,8 @@ TaCZ 与 Oculus 的 jar 需要你自己下载后放进 `libs/`（本项目不重
 src/main/java/dev/taclight/   模组源码（debug/ 与 devonly/ 是开发期工具，打包时剔除）
 src/main/resources/           资源：mixin 配置、枪灯枪包、光影补丁模板与内联 GLSL
 src/test/                     契约测试（显式运行 taclightContracts）
-pack/shaders/                 自带光影包源码
+pack/shaders/                 自研光影包源码。模组已不再自带或安装它，只保留其中的
+                              lib/taclight_core.glsl 与 taclight_math.glsl 作为注入用的 GLSL 源
 tools/                        开发期工具：场景、机位、像素比对
 docs/开发纪律与路线图.md        面向开发者：分支模型、纪律、状态、路线图
 CHANGELOG.md                  变更历史

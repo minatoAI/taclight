@@ -86,7 +86,7 @@ Requires JDK 17.
 
 ```bash
 ./gradlew jar               # build/libs/taclight-<version>.jar
-./gradlew packShaderZip     # build/distributions/taclight-shaders-<version>.zip
+./gradlew packShaderZip     # packaging task for the old in-house pack, no longer a shipped product
 ./gradlew build             # full build
 ./gradlew taclightContracts # contract tests (note: not wired into build, run it explicitly)
 ```
@@ -106,7 +106,9 @@ Download the TaCZ and Oculus jars yourself and put them in `libs/` (this project
 src/main/java/dev/taclight/   Mod source (debug/ and devonly/ are dev tools, stripped from the jar)
 src/main/resources/           Resources: mixin config, gun pack, shader patch templates, inlined GLSL
 src/test/                     Contract tests (run taclightContracts)
-pack/shaders/                 Source of the bundled shader pack
+pack/shaders/                 Source of the in-house shader pack. The mod no longer bundles or
+                              installs it; only lib/taclight_core.glsl and taclight_math.glsl are
+                              kept as the GLSL source for injection
 tools/                        Development tools: scenes, camera positions, pixel comparison
 docs/开发纪律与路线图.md        Developer notes: branch model, discipline, status, roadmap (Chinese)
 CHANGELOG.md                  Change history
