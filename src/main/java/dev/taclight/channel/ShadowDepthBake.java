@@ -48,6 +48,11 @@ public final class ShadowDepthBake {
         armedLogged = false;
         data = null;
         cursor = 0;
+        // 2026-10-06 实钤(烘中拍照用旧图挡新灯=16:06:34 整锥只剩一小片):
+        // 烘的这 64 帧里旧 depth 仍 valid ⇒ FLAG 置位仍用旧图遮挡 =
+        // 拍到的每一帧都是错的。布防即作废旧缓,烘中回退体素
+        // (对的旧路),DONE 前不显示半烘图。
+        ShadowDepthBuffer.invalidate();
         return "shadowbake armed(下一帧按当时 light0 开烘;烘焙中请勿动灯/视角)";
     }
 
@@ -62,10 +67,26 @@ public final class ShadowDepthBake {
     public static synchronized String status() {
         long age = state == State.DONE
                 ? dev.taclight.channel.ClientSpotlightUploader.currentRenderFrame() - doneFrame : -1;
+        // 灯动证明(2026-10-06):当前 light0 与烘制时灯位的偏移;动过即证明本张 depth 可能过期。
+        String moved = "";
+        try {
+            dev.taclight.channel.SpotlightData l0 =
+                    dev.taclight.channel.ClientSpotlightUploader.lastLight0();
+            if (l0 != null && (state == State.BAKING || state == State.DONE)) {
+                double dx = l0.posX() - px, dy = l0.posY() - py, dz = l0.posZ() - pz;
+                double dp = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                double dd = Math.abs(l0.dirX() - basis[0]) + Math.abs(l0.dirY() - basis[1])
+                        + Math.abs(l0.dirZ() - basis[2]);
+                moved = String.format(java.util.Locale.ROOT,
+                        " moved=%.2fm ddir=%.3f", dp, dd);
+            }
+        } catch (Throwable ignored) {
+        }
         return "shadowbake state=" + state
                 + " cursor=" + cursor + "/" + ShadowDepthBaker.SIZE
                 + " lastTickMs=" + lastTickMs
                 + (state == State.DONE ? " doneMs=" + doneMs + " ageFrames=" + age : "")
+                + moved
                 + " depthValid=" + ShadowDepthBuffer.hasValid();
     }
 
