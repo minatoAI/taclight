@@ -537,17 +537,3 @@ tasks.register('packShaderZip', Zip) {
     from('pack/shaders') { into 'shaders' }
     from('pack/pack.png')
 }
-
-// BUILTIN 2026-10-05: pack/ is the single source; build-time fixed-name zip into generated resources.
-// Runtime BuiltinPackInstaller extracts it to shaderpacks/TacLight-Builtin.
-// generated/resources-extra is already a resources srcDir (see copyInlineCore above).
-tasks.register('builtinPackZip', Zip) {
-    dependsOn tasks.named('checkShaderIncludes')
-    archiveFileName = 'builtin-pack.zip'
-    destinationDirectory = layout.buildDirectory.dir('generated/resources-extra/builtin_shaderpack')
-    preserveFileTimestamps = false
-    reproducibleFileOrder = true
-    from('pack/shaders') { into 'shaders' }
-    from('pack/pack.png')
-}
-tasks.named('processResources') { dependsOn 'builtinPackZip' }

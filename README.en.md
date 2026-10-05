@@ -18,7 +18,6 @@ When used with an Iris/Oculus shader pack, the light enters the pack's own light
 - Occlusion: no light leaking through walls. A voxel grid decides occlusion, and it errs on the conservative side (blocking too much rather than leaking).
 - Multiplayer: other players see your light. The on/off state syncs with the entity, and remote light poses are rebuilt on the receiving client. No extra network packets.
 - Shader pack compatibility: lights are injected into the pack you already have at runtime. The mod does not redistribute modified shader packs.
-- Built-in fallback pack: installed once into `shaderpacks/TacLight-Builtin` on first launch, so you still get a cone without any other pack.
 
 ## Requirements
 
@@ -28,14 +27,14 @@ When used with an Iris/Oculus shader pack, the light enters the pack's own light
 | TacLight | 0.11.2 | `mods/` | Required | This mod |
 | Oculus | 1.8.0 | `mods/` | Required on client | The Forge port of Iris. The light cone needs the shader pipeline; without it there is no cone |
 | Embeddium | 0.3.31 | `mods/` | Recommended | The Forge port of Sodium, a clear frame rate win |
-| Shader pack: Complementary Reimagined | r5.9 | `shaderpacks/` | Suggested | The main supported pack, use this one first |
-| Shader pack: iterationT | 3.2.0 | `shaderpacks/` | Optional | A second supported template |
+| Shader pack: Complementary Reimagined | r5.9 | `shaderpacks/` | Required | The main supported pack. The mod ships no pack, so without one there is no cone |
+| Shader pack: iterationT | 3.2.0 | `shaderpacks/` | Optional | A second supported template, pick either this or Complementary |
 | Timeless and Classics Zero (TaCZ) | 1.1.8-hotfix | `mods/` | Optional | Gun light integration. Without it everything works except the gun light |
 | Player Animator | 1.0.2-rc1+1.20 | `mods/` | Optional | Required by TaCZ for third-person animation. This mod has zero code references to it |
 
 Three things worth stating plainly:
 
-- **A shader pack is what makes the cone visible.** With the mod but no shader pack, the items and the toggles all work, but you will not see a cone or a beam.
+- **A shader pack is what makes the cone visible.** With the mod but no shader pack, the items and the toggles all work, but you will not see a cone or a beam. This mod does not bundle a shader pack; use one of the supported packs below.
 - **Do not patch or edit your shader pack.** The mod injects its own GLSL into your pack instance at runtime. You keep your own copy of the original pack, and the mod neither bundles nor distributes a copy of any third-party pack.
 - Injection templates exist for Complementary Reimagined r5.9 and iterationT 3.2.0. Other packs or other versions may not inject; the mod says so in chat when that happens.
 
@@ -44,9 +43,8 @@ Three things worth stating plainly:
 1. Install Forge 1.20.1.
 2. Put `taclight-0.11.2.jar` into `.minecraft/mods/`.
 3. Add Oculus on the client, and Embeddium if you want the frame rate.
-4. Put the shader pack into `.minecraft/shaderpacks/`, zipped or unzipped.
+4. Put Complementary Reimagined into `.minecraft/shaderpacks/`, zipped or unzipped. The mod ships no pack, so this step is required.
 5. In game, pick Complementary Reimagined under `Video Settings -> Shader Packs`.
-6. On first launch the mod installs a fallback pack named `TacLight-Builtin`. You can ignore it.
 
 ## Usage
 

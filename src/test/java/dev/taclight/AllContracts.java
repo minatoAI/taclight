@@ -38,7 +38,6 @@ import dev.taclight.interop.InlineCoreContract;
 import dev.taclight.interop.PackFingerprintContract;
 import dev.taclight.interop.PatchExecutorContract;
 import dev.taclight.interop.TemplateLibraryContract;
-import dev.taclight.builtin.BuiltinPackContract;
 import dev.taclight.tacz.GunLaserReaderContract;
 import dev.taclight.tacz.GunLightAllowContract;
 
@@ -60,8 +59,6 @@ public class AllContracts {
         System.out.println("== BoundedIdentityCacheContract ==");
         BoundedIdentityCacheContract.main(args);
 
-        System.out.println("== BuiltinPackContract ==");
-        BuiltinPackContract.main(args);
 
         System.out.println("== CameraSweepContract ==");
         CameraSweepContract.main(args);

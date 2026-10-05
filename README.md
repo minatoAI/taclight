@@ -18,7 +18,6 @@
 - 遮挡阴影：墙后不漏光，遮挡由体素栅格判定，取向偏保守（宁可多挡，不肯漏光）。
 - 多人游戏：别人能看到你的灯，开关状态随实体同步，远程灯的姿态由对端客户端重建，不新增网络包。
 - 光影包兼容：运行时把灯注入到你已经装好的光影包里，模组不重新分发任何改版光影包。
-- 内置备用光影包：首次启动自动装一份到 `shaderpacks/TacLight-Builtin`，没有装其他光影包时也能看到锥形光。
 
 ## 运行需求
 
@@ -28,14 +27,14 @@
 | TacLight | 0.11.2 | `mods/` | 必需 | 本模组 |
 | Oculus | 1.8.0 | `mods/` | 客户端必需 | Iris 的 Forge 移植。锥形光依赖光影管线，没装就没有锥形光 |
 | Embeddium | 0.3.31 | `mods/` | 推荐 | Sodium 的 Forge 移植，明显提升帧率 |
-| 光影包 Complementary Reimagined | r5.9 | `shaderpacks/` | 建议 | 主线适配的光影包，推荐优先用它 |
-| 光影包 iterationT | 3.2.0 | `shaderpacks/` | 可选 | 另一套已适配模板 |
+| 光影包 Complementary Reimagined | r5.9 | `shaderpacks/` | 必需 | 主线适配的光影包。模组不自带包，没有它就是没有锥形光 |
+| 光影包 iterationT | 3.2.0 | `shaderpacks/` | 可选 | 另一套已适配模板，与 Complementary 二选一 |
 | Timeless and Classics Zero (TaCZ) | 1.1.8-hotfix | `mods/` | 可选 | 枪挂灯联动。没装时手感正常，只是没有枪灯 |
 | Player Animator | 1.0.2-rc1+1.20 | `mods/` | 可选 | TaCZ 的第三人称动画依赖它。本模组零代码引用 |
 
 几点要说清楚的：
 
-- **光影包是锥形光生效的前提。** 只装模组不装光影包，物品和开关都正常，但看不到锥形光和光柱。
+- **光影包是锥形光生效的前提。** 只装模组不装光影包，物品和开关都正常，但看不到锥形光和光柱。本模组不自带光影包，请使用下方列出的已适配光影包。
 - **光影包不用打补丁，也不要改。** 模组在运行时把自研 GLSL 注入到你的包实例里。你用的是自己那份原版光影包，模组不附带也不分发任何第三方光影包的副本。
 - 已适配注入模板的是 Complementary Reimagined r5.9 与 iterationT 3.2.0。换其他包或换版本可能注入不进去，此时模组会在聊天栏提示。
 
@@ -44,9 +43,8 @@
 1. 装 Forge 1.20.1。
 2. 把 `taclight-0.11.2.jar` 放进 `.minecraft/mods/`。
 3. 客户端再放 Oculus（建议顺手放 Embeddium）。
-4. 把光影包解压或直接放 zip 到 `.minecraft/shaderpacks/`。
+4. 把 Complementary Reimagined 解压或直接放 zip 到 `.minecraft/shaderpacks/`（模组不自带光影包，这一步不能省）。
 5. 进游戏，`视频设置 → 光影` 里选中 Complementary Reimagined。
-6. 首次启动时模组会往 `shaderpacks/` 装一份备用包 `TacLight-Builtin`，你不用管它。
 
 ## 使用
 

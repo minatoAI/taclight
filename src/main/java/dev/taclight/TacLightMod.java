@@ -5,7 +5,6 @@ import dev.taclight.config.TacLightConfig;
 import dev.taclight.registry.ModItems;
 import dev.taclight.tacz.TaczCompat;
 import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import org.slf4j.Logger;
@@ -37,7 +36,6 @@ public class TacLightMod {
         bus.addListener(ModItems::onCreativeTabLoad);
         tryRegisterGunpack();
         bus.addListener(this::commonSetup);
-        bus.addListener(this::clientSetup);
     }
 
     /** 软依赖注册:仅当 TaCZ 存在时,反射调用 TaczGunpackHook(其类引用 TaCZ)。 */
@@ -58,35 +56,4 @@ public class TacLightMod {
         event.enqueueWork(dev.taclight.network.TacLightNetwork::register);
     }
 
-    private void clientSetup(final FMLClientSetupEvent event) {
-        // BUILTIN 2026-10-05: install TacLight-Builtin into shaderpacks on first launch
-        // (Iris discovers packs only from disk; the JAR cannot register one in memory).
-        // Any failure degrades to skip: lighting falls back to injection/generic paths.
-        event.enqueueWork(() -> {
-            try {
-                var settings = builtinSettings();
-                var outcome = dev.taclight.builtin.BuiltinPackInstaller.ensureInstalled(
-                        net.minecraftforge.fml.loading.FMLPaths.GAMEDIR.get(), settings,
-                        () -> dev.taclight.builtin.BuiltinPackInstaller.class.getResourceAsStream(
-                                dev.taclight.builtin.BuiltinPackInstaller.RESOURCE_ZIP));
-                LOGGER.info("[TacLight] builtin pack: {}", outcome.detail());
-            } catch (Throwable t) {
-                LOGGER.warn("[TacLight] builtin pack install skipped: {}", t.toString());
-            }
-        });
-    }
-
-    private static dev.taclight.builtin.BuiltinPackInstaller.Settings builtinSettings() {
-        try {
-            return new dev.taclight.builtin.BuiltinPackInstaller.Settings(
-                    TacLightConfig.EXPOSURE_ADAPTIVE.get(),
-                    TacLightConfig.EXPOSURE_TARGET.get(),
-                    TacLightConfig.EXPOSURE_MIN.get(),
-                    TacLightConfig.EXPOSURE_MAX.get(),
-                    TacLightConfig.EXPOSURE_ADAPT_RATE.get(),
-                    VERSION);
-        } catch (Throwable t) {
-            return dev.taclight.builtin.BuiltinPackInstaller.defaults(VERSION);
-        }
-    }
 }
