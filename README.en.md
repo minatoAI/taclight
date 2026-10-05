@@ -4,7 +4,7 @@
 
 A Minecraft mod that adds lights which actually cast cone-shaped light.
 
-In vanilla and in most lighting mods, a light is a sphere attached to the player, and it lands on a wall as a round blob. TacLight makes flashlights and gun-mounted lights cast a real cone: a defined edge, distance falloff, visible beams in fog and dust, and no leaking through walls. The lights are items in the game, so they move with your hand and with your gun.
+TacLight makes flashlights and gun-mounted lights cast a real cone: a defined edge, distance falloff, visible beams in fog and dust, and no leaking through walls. The lights are items in the game, so they move with your hand and with your gun.
 
 When used with an Iris/Oculus shader pack, the light enters the pack's own lighting and volumetric pipeline, so it matches the look of the pack instead of being dragged down by the vanilla light model.
 
