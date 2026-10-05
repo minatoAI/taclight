@@ -22,5 +22,16 @@ public final class GunControl {
         return next;
     }
 
+    /** 枪灯 Iris 区块光强度(纯函数,2026-10-06):装上即亮是 bug,必须跟随开关。
+     * <p>本地玩家读本机有效值({@code gunLightEffective}=开关×持枪门);
+     * 远端玩家读同步真源({@code PlayerLightAccess.gunLight},服务端写的已是有效值),
+     * 不能读本机状态否则观察者看不到对端灯态。未装件恒返 0。 */
+    public static final int GUN_BLOCK_LIGHT = 10;
+    public static int gunBlockLightEmission(boolean hasOurLight, boolean isLocal, boolean localEffective, boolean remoteSynced) {
+        if (!hasOurLight) return 0;
+        boolean on = isLocal ? localEffective : remoteSynced;
+        return on ? GUN_BLOCK_LIGHT : 0;
+    }
+
     private GunControl() {}
 }

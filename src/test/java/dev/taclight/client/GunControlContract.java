@@ -57,6 +57,13 @@ public class GunControlContract {
         check(ClientLightState.gunLightOn(), "切走后手动偏好保留");
         ClientLightState.setGunProbe(true);
         check(ClientLightState.gunLightEffective(), "切回持枪=恢复亮");
+        // Iris 区块光门控(2026-10-06 用户实测:装上即亮不受开关=bug):未装件恒 0;本地读有效值;远端读同步真源
+        check(GunControl.gunBlockLightEmission(false, true, true, false) == 0, "未装件=0(与开关无关)");
+        check(GunControl.gunBlockLightEmission(true, true, false, false) == 0, "本地装件但关灯=0(本次回归)");
+        check(GunControl.gunBlockLightEmission(true, true, true, false) == 10, "本地装件+开灯=10");
+        check(GunControl.gunBlockLightEmission(true, false, false, false) == 0, "远端同步灭=0(不读本机)");
+        check(GunControl.gunBlockLightEmission(true, false, true, true) == 10, "远端同步亮=10(本机开关不干扰)");
+        check(GunControl.gunBlockLightEmission(true, false, true, false) == 0, "远端以同步为准");
         // 复位,免污染后续契约/运行
         ClientLightState.setGunProbe(false);
         ClientLightState.setGunLight(false);
