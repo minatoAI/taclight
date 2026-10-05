@@ -8,7 +8,7 @@ TacLight makes flashlights and gun-mounted lights cast a real cone: a defined ed
 
 When used with an Iris/Oculus shader pack, the light enters the pack's own lighting and volumetric pipeline, so it matches the look of the pack instead of being dragged down by the vanilla light model.
 
-**Current version 0.11.3 (preview).** The core works; the look is still being polished.
+**Current version 0.11.4 (preview).** The core works; the look is still being polished.
 
 ## Features
 
@@ -26,7 +26,7 @@ This is the version combination the release was tested against. It is not a hard
 | Component | Version | Where | Role |
 |---|---|---|---|
 | Minecraft Forge | 1.20.1-47.1.3 | launcher | Platform, client and server |
-| TacLight | 0.11.3 | `mods/` | This mod |
+| TacLight | 0.11.4 | `mods/` | This mod |
 | Oculus | 1.8.0 | `mods/` | The shader pipeline; the light cone needs it |
 | Embeddium | 0.3.31 | `mods/` | Frame rate |
 | Shader pack: Complementary Reimagined | r5.9 | `shaderpacks/` | What makes the cone visible; the main supported pack |
@@ -39,12 +39,12 @@ A few things worth stating plainly:
 - The mod itself only asks for Forge 1.20.1. Other Forge versions were not tested.
 - **A shader pack is what makes the cone visible.** This mod ships no pack. With the mod but no pack, the items and the toggles all work, but you will not see a cone or a beam.
 - **Do not patch or edit your shader pack.** The mod injects its own GLSL into your pack instance at runtime. You keep your own copy of the original pack, and the mod neither bundles nor distributes a copy of any third-party pack.
-- Injection templates exist for Complementary Reimagined r5.9 and iterationT 3.2.0 only. Other packs or other versions may not inject; the mod says so in chat when that happens.
+- Injection matches on the pack's **contents** (key file hashes plus literal anchors), so the file name does not matter, not even a browser's `(1)` duplicate suffix. Only Complementary Reimagined r5.9 and iterationT 3.2.0 are adapted so far; a modified pack or an unadapted new version may still fail to inject, and chat will say the pack is not on the supported list.
 
 ## Installation
 
 1. Install Forge 1.20.1.
-2. Put `taclight-0.11.3.jar` into `.minecraft/mods/`.
+2. Put `taclight-0.11.4.jar` into `.minecraft/mods/`.
 3. Add Oculus on the client, and Embeddium if you want the frame rate.
 4. Put Complementary Reimagined into `.minecraft/shaderpacks/`, zipped or unzipped. The mod ships no pack, so this step is required.
 5. In game, pick Complementary Reimagined under `Video Settings -> Shader Packs`.
@@ -69,7 +69,7 @@ Listed honestly, so you do not judge it broken for something it never claimed:
 
 1. **Occlusion for complex block shapes is conservative.** Fences, stairs, snow layers and slabs are handled through a voxel grid. When the light ray grazes the underside of a fence bar, it will decide the spot is blocked rather than let light through. The result can look too dark, and it will not reach per-pixel shape accuracy. This is the ceiling of the current approach, not something more tuning removes.
 2. **The cone only exists with Oculus/Iris and a shader pack.** Without a shader pipeline the mod still works, but there is no cone and no beam.
-3. **Injection depends on a template matching your pack version.** Change the pack version or use a different pack and injection may not apply. Chat reports it when that happens.
+3. **Injection matches on pack contents.** The file name, including duplicate-download suffixes such as `(1)`, does not matter. A pack whose sources were modified, or a new version that is not adapted yet, may still fail to inject; chat reports it when that happens.
 4. **Parameters are tuned by hand.** Nothing adapts to the scene automatically.
 5. **The repository ships the internal debug surface and the verification harness.** `src/main/java/dev/taclight/debug` and `devonly` are development tools, excluded when the jar is packaged, so they never reach the release artifact. The contract tests under `src/test` have to be run explicitly (see below).
 6. Preview status: the core works, the look is still being polished.
