@@ -248,53 +248,6 @@ public class ClientEvents {
         if (mc.player != null) mc.player.displayClientMessage(Component.literal(msg), false);
     }
 
-    /** Number of screenshot encodes still pending; scheduling pressure is recorded as D rows. */
-    private static final java.util.concurrent.atomic.AtomicInteger MCAP_PENDING =
-            new java.util.concurrent.atomic.AtomicInteger();
-
-    /** Recorder run root is initialized once per client process. */
-    static {
-        dev.taclight.channel.FrameRecorder.setBaseDir(
-                net.minecraftforge.fml.loading.FMLPaths.GAMEDIR.get().toFile());
-    }
-
-    /** Frame-end screenshot execution. Reservation writes P synchronously; callback writes S/F by token. */
-    @SubscribeEvent
-    public static void onRenderTick(TickEvent.RenderTickEvent event) {
-        if (event.phase != TickEvent.Phase.END) return;
-        Minecraft mc = Minecraft.getInstance();
-        if (mc.level == null || mc.player == null) {
-            dev.taclight.channel.MotionCapture.shutdown("world-unload");
-            return;
-        }
-        if (!dev.taclight.channel.MotionCapture.armed()) return;
-        long nano = System.nanoTime();
-        long renderFrame = dev.taclight.channel.ClientSpotlightUploader.currentRenderFrame();
-        dev.taclight.channel.FrameRecorder.ShotToken token =
-                dev.taclight.channel.MotionCapture.reserveShot(nano, renderFrame);
-        if (token == null) return;
-        MCAP_PENDING.incrementAndGet();
-        try {
-            net.minecraft.client.Screenshot.grab(token.sessionDir(), token.filename(), mc.getMainRenderTarget(), component -> {
-                try {
-                    boolean success = token.expectedFile().isFile();
-                    dev.taclight.channel.FrameRecorder.completeShot(token, success,
-                            success ? "ok" : "expected-file-missing");
-                    if (success) TacLightMod.LOGGER.info("[TacLight] REC shot {}", token.expectedFile());
-                    else TacLightMod.LOGGER.error("[TacLight] REC shot missing {} callback={}",
-                            token.expectedFile(), component.getString());
-                } finally {
-                    MCAP_PENDING.decrementAndGet();
-                }
-            });
-        } catch (Throwable t) {
-            MCAP_PENDING.decrementAndGet();
-            dev.taclight.channel.FrameRecorder.completeShot(token, false,
-                    "grab-throw:" + t.getClass().getSimpleName());
-            TacLightMod.LOGGER.error("[TacLight] REC grab failed for {}", token.expectedFile(), t);
-        }
-    }
-
     @SubscribeEvent
     public static void onRenderLevel(net.minecraftforge.client.event.RenderLevelStageEvent event) {
         if (event.getStage() != net.minecraftforge.client.event.RenderLevelStageEvent.Stage.AFTER_LEVEL) return;
@@ -304,7 +257,6 @@ public class ClientEvents {
         dev.taclight.channel.ClientSpotlightUploader.onFrame();
         dev.taclight.channel.LightBuffer.rebindBase();
         // (2026-10-06 预览版剥离:S4a depth 已删除,体素为唯一遮挡路径。)
-        dev.taclight.channel.PerfStats.tickFrame();
     }
 
     @SubscribeEvent
@@ -317,7 +269,6 @@ public class ClientEvents {
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null || mc.player == null) {
             // 退出世界后可信关闭录制并停摆 SSBO；shutdown 幂等，可被多个 world-null hook 调用。
-            dev.taclight.channel.MotionCapture.shutdown("world-unload");
             dev.taclight.channel.LightBuffer.upload(java.util.List.of());
             return;
         }

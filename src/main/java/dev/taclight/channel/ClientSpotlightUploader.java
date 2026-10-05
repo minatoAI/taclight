@@ -66,14 +66,10 @@ public final class ClientSpotlightUploader {
         recFrame++;
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null || mc.player == null) {
-            MotionCapture.shutdown("world-unload");
             LightBuffer.upload(List.of());
             LightMotionConf.endFrame();   // 世界卸载:逐出全部灯键(重进=首帧语义)
             return;
         }
-        // !perf 相位计时(2026-09-25 ⑨):关着时 = 一次 volatile 读 + 零 nanoTime,生产零开销。
-        boolean perf = PerfStats.active();
-        long tP0 = perf ? System.nanoTime() : 0;
         dev.taclight.client.CameraSweep.tick(mc.player);
         LightParams cfg = LightParams.load();
         List<SpotlightData> lights = new ArrayList<>(2);
@@ -163,9 +159,7 @@ public final class ClientSpotlightUploader {
         if (LightTuneOverride.beamOnly()) extraFlags |= SpotlightBufferLayout.FLAG_BEAM_ONLY;
         // 体素遮挡栅格(09-01 深夜④ DDA):墙后漏光立项,与灯数据同缓冲上传;
         // 禁用/无灯 → null,GLSL 逐光线回退屏幕空间 SSO。
-        long tP1 = perf ? System.nanoTime() : 0;
         var voxelGrid = dev.taclight.client.VoxelGrid.update(mc, lights);
-        long tP2 = perf ? System.nanoTime() : 0;
         clampLightsOutOfSolid(lights, voxelGrid);
         // 遮挡距离表(2026-09-06 方案二,!occl 默认开):仅栅格有效时置位——
         // 栅格无效时 GLSL 走原逐采样 DDA(-1→可见)回退,语义与旧行为逐位一致。
@@ -184,31 +178,8 @@ public final class ClientSpotlightUploader {
         // 帧内数值探针(P2,2026-09-25):仅在调试中继布防时置位;未置位 ⇒ GLSL 短路,
         // 不访问 binding=8(生产零风险)。
         if (LightTuneOverride.numProbe()) extraFlags |= SpotlightBufferLayout.FLAG_NUM_PROBE;
-        long tP3 = perf ? System.nanoTime() : 0;
         LightBuffer.upload(lights, extraFlags, voxelGrid);
         noteLastLight0(lights);
-        if (perf) {
-            long tP4 = System.nanoTime();
-            PerfStats.notePhases((tP1 - tP0) / 1e6, (tP2 - tP1) / 1e6, (tP3 - tP2) / 1e6,
-                    (tP4 - tP3) / 1e6, (tP4 - tP0) / 1e6, lights.size());
-        }
-        if (FrameRecorder.active()) {
-            long t = System.nanoTime() / 1_000_000L;
-            // C 行明确区分相机眼/玩家眼位，并记录 vanilla bobView 的真实驱动字段。
-            FrameRecorder.append(FrameRecorder.cameraRow(t, recFrame,
-                    eye.x, eye.y, eye.z, mc.player.getYRot(), mc.player.getXRot(),
-                    mc.player.getX(), mc.player.getY(), mc.player.getZ(),
-                    playerEye.x, playerEye.y, playerEye.z,
-                    mc.player.walkDist, mc.player.walkDistO, mc.player.bob, mc.player.oBob,
-                    mc.options.bobView().get()));
-            // L 行:每灯一次(顺序=SSBO 顺序,自身/枪/远程)
-            for (int i = 0; i < lights.size() && i < 8; i++) {
-                SpotlightData s = lights.get(i);
-                FrameRecorder.append(FrameRecorder.lightRow(t, recFrame, i,
-                        s.posX(), s.posY(), s.posZ(), s.dirX(), s.dirY(), s.dirZ(),
-                        s.radius(), s.intensity(), s.cosOuter(), s.cosInner()));
-            }
-        }
         lookTraceTick(mc);
     }
 
@@ -226,21 +197,10 @@ public final class ClientSpotlightUploader {
         lastLight0 = lights.isEmpty() ? null : lights.get(0);
     }
 
-    /** 消融探针胶水(09-01):!looktrace 激活时逐帧记录最近非自身 LivingEntity 的角度链路;
-     *  09-01 晚兼作 MotionCapture 门控输入(布防时每帧喂位姿,会话开/关联动 LookTrace 门控模式)。 */
-    private static boolean mcapAutoTrace;
-    private static int mcapSeenSession;
-
+    /** 消融探针胶水(09-01):!looktrace 激活时逐帧记录最近非自身 LivingEntity 的角度链路。 */
     private static void lookTraceTick(Minecraft mc) {
-        boolean mcapArmed = dev.taclight.channel.MotionCapture.armed();
-        if (!dev.taclight.channel.LookTrace.active() && !mcapArmed) return;
+        if (!dev.taclight.channel.LookTrace.active()) return;
         long nano = System.nanoTime();
-        // 本地(观察者)通道(09-01 深夜⑥):自身走路/转视角同样门控 —— 必须先于
-        // 远程目标扫描(best==null 时本地运动仍要记录，观察者运动场景正是"对方灯不动")。
-        if (mcapArmed) {
-            dev.taclight.channel.MotionCapture.observeLocal(mc.player.getYRot(), mc.player.getXRot(),
-                    mc.player.getX(), mc.player.getY(), mc.player.getZ(), nano);
-        }
         net.minecraft.world.entity.LivingEntity best = null;
         double bestD = 48.0 * 48.0;
         for (var ent : mc.level.entitiesForRendering()) {
@@ -249,24 +209,6 @@ public final class ClientSpotlightUploader {
             if (d < bestD) { bestD = d; best = le; }
         }
         if (best == null) return;
-        if (mcapArmed) {
-            dev.taclight.channel.MotionCapture.observe(best.getId(), best.yHeadRot, best.getXRot(),
-                    best.getX(), best.getY(), best.getZ(), nano);
-            int ses = dev.taclight.channel.MotionCapture.sessionId();
-            if (ses != mcapSeenSession) {
-                if (ses != 0) {
-                    if (!dev.taclight.channel.LookTrace.active()) {
-                        dev.taclight.channel.LookTrace.configure("on");
-                        mcapAutoTrace = true;
-                    }
-                } else if (mcapAutoTrace) {
-                    dev.taclight.channel.LookTrace.configure("off");
-                    mcapAutoTrace = false;
-                }
-                mcapSeenSession = ses;
-            }
-        }
-        if (!dev.taclight.channel.LookTrace.active()) return;
         float pt = mc.getPartialTick();
         float hO = best.yHeadRotO, hC = best.yHeadRot;
         float bO = best.yBodyRotO, bC = best.yBodyRot;
@@ -306,12 +248,6 @@ public final class ClientSpotlightUploader {
                 best.xo, best.yo, best.zo, best.getX(), best.getY(), best.getZ(),
                 tX, tY, tZ, dX, dY, dZ);
         // R 行(09-01 深夜⑥):与 LOOKTRACE 同值的 CSV 副本,会话期内离线拼链路
-        if (dev.taclight.channel.FrameRecorder.active()) {
-            FrameRecorder.append(FrameRecorder.remoteRow(nano / 1_000_000L, recFrame, best.getId(), pt,
-                    hO, hC, bO, bC, pO, pC, baseYaw, basePitch, omYaw, rowExt,
-                    best.xo, best.yo, best.zo, best.getX(), best.getY(), best.getZ(),
-                    tX, tY, tZ, dX, dY, dZ));
-        }
     }
 
     /** 时间复用逐灯置信度(2026-09-06 !tm 立项):键=灯身份(slotKeys 与 lights 同序),
@@ -342,9 +278,6 @@ public final class ClientSpotlightUploader {
         double prevEyeX, prevEyeY, prevEyeZ;
         boolean hasPrevEye;
     }
-
-    /** DIAG-TP 摘要(每持枪远程玩家一行,单帧覆盖;诊断从上传器读单一真源)。 */
-    public static final java.util.Map<Integer, String> TP_PROBE = new java.util.HashMap<>();
 
     /** M5 远程玩家灯收集:实体数据开关 → 距离剔除/就近上限 → 第三人称锚定数学复用。 */
     private static void collectRemoteLights(Minecraft mc, Vec3 camEye, LightParams cfg,
@@ -463,14 +396,12 @@ public final class ClientSpotlightUploader {
                 gun = toSpot(new Vec3(res.pos().x, res.pos().y, res.pos().z),
                         new Vec3(fwdA[0], fwdA[1], fwdA[2]), cfg,
                         dev.taclight.config.TacLightConfig.GUN_MULTIPLIER.get().floatValue());
-                recordTpProbe(p, entry, res, liveRef);
                 tpSeen.add(p.getId());
                 out.add(selfCapped(gun, eye));
                 slotKeys.add("remote:" + p.getId() + ":gun");
             }
         }
         TP_BLENDS.keySet().retainAll(tpSeen);
-        TP_PROBE.keySet().retainAll(tpSeen);
     }
 
     /**
@@ -487,42 +418,6 @@ public final class ClientSpotlightUploader {
         }
         return new TpLightResolver.Referent(eye.x, eye.y, eye.z,
                 yaw, pitch, aiming, p.getMainHandItem().getItem().hashCode());
-    }
-
-    /** G 打桩行 + DIAG 摘要:TP 链逐级中间值(与 C 行同帧同 t,离线逐级相关性分析)。 */
-    private static void recordTpProbe(net.minecraft.client.player.AbstractClientPlayer p,
-                                      dev.taclight.pose.MuzzlePoseStore.Entry entry,
-                                      TpLightResolver.Resolved res,
-                                      TpLightResolver.Referent liveRef) {
-        String mode = dev.taclight.client.TpFallbackControl.blended() ? "blend" : "hard";
-        String roe = dev.taclight.pose.MuzzlePoseMath.isTpRowReadDebug() ? "row" : "col";
-        long tMs = System.nanoTime() / 1_000_000L;
-        float rfx = entry == null ? 0f : entry.pose().fx();
-        float rfy = entry == null ? 0f : entry.pose().fy();
-        float rfz = entry == null ? 0f : entry.pose().fz();
-        TP_PROBE.put(p.getId(), String.format(
-                "state=%s w=%.3f age=%.0fms fb=%s roe=%s raw=(%.3f,%.3f,%.3f) pos=(%.2f,%.2f,%.2f) dir=(%.3f,%.3f,%.3f)",
-                res.state(), res.weight(),
-                entry == null ? -1.0 : entry.ageNanos(System.nanoTime()) / 1e6,
-                mode, roe, rfx, rfy, rfz,
-                res.pos().x(), res.pos().y(), res.pos().z(),
-                res.dir().x(), res.dir().y(), res.dir().z()));
-        if (!FrameRecorder.active()) {
-            return;
-        }
-        FrameRecorder.append(FrameRecorder.gunRow(tMs, recFrame, p.getId(),
-                res.state(), res.weight(), mode, roe,
-                rfx, rfy, rfz,
-                entry == null ? 0f : entry.camYaw(), entry == null ? 0f : entry.camPitch(),
-                entry == null ? 0f : entry.camRot().x, entry == null ? 0f : entry.camRot().y,
-                entry == null ? 0f : entry.camRot().z, entry == null ? 0f : entry.camRot().w,
-                entry == null ? 0 : entry.camEye().x, entry == null ? 0 : entry.camEye().y,
-                entry == null ? 0 : entry.camEye().z,
-                res.pos().x(), res.pos().y(), res.pos().z(),
-                res.dir().x(), res.dir().y(), res.dir().z(),
-                liveRef.x(), liveRef.y(), liveRef.z(), liveRef.yaw(), liveRef.pitch(),
-                liveRef.aiming(), liveRef.itemHash(),
-                res.state().equals("fresh") || res.state().equals("hold")));
     }
 
     // ---- F2 自体胶囊常量(GLSL 侧消费,竖直半高 TACLIGHT_SELF_CAP_HALF=1.05)----

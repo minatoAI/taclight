@@ -152,14 +152,6 @@ public final class DebugCommandRelay {
             }
             return;
         }
-        if (line.equals("!rec") || line.startsWith("!rec ")) {
-            // 一键录制(09-01 深夜⑥,与 !mcap 同一状态机):on 后本地/远程任一运动
-            // 自动开录(逐帧 CSV + 60fps 截图),静止自动收窗。精确匹配防吞 !reload。
-            String arg = line.length() > 4 ? line.substring(4).trim() : "";
-            TacLightMod.LOGGER.info("[TacLight] RELAY rec -> {}",
-                    dev.taclight.channel.MotionCapture.configure(arg));
-            return;
-        }
         if (line.equals("!gl")) {
             // GL 身份 + 扩展面记录(2026-09-25):
             // ① 本机是 NVIDIA RTX 5070 Ti + AMD 核显的混合显卡,必须知道游戏**实际**跑在哪块 GPU 上
@@ -324,16 +316,6 @@ public final class DebugCommandRelay {
                 }
             } catch (Throwable t) {
                 TacLightMod.LOGGER.warn("[TacLight] RELAY lan failed: {}", t.toString());
-            }
-            return;
-        }
-        if (line.equals("!perf") || line.startsWith("!perf ")) {
-            // CPU 侧性能计时(2026-09-25 ⑨):!perf start [秒] | stop | status | reset。
-            // 多行回显(与 !voxray 同规逐行打)。体素盒/builds 数由 !voxel status 给,不在此重复。
-            String arg = line.length() > 5 ? line.substring(5).trim() : "";
-            String res = dev.taclight.channel.PerfStats.configure(arg);
-            for (String l : res.split("\n")) {
-                TacLightMod.LOGGER.info("[TacLight] RELAY perf | {}", l);
             }
             return;
         }
@@ -655,13 +637,6 @@ public final class DebugCommandRelay {
             String arg = line.length() > 10 ? line.substring(10).trim() : "";
             TacLightMod.LOGGER.info("[TacLight] RELAY looktrace -> {}",
                     dev.taclight.channel.LookTrace.configure(arg));
-            return;
-        }
-        if (line.startsWith("!mcap")) {
-            // 运动门控采集开关(09-01 晚):布防后被观察角色朝向/位置变化自动连拍+信号
-            String arg = line.length() > 5 ? line.substring(5).trim() : "";
-            TacLightMod.LOGGER.info("[TacLight] RELAY mcap -> {}",
-                    dev.taclight.channel.MotionCapture.configure(arg));
             return;
         }
         if (line.startsWith("!bsnap")) {

@@ -4,14 +4,11 @@ import dev.taclight.channel.LookTraceContract;
 import dev.taclight.channel.LightLevelOverrideContract;
 import dev.taclight.channel.LightTuneContract;
 import dev.taclight.tune.TuneContract;
-import dev.taclight.channel.MotionCaptureContract;
-import dev.taclight.channel.FrameRecorderContract;
 import dev.taclight.channel.MultiLightCollectorContract;
 import dev.taclight.channel.OcclTableContract;
 import dev.taclight.channel.TemporalReuseContract;
 import dev.taclight.channel.RemoteBaseSnapContract;
 import dev.taclight.channel.RemotePosSnapContract;
-import dev.taclight.channel.PerfStatsContract;
 import dev.taclight.channel.RemoteLookPredictorContract;
 import dev.taclight.channel.SlabHitDistContract;
 import dev.taclight.channel.SpotlightBufferLayoutContract;
@@ -75,8 +72,6 @@ public class AllContracts {
         dev.taclight.ContractOrderContract.main(args);
 
 
-        System.out.println("== FrameRecorderContract ==");
-        FrameRecorderContract.main(args);
 
         System.out.println("== GunControlContract ==");
         GunControlContract.main(args);
@@ -135,8 +130,6 @@ public class AllContracts {
         System.out.println("== LookTraceContract ==");
         LookTraceContract.main(args);
 
-        System.out.println("== MotionCaptureContract ==");
-        MotionCaptureContract.main(args);
 
         System.out.println("== MultiLightCollectorContract ==");
         MultiLightCollectorContract.main(args);
@@ -159,8 +152,6 @@ public class AllContracts {
         System.out.println("== PatchExecutorContract ==");
         PatchExecutorContract.main(args);
 
-        System.out.println("== PerfStatsContract ==");
-        PerfStatsContract.main(args);
 
         System.out.println("== PlayerLightSyncContract ==");
         PlayerLightSyncContract.main(args);

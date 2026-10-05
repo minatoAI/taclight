@@ -111,6 +111,32 @@ public class InteropPackagingContract {
      */
     private static final String[] DEAD_METHOD_SYMBOLS = { "parseRelayArg", "applyAuto" };
 
+    /**
+     * 2026-10-06 预览版收尾:上一轮"剥离调试面"按**目录**剔除,漏掉了散在 channel/client 的
+     * 6 个调试类(class 级剔除只覆盖 debug&#47;** 与 devonly&#47;**)。它们随发布件发出但已无触发源,
+     * 属于"惰性残留" —— 本条按**类名**把它们钉死在发布件之外。
+     * <p>内嵌类($)一并命中,避免"删了外壳留了内部类"。</p>
+     */
+    private static final String[] REMOVED_DEBUG_CLASSES = {
+            "dev/taclight/mixin/GunModelRenderProbeMixin",
+            "dev/taclight/client/RenderDocApi",
+            "dev/taclight/client/RenderDocGate",
+            "dev/taclight/channel/PerfStats",
+            "dev/taclight/channel/FrameRecorder",
+            "dev/taclight/channel/MotionCapture",
+    };
+
+    /** 已删功能的语言键:功能删了、键还留在 lang 里 ⇒ 发布件带孤儿文案。 */
+    private static final String[] REMOVED_LANG_KEYS = {
+            "key.taclight.debug_toggle",
+            "key.taclight.diag_dump",
+            "key.taclight.bench",
+            "key.taclight.snapshot",
+    };
+
+    /** 语言键正控:同一个读取路径必须能找到这个键,否则"没找到"只说明读错了文件。 */
+    private static final String PRESENT_LANG_KEY = "key.taclight.flashlight_toggle";
+
     public static void main(String[] args) throws Exception {
         releaseJarBoundary();
         versionCoherence();
@@ -146,6 +172,7 @@ public class InteropPackagingContract {
         List<String> relay = new ArrayList<>();
         List<String> debug = new ArrayList<>();
         List<String> devOnly = new ArrayList<>();
+        List<String> deadDebugClass = new ArrayList<>();
         boolean hasInterop = false;
         try (ZipFile z = new ZipFile(jar.toFile())) {
             Enumeration<? extends ZipEntry> en = z.entries();
@@ -155,6 +182,7 @@ public class InteropPackagingContract {
                 if (n.startsWith("dev/taclight/debug/")) debug.add(n);
                 if (isDevOnlyEntry(n)) devOnly.add(n);
                 if (n.equals("dev/taclight/interop/RuntimePackInjector.class")) hasInterop = true;
+                if (isRemovedDebugClass(n)) deadDebugClass.add(n);
             }
         }
         check(hasInterop, "正控:发布 jar 含 dev/taclight/interop/RuntimePackInjector.class(注入逻辑必须发布)");
@@ -175,6 +203,29 @@ public class InteropPackagingContract {
         check(deadHits.length == 0,
                 "★ R12c[N1·构件] 发布件 dev/taclight/client/GunControl.class 不含中继专用死方法符号"
                         + "(期望 0 命中,实际 [" + String.join(",", deadHits) + "]);选中 jar = " + jar);
+
+        // 2026-10-06 预览版收尾:调试面**按类名**的构件闸门(补 R12 目录剔除的漏)。
+        //   红态自证:拿上一版发布件(89fa02a 构建)走 -PreleaseJar ⇒ 6 个类名逐条点名。
+        check(deadDebugClass.isEmpty(),
+                "★ 预览版收尾[构件] 发布 jar 不含已删调试类(期望 0 条,实际 " + deadDebugClass.size()
+                        + (deadDebugClass.isEmpty() ? "" : " ⇒ " + deadDebugClass) + ");选中 jar = " + jar);
+
+        // 2026-10-06:探针 mixin 也必须从 mixin 配置里消失 —— 类删了但配置留名会让 Mixin 直接报错,
+        //   所以这两件事必须同时成立(只删类不改配置 = 启动崩;只改配置不删类 = 残留)。
+        check(!zipEntryContainsAscii(jar, RELEASE_MIXIN_CONFIG, "GunModelRenderProbeMixin"),
+                "★ 预览版收尾[构件] " + RELEASE_MIXIN_CONFIG + " 不再注册 GunModelRenderProbeMixin");
+
+        // 2026-10-06:孤儿语言键。正控:同一读取函数必须先能找到 flashlight_toggle,
+        //   否则本条只能证明"文件读错了",不能证明"键不存在"(AGENTS 一 4:空值 ≠ 否定结论)。
+        for (String lang : new String[]{ "assets/taclight/lang/en_us.json", "assets/taclight/lang/zh_cn.json" }) {
+            check(zipEntryContainsAscii(jar, lang, PRESENT_LANG_KEY),
+                    "正控:jar 内 " + lang + " 含在用的语言键 " + PRESENT_LANG_KEY);
+            List<String> orphans = new ArrayList<>();
+            for (String k : REMOVED_LANG_KEYS) {
+                if (zipEntryContainsAscii(jar, lang, k)) orphans.add(k);
+            }
+            check(orphans.isEmpty(), "★ 预览版收尾[构件] " + lang + " 不含已删功能的孤儿键(实际 " + orphans + ")");
+        }
 
         // 2026-09-28 U-1b:gradle.properties 的 mod_version 与 jar 清单 Implementation-Version 必须同源。
         //   为什么补这条:implVer 此前**只被打印、从未被 check**(全文件仅 :93 读、:96 打印),
@@ -381,6 +432,19 @@ public class InteropPackagingContract {
             }
         }
         return hit.toArray(new String[0]);
+    }
+
+    /** 发布件条目是否是已删调试类(含内嵌类)。 */
+    private static boolean isRemovedDebugClass(String entry) {
+        if (!entry.endsWith(".class")) return false;
+        for (String fq : REMOVED_DEBUG_CLASSES) {
+            String simple = fq.substring(fq.lastIndexOf('/') + 1);
+            String pkg = fq.substring(0, fq.lastIndexOf('/') + 1);
+            if (!entry.startsWith(pkg)) continue;
+            String rest = entry.substring(pkg.length());
+            if (rest.equals(simple + ".class") || rest.startsWith(simple + "$")) return true;
+        }
+        return false;
     }
 
     /** 朴素 ASCII 子串搜索(class 常量池为 modified-UTF8,ASCII 段逐字节可比)。 */

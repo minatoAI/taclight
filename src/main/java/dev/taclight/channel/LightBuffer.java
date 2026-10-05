@@ -43,10 +43,8 @@ public final class LightBuffer {
      *
      * <p><b>{@code count} 口径(2026-09-25 待办 ⑰)</b>:{@code count = min(形参列表长度, MAX_LIGHTS=8)}
      * = <b>实际上传槽数</b> —— <b>含</b> {@code !synth} 合成灯,写进 SSBO 头第 0 个字,并等于 GLSL
-     * 每像素遍历的灯槽数(超过 8 的灯被丢弃)。与之对照:{@code PerfStats} 的 {@code lights}=
-     * 调用方列表长度 = <b>世界推导</b>灯数,<b>不含</b>合成灯 ⇒ 两者在 {@code !synth N} 下天然不等
-     * ({@code ssbo count} 比 {@code lights} 大 N,直到钳到 8),<b>不得互相校验</b>。
-     * 日志里的 {@code !diag ... ssbo count=} 就是这个数(由 {@link #dumpLight0()} 从 GPU 头字回读)。</p>
+     * 每像素遍历的灯槽数(超过 8 的灯被丢弃);写进 SSBO 头第 0 个字。
+     * 由 {@link #dumpLight0()} 从 GPU 头字回读可校验。</p>
      */
     public static synchronized void upload(List<SpotlightData> lights, int extraFlags,
                                            VoxelField.Snapshot grid) {
@@ -59,8 +57,7 @@ public final class LightBuffer {
                 ssboId = GL15.glGenBuffers();
                 LOGGER.info("[TacLight] SSBO created (id={}, bytes={} incl voxel tail)", ssboId, bytes);
             }
-            int flags = (count > 0 ? SpotlightBufferLayout.FLAG_HAS_DATA : 0)
-                    | SpotlightBufferLayout.FLAG_TIMING_PROBE | extraFlags;
+            int flags = (count > 0 ? SpotlightBufferLayout.FLAG_HAS_DATA : 0) | extraFlags;
             ByteBuffer buf = SpotlightBufferLayout.newBuffer(count);
             SpotlightBufferLayout.writeHeader(buf, count, 1.0f, flags);
             for (int i = 0; i < count; i++) {
@@ -117,8 +114,6 @@ public final class LightBuffer {
                         (long) SpotlightBufferLayout.OFF_VOX_DATA, gridStage);
                 lastGridVersion = grid.version();
             }
-            // !perf 上传量(2026-09-25 ⑨):头段 832B/帧恒传;调色板盒区与体素数据仅 version 变化时。
-            if (PerfStats.active()) PerfStats.noteUpload(SpotlightBufferLayout.HEAD_STAGE_BYTES, tailB);
             if (!uploadLogged) { uploadLogged = true; LOGGER.info("[TacLight] upload {} light(s), flags={}", count, flags); }
             GL30.glBindBufferBase(GL43.GL_SHADER_STORAGE_BUFFER, SpotlightBufferLayout.BINDING, ssboId);
             // v0.9.0:路线 P 时代的 SLOT PROBE(binding 0/1/8 冗余绑定)已删除,
@@ -165,7 +160,7 @@ public final class LightBuffer {
      * 诊断:直读 GPU 缓冲 light0 与 cookie(GLSL 写回),验证 Java 上传 vs GLSL 布局。
      * 返回串里的 {@code count=} = {@link #upload} 写进头字的<b>实际上传槽数</b>(含 {@code !synth}
      * 合成灯、钳 {@code MAX_LIGHTS=8};口径见 {@code upload} 的口径段)⇒ 它就是日志里
-     * {@code !diag ... ssbo count=} 的来源,<b>不要</b>拿它与 {@code PerfStats} 的 {@code lights=} 互校。
+     * 诊断回读的来源(块级校验用)。
      */
     public static synchronized String dumpLight0() {
         try {
