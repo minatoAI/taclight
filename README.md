@@ -1,55 +1,117 @@
-# TacLight — 聚光灯照明设备(Forge 1.20.1)
+# TacLight
 
-为 Minecraft 提供"手电筒/聚光灯"式**锥形照明设备**(非游戏内点光源),并与
-[Timeless and Classics Zero](https://www.curseforge.com/minecraft/mc-mods/timeless-and-classics-zero)
-联动(枪挂照明附件 + 独立手持手电筒)。
+给 Minecraft 加"真正会投射锥形光照的灯"。
 
-## 技术栈
-- MC 1.20.1 / Forge 47.1.3 / Java 17
-- 光影:Oculus 1.8.0(Iris Forge 移植)+ Embeddium;参考/首发适配 **iterationT 3.2.0**
-- 数据通道:官方 Iris API(IrisItemLightProvider)→ 兼容所有支持手持光的包;
-  V3 起 SSBO+补丁通道实现"光从枪口出"(详见调查报告)
+原版和多数灯光模组的灯是套在玩家身上的一圈球形光，照到墙上就是一块圆斑。TacLight 让手电筒和枪挂灯投射真实的锥形光：有明确的光锥边界、有距离衰减、在雾和尘埃里能看到光柱，被墙挡住的地方不漏光。灯本身是游戏里的物品，拿在手上和装在枪上都会跟着动。
 
-## 配置
-所有光效参数在 `run/config/taclight-client.toml`(半径/强度/内外锥角/光束密度/枪灯倍率)或发布后 `config/taclight-client.toml`。
+配合 Iris/Oculus 光影包使用时，光直接进入光影包的照明和体积光管线，所以观感跟光影包自己的光照是一致的，不会被原版光照模型拖低。
 
-## 实机体验提示
-- **分通道验证**:iterationT 设置里把 `HELDLIGHT_MODE` 设为 0,此时只有 TacLight 的 SSBO 锥形光(排除内置手电干扰);按 **K** 切霓虹调试模式,纯绿锥形光 = 我们注入的 pass 在画;
-- 距离衰减修复后:近处亮、远处渐暗,不再均匀白团;
+**当前版本 0.11.2（预览版）**。核心功能可用，观感仍在打磨。
 
-## 常用命令(纯离线,复用本地 Gradle 缓存)
-```powershell
-.\gradlew-java17.cmd build        # 编译 + 打包(离线 --offline 可加)
-.\gradlew-java17.cmd runClient    # 客户端 dev 运行
+## 特性
+
+- 手持手电筒：真实锥形光，可调内外锥角、照距、亮度、衰减。
+- 枪挂照明附件：装到 TaCZ 枪械上，光从枪口出，跟随枪的朝向和第三人称姿态。
+- 体积光：雾、尘埃、水下能看到光柱（丁达尔效应）。
+- 遮挡阴影：墙后不漏光，遮挡由体素栅格判定，取向偏保守（宁可多挡，不肯漏光）。
+- 多人游戏：别人能看到你的灯，开关状态随实体同步，远程灯的姿态由对端客户端重建，不新增网络包。
+- 光影包兼容：运行时把灯注入到你已经装好的光影包里，模组不重新分发任何改版光影包。
+- 内置备用光影包：首次启动自动装一份到 `shaderpacks/TacLight-Builtin`，没有装其他光影包时也能看到锥形光。
+
+## 运行需求
+
+| 组件 | 版本 | 放哪 | 必需 | 说明 |
+|---|---|---|---|---|
+| Minecraft Forge | 1.20.1-47.1.3（范围 `[47.1,48)`） | 启动器 | 必需 | 客户端与服务端 |
+| TacLight | 0.11.2 | `mods/` | 必需 | 本模组 |
+| Oculus | 1.8.0 | `mods/` | 客户端必需 | Iris 的 Forge 移植。锥形光依赖光影管线，没装就没有锥形光 |
+| Embeddium | 0.3.31 | `mods/` | 推荐 | Sodium 的 Forge 移植，明显提升帧率 |
+| 光影包 Complementary Reimagined | r5.9 | `shaderpacks/` | 建议 | 主线适配的光影包，推荐优先用它 |
+| 光影包 iterationT | 3.2.0 | `shaderpacks/` | 可选 | 另一套已适配模板 |
+| Timeless and Classics Zero (TaCZ) | 1.1.8-hotfix | `mods/` | 可选 | 枪挂灯联动。没装时手感正常，只是没有枪灯 |
+| Player Animator | 1.0.2-rc1+1.20 | `mods/` | 可选 | TaCZ 的第三人称动画依赖它。本模组零代码引用 |
+
+几点要说清楚的：
+
+- **光影包是锥形光生效的前提。** 只装模组不装光影包，物品和开关都正常，但看不到锥形光和光柱。
+- **光影包不用打补丁，也不要改。** 模组在运行时把自研 GLSL 注入到你的包实例里。你用的是自己那份原版光影包，模组不附带也不分发任何第三方光影包的副本。
+- 已适配注入模板的是 Complementary Reimagined r5.9 与 iterationT 3.2.0。换其他包或换版本可能注入不进去，此时模组会在聊天栏提示。
+
+## 安装
+
+1. 装 Forge 1.20.1。
+2. 把 `taclight-0.11.2.jar` 放进 `.minecraft/mods/`。
+3. 客户端再放 Oculus（建议顺手放 Embeddium）。
+4. 把光影包解压或直接放 zip 到 `.minecraft/shaderpacks/`。
+5. 进游戏，`视频设置 → 光影` 里选中 Complementary Reimagined。
+6. 首次启动时模组会往 `shaderpacks/` 装一份备用包 `TacLight-Builtin`，你不用管它。
+
+## 使用
+
+按键（可在 `选项 → 控制 → TacLight` 里改）：
+
+| 按键 | 作用 |
+|---|---|
+| `J` | 手电筒开关 |
+| `M` | 枪灯开关 |
+
+- 手电筒的开关状态存在**这支手电筒自己的物品数据**里。切到别的物品再切回来，状态还在。
+- 枪灯是逐把枪独立的，每把枪有自己的开关状态。
+- 光效参数在 `config/taclight-client.toml`：半径、强度、内外锥角、光束密度、枪灯倍率。
+- 多人游戏里，你开关灯，同服务器的其他人能看到；远程玩家的灯姿态由你自己的客户端重建，不需要额外同步。
+
+## 已知限制
+
+如实列出，避免你按预期之外的效果去判断它坏了：
+
+1. **复杂形状方块的遮挡是保守的。** 栅栏、楼梯、雪层、半砖这类非满方块的遮挡用体素栅格判定，遇到"灯线擦着横杆底边过去"这种几何关系，会宁可判成被挡住。结果是可能偏暗，做不到像素级形状精度。这是当前技术路线的上限，不是调参能消除的。
+2. **只在 Oculus/Iris 加光影包时才有锥形光。** 没有光影管线时模组本体照常工作，但没有光锥和光柱。
+3. **光影注入依赖补丁模板匹配包版本。** 包里换了版本或换了另一套包，注入可能不生效，聊天栏会提示。
+4. **参数是手动调参**，没有按场景自动适配。
+5. **公开仓不含内部验证台**，所以这个仓库里没有可以直接跑的自动化测试。
+6. 预览版定位：核心功能可用，观感仍在打磨。
+
+## 性能
+
+开发机实测（2026-09，旧测试台，4K，双灯；不是验收数字，随硬件和场景变化）：
+
+- 体积光遮挡查表：最坏视角 38.4 → 65.4 FPS（约 +70%），画面差异 0.16% 像素。
+- 体积光时间复用：116.2 → 183.5 FPS，灯侧开销 6.24 → 3.08 ms。
+
+这两项都已随本版发布。详细口径与原始数据见开发者文档。
+
+## 从源码构建
+
+前置：JDK 17。
+
+```bash
+./gradlew jar            # 产物 build/libs/taclight-<version>.jar
+./gradlew packShaderZip  # 产物 build/distributions/taclight-shaders-<version>.zip
+./gradlew build          # 全量构建
 ```
-> 需要  `E:\dshHome\mc-shader-spotlight-dev-qa\.tools\jdk-17`(JDK 17,复用旧项目工具链);
-> 首次联网环境执行一次 `gradlew build` 后即可完全离线。
+
+TaCZ 与 Oculus 的 jar 需要你自己下载后放进 `libs/`（本项目不重分发，理由见 `THIRD_PARTY.md`）。缺件时构建会在 `checkLocalDeps` 阶段明确报出缺哪个文件，而不是丢一个编译错误。
+
+## 许可与致谢
+
+- 本模组与自带光影包源码：**GPL-3.0-or-later**（`LICENSE`，全文 `LICENSE-GPL-3.0.txt`）。
+- 不重分发任何第三方 jar，依赖的许可与再分发口径见 `THIRD_PARTY.md`。
+- 不重分发任何改版光影包。光影包的注入由用户的本地环境在运行时完成。
+- 上游思想借鉴（均未逐字复制代码）与 Minecraft/Forge 的链接使用，见 `THIRD_PARTY.md`。
 
 ## 目录
-- `src/main/java/dev/taclight/` 产品代码
-- `libs/` 本地离线依赖(不提交 git)
-- `.gradle-user-home/` 复用自旧项目的完整 Gradle/ForgeGradle 缓存(不提交 git)
-- `../docs/01-调查报告与项目边界.md` 三问调查与路线图
 
-## 开发纪律(摘录,详见调查报告 §5)
-1. 单一状态真源:只维护一份里程碑清单(本 README 状态行)。
-2. 测试/脚手架独立 sourceSet,主源码只放产品类。
-3. 官方 API 优先;反射/mixin 收敛进 adapter 层 + 版本探测 + fail-closed。
-4. 依赖全部 optional + 能力探测。
-5. GLSL 单源生成,禁止手工双拷贝。
-6. 许可证:TaCZ=GPL-3.0 项目取 GPL-3.0-or-later;Photon 禁改版分发;HandheldMoon=ARR 仅参考行为。
-7. 证据自动化(OFF-A/OFF-B 像素基线),每阶段 git tag。
+```
+src/main/java/dev/taclight/   产品代码（不含内部调试面）
+src/main/resources/           资源：mixin 配置、枪灯枪包、光影补丁模板与内联 GLSL
+pack/shaders/                 自带光影包源码
+docs/开发纪律与路线图.md        面向开发者：纪律、状态、路线图
+CHANGELOG.md                  变更历史
+THIRD_PARTY.md                第三方致谢与许可
+```
 
-## 路线图
-- [x] v0.8.3 选包自检(活动包若不含注入标记,聊天栏直接提示切换派生包)+ K 键聊天反馈
-- [x] v0.8.2 注入光 soft-knee 整形(距离衰减可见)+ K 键霓虹调试模式(通道可辨识)
-- [x] v0.7.0 发布构建(clean build + 契约 29/29 + jar 完整性审计)
-- [x] V0 环境与工程骨架(离线构建验证通过)
-- [x] V1 手电筒物品 + IrisItemLightProvider + 开关(代码完成,**待实机验收**:runClient 手持手电筒按 L 验证锥形光)
-- [x] V2 TaCZ 枪挂灯附件(taclight:gun_light gunpack + EXTRA_ENTRIES 官方注册 + 探针识别;契约测试 6/6;冒烟:2 个 gunpack 注册成功,**待实机验收**:枪匠台合成→改装界面装上 HK416D→日志出现 gun light ON)
-- [x] V3-p1 SSBO 通道(binding 7,std430 96B/灯)+ iterationT 补丁管线(锚点/SHA512/幂等)+ 表面锥光 GLSL(软边+屏幕空间遮挡);契约 18/18;补丁包在 Oculus 加载成功
-- [x] V3-p2 体积光束(composite.fsh 16 步 raymarch + 光束遮挡)+ 高光(composite5 GGX);契约 18/18;补丁包加载成功,**待实机验收**:雾中可见光柱、潮湿表面有高光
-- [x] V4 枪口精确姿态 + **SSBO 通道端到端已验证**(v0.8.1 修复 f0 类型后 E2E 探针通过;真相:此前的"Oculus 阻断"是 composite5 编译失败所致,见 docs/04 修订版)
-- [x] B 计划:枪灯走官方 G 通道(GunItemLightProviderMixin 注入 IrisItemLightProvider)→ 持枪即点亮 iterationT 内置 FLASHLIGHT;**待实机验收**:/taclight kit → 持 HK416D(装枪灯)对墙出现锥形光
-- [ ] V3 SSBO 真通道(枪口朝向/体积束/屏幕空间遮挡)
-- [ ] V4 打磨(多灯/UI/性能/多人可选)
+## 文档
+
+- `CHANGELOG.md`：版本变更历史。
+- `docs/开发纪律与路线图.md`：开发纪律、当前状态、路线图与验证方式。
+- `THIRD_PARTY.md`：第三方依赖、许可与署名。
