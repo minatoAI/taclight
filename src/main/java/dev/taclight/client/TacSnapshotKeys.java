@@ -40,15 +40,9 @@ public final class TacSnapshotKeys {
             Path dir = DebugSnapshotter.saveSnapshot("key/F9");
             TacLightMod.LOGGER.info("[TacLight] SNAP key/F9 -> {}",
                     dir == null ? "FAILED" : dir.toString());
-            // S4a depth 诊断开关(2026-10-06 凌晨正射特写):上下两洞一白一黑
-            // 不再猜,用 depth 直接验:depth 亮则体素错,depth 黑则几何真挡。
-            // 烘中作废旧图+F9 包自带 moved,第二张不动即 fresh。
-            try {
-                String arm = dev.taclight.channel.ShadowDepthBake.arm();
-                TacLightMod.LOGGER.info("[TacLight] SNAP key/F9 + {}", arm);
-            } catch (Throwable t) {
-                TacLightMod.LOGGER.warn("[TacLight] SNAP key/F9 depth-arm failed: {}", t.toString());
-            }
+            // S4a depth 休眠(2026-10-06 凌晨结案):CPU 烘焙永远跟不上移动灯,
+            // 每张 F9 强烘是骚扰;depth 代码封存待 S4b(GPU 每帧),
+            // F9 回纯快照(包内仍自带 depth 状态行供查)。
         }
     }
 }
