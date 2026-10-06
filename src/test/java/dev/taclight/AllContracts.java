@@ -105,6 +105,11 @@ public class AllContracts {
         System.out.println("== InteropStatusContract ==");
         dev.taclight.interop.InteropStatusContract.main(args);
 
+        // 手电筒开/关图标(2026-10-06 用户需求):Java 属性 id ↔ 模型 predicate ↔ *_on 模型 ↔ 贴图,
+        // 四处配对任一写错都不会报错,只会"图标不跟着变";另钉"只加光效、机身逐位不动"。
+        System.out.println("== ItemIconStateContract ==");
+        dev.taclight.client.ItemIconStateContract.main(args);
+
         // 合成按键注入纯核心(2026-09-26 待办 A5,中继 !key):名字表 / 两类消费路径 /
         // 毫秒自动抬起状态机 / Tracker(离线真跑) + dev 中继接线(进程内 KeyboardHandler.keyPress)。
         System.out.println("== KeyInjectContract ==");
@@ -152,6 +157,12 @@ public class AllContracts {
 
         System.out.println("== PlayerLightSyncContract ==");
         PlayerLightSyncContract.main(args);
+
+        // 最低可玩性(2026-10-06 用户提问立项):两个设备都要能在生存里拿到 ——
+        // 手电筒 vanilla 合成 + 枪挂灯 TaCZ 枪械工作台配方(gunpack 独立树,静默失效风险最高)。
+        System.out.println("== RecipePlayabilityContract ==");
+        RecipePlayabilityContract.main(args);
+
 
         System.out.println("== RemoteBaseSnapContract ==");
         RemoteBaseSnapContract.main(args);

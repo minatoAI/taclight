@@ -56,15 +56,19 @@ public class VoxelDdaContract {
                 "深穿透实心格仍一票否决 T=0");
         // 掠边(穿透 0.061 格 < 带宽):大部分透射,不再硬翻转;范围随带宽推导,
         // 不硬编码,防调参时契约与实现脱节。
+        // ★ 2026-10-06:实心格从 y==0 改为 x==1 —— 灯原点在 (0.912,0.5,0.5) 的格子里,
+        // 而 y==0 的实心平面**正好包含灯所在格**;起点格判定生效后那是"灯埋在方块里",
+        // 合法地 T=0(见下方"起点格"一节),本项要测的是**中间格**的掠边软化,故把实心面
+        // 挪到不包含灯的 x==1:射线几何与穿透长度(0.0612 / 0.0306 格)完全不变。
         double graze = VoxelDda.transmit(0.912, 0.5, 0.5, 1.112, 1.5, 0.5,
-                cell -> cell.y() == 0 ? VoxelField.CODE_SOLID : VoxelField.CODE_EMPTY);
+                cell -> cell.x() == 1 ? VoxelField.CODE_SOLID : VoxelField.CODE_EMPTY);
         // 该射线的几何穿透长度 ≈0.0612 格,与带宽无关;由 (1-T)×带宽 反推应守恒。
         double grazePen = (1.0 - graze) * VoxelDda.FUZZ_BLOCKS;
         check(graze < 1.0 && Math.abs(grazePen - 0.0612) < 2e-3,
                 "掠边实心格得部分透射且穿透长度守恒(实测 T=" + graze + ",穿透 "
                         + String.format("%.5f", grazePen) + " 格,带宽 " + VoxelDda.FUZZ_BLOCKS + ")");
         double grazeShallower = VoxelDda.transmit(0.906, 0.5, 0.5, 1.106, 1.5, 0.5,
-                cell -> cell.y() == 0 ? VoxelField.CODE_SOLID : VoxelField.CODE_EMPTY);
+                cell -> cell.x() == 1 ? VoxelField.CODE_SOLID : VoxelField.CODE_EMPTY);
         check(grazeShallower > graze,
                 "越浅的掠边透射越高(实测 " + grazeShallower + " > " + graze + ")");
         // 树叶/植被保持整格语义(穿透≥带宽时系数不变)。
@@ -170,10 +174,10 @@ public class VoxelDdaContract {
                 "scene→view 用全矩阵(与光栅化几何同含 bob 平移,差分才可抵消)");
         check(!shader.contains("mat3(gbufferModelView) * scenePos"),
                 "scene→view 禁止 mat3-only 形式(与带平移的 fragView 相减=步频抖动)");
-        check(shader.contains("float tNext = min(tMax.x, min(tMax.y, tMax.z));"),
+        check(shader.contains("float tExit = min(tMax.x, min(tMax.y, tMax.z));"),
                 "GLSL 使用统一 crossing time");
-        check(shader.contains("bvec3 tied = lessThanEqual(abs(tMax - vec3(tNext)), vec3(tieEps));"),
-                "GLSL 用距离比例容差识别全部 tied axes");
+        check(shader.contains("bvec3 tied = lessThanEqual(abs(tMax - vec3(tEntry)), vec3(tieEps));"),
+                "GLSL 用距离比例容差识别全部 tied axes(tie 基准 = 本轮格入口 tEntry)");
         check(shader.contains("cell += istep * ivec3(tied);"),
                 "GLSL 同时推进全部 tied axes");
         check(!shader.contains("cell[axis] += istep[axis]"),
@@ -191,7 +195,7 @@ public class VoxelDdaContract {
         // 旧版在表面照明用视图域 dot(lightView,lightView)<0.25 判"灯≈相机"
         // 并直接 vis=1(跳过遮挡)。坑57 修复后 lightView 含 bob 平移(±0.1),自灯
         // 锚点(手持 0.44/枪灯 ~0.6)恰在 0.5 阈值两侧,随步频翻转 → 影子"消失+闪烁"。
-        // 且灯≈相机时体素 DDA 依然有效(世界空间射线,起点/终点格双豁免),
+        // 且灯≈相机时体素 DDA 依然有效(世界空间射线;终点格豁免自遮,起点格几何照判),
         // 跳过 DDA = 自灯影子整体丢失;同轴豁免只应用于 DDA 无效时的屏幕空间回退。
         // interop 剥离后该分流逻辑位于 core 的 taclight_surface_lighting。
         String surface = Files.readString(Path.of("pack/shaders/composite.fsh"));
@@ -206,6 +210,39 @@ public class VoxelDdaContract {
                 "体素 DDA 在同轴判定之前无条件执行(灯≈相机时 DDA 依然有效,跳过=自灯影子丢失)");
         check(shader.contains("} else if (dot(lightScene, lightScene) < 0.25) {"),
                 "同轴豁免只作为 DDA 无效(-1)时的回退分支(热修12 的 SSO 退化只属于屏幕空间路径)");
+
+        // ---- ★ 2026-10-06 起点格(灯所在格)几何必须参与遮挡 ----
+        // 用户实测缺陷:灯靠方块太近时,方块另一侧出现"该方块影子形状的亮区"(漏光)。
+        // 根因:起点格整格豁免,前提是"灯在空气格里" —— 而手持灯原点 = 眼位 + look*0.35
+        // ⇒ 贴墙站着灯原点就落进墙格,墙自己完全不遮挡(旧码此处 T=1.0)。
+        VoxelDda.Classifier wall1 = c -> c.x() == 0 ? VoxelField.CODE_SOLID : VoxelField.CODE_EMPTY;
+        check(VoxelDda.transmit(0.5, 5.5, 5.5, 2.5, 5.5, 5.5, wall1) == 0.0,
+                "[旧码必红] 灯原点在 1 格厚墙的格内 ⇒ 墙后 T=0(旧码整格豁免 ⇒ T=1 漏光)");
+        check(VoxelDda.transmit(0.4, 5.5, 5.5, 2.5, 6.5, 5.5, wall1) == 0.0,
+                "[旧码必红] 灯在墙格内斜射 ⇒ 同样 T=0");
+        check(VoxelDda.transmit(-0.5, 5.5, 5.5, 2.5, 5.5, 5.5, wall1) == 0.0,
+                "对照:灯在墙前空气格 ⇒ T=0(确认修的只是起点格豁免)");
+        check(VoxelDda.transmit(0.5, 5.5, 5.5, 1.5, 5.5, 5.5,
+                        c -> VoxelField.CODE_EMPTY) == 1.0,
+                "对照:起点格与终点格都是空气 ⇒ T=1(不引入假遮挡)");
+        // 薄板:埋在板里必须挡;但"同一格、板在脚下/上方"不许被误挡 —— 这是过度修复的红线。
+        VoxelDda.Classifier slab = c -> c.x() == 0 ? VoxelField.slabBottomCode(4) : VoxelField.CODE_EMPTY;
+        check(VoxelDda.transmit(0.5, 0.2, 5.5, 2.5, 0.2, 5.5, slab) == 0.0,
+                "[旧码必红] 灯埋在薄板(0..0.5)内 ⇒ T=0");
+        check(VoxelDda.transmit(0.5, 0.8, 5.5, 2.5, 0.8, 5.5, slab) == 1.0,
+                "★ 红线:灯在该格薄板**上方** ⇒ 板本来就没挡住 ⇒ T=1(不许一刀切「起点格有几何就封」)");
+        check(VoxelDda.transmit(0.5, 0.2, 5.5, 0.9, 0.2, 5.5, slab) == 0.0,
+                "灯与受光面同格(终点=起点格)且灯埋在板内 ⇒ T=0");
+        check(VoxelDda.transmit(0.5, 5.5, 5.5, 0.9, 5.5, 5.5,
+                        c -> c.x() == 0 ? VoxelField.CODE_SOLID : VoxelField.CODE_EMPTY) == 0.0,
+                "灯与受光面同格且灯埋在满方块内 ⇒ T=0(旧码会越过终点继续步进)");
+        // 植被/树叶:起点格仍豁免(体积填充语义;不做"走进草丛整体变暗"这种行为变化)。
+        check(close(VoxelDda.transmit(0.5, 5.5, 5.5, 2.5, 5.5, 5.5,
+                        c -> c.x() == 0 ? VoxelField.CODE_VEG : VoxelField.CODE_EMPTY), 1.0),
+                "起点格软植被仍豁免(与旧行为一致)");
+        check(close(VoxelDda.transmit(0.5, 5.5, 5.5, 2.5, 5.5, 5.5,
+                        c -> c.x() == 1 ? VoxelField.CODE_VEG : VoxelField.CODE_EMPTY), 0.75),
+                "中间格软植被照旧衰减(豁免只限起点格)");
 
         System.out.println("VoxelDdaContract: ALL PASS (" + checks + " checks)");
     }

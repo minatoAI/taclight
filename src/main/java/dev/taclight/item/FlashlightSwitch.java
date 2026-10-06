@@ -14,8 +14,12 @@ import net.minecraft.nbt.CompoundTag;
  * 把纯规则放在**不继承任何 Item 的类**里,规则本身就能被契约真往返。</p>
  *
  * <p>规则(契约 {@code HandheldGateContract} 钉死):
- * <b>缺键 = 开</b>(等价旧默认 {@code handheldOn=true}:新拿到的电筒直接亮),
- * <b>有键 = 该值</b>(显式 false 才是"这支关了")。</p>
+ * <b>缺键 = 关</b>,<b>有键 = 该值</b>。</p>
+ *
+ * <p><b>2026-10-06 用户改判(旧口径是"缺键 = 开")</b>:手电筒与枪挂灯在<b>默认状态下都不该亮</b>
+ * —— 新做出来的电筒、新装上的枪灯都要按一下才亮。旧口径的由来是 2026-10-04 的一条抱怨
+ * ("拿到还要先按一下"),现在用户判定相反:灯不该自己亮。缺键=关同时覆盖"旧存档里从没按过
+ * 开关的电筒"(它们没有这个标签 ⇒ 进世界后是灭的)。</p>
  */
 public final class FlashlightSwitch {
     /** 开关状态标签键(per-ItemStack)。 */
@@ -23,9 +27,9 @@ public final class FlashlightSwitch {
 
     private FlashlightSwitch() {}
 
-    /** 纯函数:缺键 = 开;有键 = 该值。 */
+    /** 纯函数:缺键 = 关;有键 = 该值(2026-10-06 用户改判,旧口径是"缺键 = 开")。 */
     public static boolean resolveTag(boolean hasKey, boolean value) {
-        return hasKey ? value : true;
+        return hasKey && value;
     }
 
     /** 存储层读(纯 NBT,null 按"缺键"处理)。 */

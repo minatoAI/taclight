@@ -98,40 +98,85 @@ public final class VoxelDda {
         if (len < 1e-4) return 1.0;
         double nx = dx / len, ny = dy / len, nz = dz / len;
         double transmission = 1.0;
-        for (Visited visited : traceVisited(ax, ay, az, bx, by, bz)) {
-            int code = classifier.code(visited.cell());
-            if (code >= VoxelField.CODE_PALETTE_BASE) {
-                // 形状调色板:逐盒走与薄板同一条盒规则;取不到盒 ⇒ 保守按整格(宁可误挡)
-                float[] boxes = shapes == null ? null : shapes.boxesFor(visited.cell(), code);
-                if (boxes == null) {
-                    double f = boxFraction(ax, ay, az, nx, ny, nz, visited, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0);
-                    if (f <= 0.0) return 0.0;
-                    transmission *= f;
-                    continue;
-                }
-                for (int i = 0; i + 5 < boxes.length; i += 6) {
-                    double f = boxFraction(ax, ay, az, nx, ny, nz, visited,
-                            boxes[i], boxes[i + 1], boxes[i + 2], boxes[i + 3], boxes[i + 4], boxes[i + 5]);
-                    if (f <= 0.0) return 0.0;
-                    transmission *= f;
-                }
-            } else if (code == VoxelField.CODE_SOLID) {
-                double factor = Math.min(visited.penetration() / FUZZ_BLOCKS, 1.0);
-                if (factor >= 1.0) return 0.0;
-                transmission *= 1.0 - factor;
-            } else if (code == VoxelField.CODE_LEAF) {
-                transmission *= 0.40;
-            } else if (code == VoxelField.CODE_VEG) {
-                transmission *= 0.75;
-            } else if (VoxelField.isSlab(code)) {
-                double factor = boxFraction(ax, ay, az, nx, ny, nz, visited,
-                        0.0, VoxelField.slabLow(code), 0.0,
-                        1.0, VoxelField.slabHigh(code), 1.0);
-                if (factor <= 0.0) return 0.0;
-                transmission *= factor;
+        // ★ 2026-10-06 起点格(灯所在格)也要判定。
+        //
+        // 旧实现把起点格整格豁免(遍历"先步进后判定"),前提写在注释里:"起点格 = 灯所在**空气格**"。
+        // 这个前提不成立时就是漏光:灯原点落在方块格内,该方块自己完全不遮挡 ⇒ 光从方块另一侧
+        // 漏出,漏出的形状正是那个方块的影子形状。用户实测条件:"灯靠方块太近" —— 手持灯光源是
+        // 眼位 + look*0.35 ⇒ 贴墙站着(眼距墙 < 0.35)灯原点就在墙格里(2026-10-06 实机)。
+        //
+        // 语义:实体几何(满方块 3 / 薄板 4..15 / 形状调色板 ≥16)在起点格照常参与遮挡,
+        // 即"灯埋在几何里 ⇒ 该几何挡住它"。植被(1)/树叶(2)仍豁免起点格 —— 那是"体积填充"
+        // 语义,不该因为"走进草丛"就让整体变暗(与本次缺陷无关的行为变化,故意不做)。
+        Visited start = startVisited(ax, ay, az, nx, ny, nz, len);
+        if (start != null) {
+            int code = classifier.code(start.cell());
+            if (code >= VoxelField.CODE_SOLID) {
+                transmission = applyCell(transmission, code, ax, ay, az, nx, ny, nz, start, shapes);
+                if (transmission <= 0.0) return 0.0;
             }
         }
+        for (Visited visited : traceVisited(ax, ay, az, bx, by, bz)) {
+            int code = classifier.code(visited.cell());
+            transmission = applyCell(transmission, code, ax, ay, az, nx, ny, nz, visited, shapes);
+            if (transmission <= 0.0) return 0.0;
+        }
         return transmission;
+    }
+
+    /**
+     * 单格材质 → 透射倍数({@code ≤0} = 一票否决)。起点格与中间格走<b>同一条</b>规则,
+     * 只有"是否豁免植被/树叶"由调用方决定(起点格豁免,见 {@link #transmit})。
+     */
+    private static double applyCell(double transmission, int code,
+                                    double ax, double ay, double az,
+                                    double nx, double ny, double nz,
+                                    Visited v, ShapeLookup shapes) {
+        if (code >= VoxelField.CODE_PALETTE_BASE) {
+            // 形状调色板:逐盒走与薄板同一条盒规则;取不到盒 ⇒ 保守按整格(宁可误挡)
+            float[] boxes = shapes == null ? null : shapes.boxesFor(v.cell(), code);
+            if (boxes == null) {
+                return transmission * boxFraction(ax, ay, az, nx, ny, nz, v, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0);
+            }
+            for (int i = 0; i + 5 < boxes.length; i += 6) {
+                double f = boxFraction(ax, ay, az, nx, ny, nz, v,
+                        boxes[i], boxes[i + 1], boxes[i + 2], boxes[i + 3], boxes[i + 4], boxes[i + 5]);
+                if (f <= 0.0) return 0.0;
+                transmission *= f;
+            }
+            return transmission;
+        }
+        if (code == VoxelField.CODE_SOLID) {
+            double factor = Math.min(v.penetration() / FUZZ_BLOCKS, 1.0);
+            return factor >= 1.0 ? 0.0 : transmission * (1.0 - factor);
+        }
+        if (code == VoxelField.CODE_LEAF) return transmission * 0.40;
+        if (code == VoxelField.CODE_VEG) return transmission * 0.75;
+        if (VoxelField.isSlab(code)) {
+            double factor = boxFraction(ax, ay, az, nx, ny, nz, v,
+                    0.0, VoxelField.slabLow(code), 0.0,
+                    1.0, VoxelField.slabHigh(code), 1.0);
+            return factor <= 0.0 ? 0.0 : transmission * factor;
+        }
+        return transmission;
+    }
+
+    /**
+     * 起点格(灯所在格)的访问记录:入口时间 <b>0</b>(射线从灯出发),出口 = 离开该格的时间。
+     * 与 {@link #traceVisited} 共用同一套 crossing 口径,{@code null} = 退化射线(len≈0)。
+     */
+    static Visited startVisited(double ax, double ay, double az,
+                                double dirX, double dirY, double dirZ, double len) {
+        if (len < 1e-4) return null;
+        int cx = floor(ax), cy = floor(ay), cz = floor(az);
+        double maxX = firstCrossing(ax, cx, dirX, delta(dirX));
+        double maxY = firstCrossing(ay, cy, dirY, delta(dirY));
+        double maxZ = firstCrossing(az, cz, dirZ, delta(dirZ));
+        double tEnd = Math.min(Math.min(maxX, Math.min(maxY, maxZ)), len);
+        double yA = ay - cy;
+        double yB = ay + dirY * tEnd - cy;
+        return new Visited(new Cell(cx, cy, cz), 0.0, tEnd, tEnd,
+                Math.min(yA, yB), Math.max(yA, yB));
     }
 
     /**

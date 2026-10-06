@@ -56,7 +56,7 @@ public class FlashlightItem extends Item {
     //
     // 现规则(契约 FlashlightSwitchContract 钉死):
     //   * 状态存在 **ItemStack 自己的 NBT**(键 TAG_ON);
-    //   * **缺标签 = 开** —— 与旧默认 handheldOn=true 等价(新拿到的电筒直接亮,
+    //   * **缺标签 = 关** —— 与 ClientLightState 的初始值一致(新拿到的电筒不自己亮;
     //     "拿到还要先开一下"这条抱怨随之消失);
     //   * **显式写 false = 关**,且**不再被"离手"清掉** ⇒ 每支电筒各记各的。
     // ------------------------------------------------------------------------
@@ -64,7 +64,7 @@ public class FlashlightItem extends Item {
     /** 开关状态标签键(per-ItemStack)。规则层在 {@link FlashlightSwitch}(不继承 Item,可离线判定)。 */
     public static final String TAG_ON = FlashlightSwitch.TAG_ON;
 
-    /** 纯函数(离线契约钉死,零注册表依赖):**缺标签 = 开;有标签 = 该值**。 */
+    /** 纯函数(离线契约钉死,零注册表依赖):**缺标签 = 关;有标签 = 该值**(2026-10-06 改判)。 */
     public static boolean resolveTag(boolean hasKey, boolean value) {
         return FlashlightSwitch.resolveTag(hasKey, value);
     }

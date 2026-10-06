@@ -108,6 +108,13 @@ public class InlineCoreContract {
                 "前向 attenuation 三参签名(与主包同源,逐灯 K)");
         check(fwd.contains("L.cone.z"),
                 "前向 surface 消费 cone.z 逐灯 K(!atten 透传)");
+        // ★ 2026-10-06 起点格遮挡(用户实机:灯靠方块太近 ⇒ 方块另一侧漏光)。
+        // 前向桩是 Complementary 走的路径,这条规则必须与完整核同源;只改完整核 =
+        // 用户看到的现象一点没变(而契约全绿)。
+        check(fwd.contains("float tEntry = 0.0;") && fwd.contains("if (guard > 0) {"),
+                "前向精简:起点格参与遮挡(首轮判定起点格,之后才步进)");
+        check(fwd.contains("min(tExit, len) - tEntry"),
+                "前向精简:实心格穿透长度以格入口 tEntry 为基准(旧码用被豁免的起点出口)");
         // 2026-09-05 第四旋钮:近场软膝 2-arg 同源 + surface 消费 cone.w(0=恒等)。
         check(fwd.contains("vec3 taclight_soft_knee3(vec3 x, float gOverride)"),
                 "前向 soft_knee3 双参签名(与主包同源,!knee 逐灯透传)");
@@ -182,8 +189,10 @@ public class InlineCoreContract {
                 "前向盒 kernel = span(入界时间+盒内路径) + band + fraction 三件,与完整核同名同构");
         // 2026-09-04 阴影破碎修复:掠边穿透软化带(与主线 TACLIGHT_VOX_FUZZ 0.35 同源,
         // 穿透<0.35 按比例放行,≥0.35 仍 return 0.0,墙后遮挡基线不变)+tie eps 与主线同 1e-6。
+        // 2026-10-06:tie eps 的比较基准随起点格判定一起从 tNext(被豁免的起点出口)改为
+        // tEntry(本轮格的入口),数值仍是 1e-6;这里同步钉住新名,防"改了一处忘了另一处"。
         check(fwdVox.contains("penLen") && fwdVox.contains("/0.35") && fwdVox.contains("T*=1.0-f")
-                        && fwdVox.contains("abs(tNext)*0.000001"),
+                        && fwdVox.contains("abs(tEntry)*0.000001"),
                 "前向 vox_transmit 掠边软化带 0.35+tie eps 1e-6(与主线同源,修阴影破碎硬齿)");
     }
 

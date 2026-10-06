@@ -2,7 +2,9 @@ package dev.taclight.client;
 
 /** 客户端灯光状态(纯本地,零网络包)。 */
 public final class ClientLightState {
-    private static boolean handheldOn = true;
+    /** 手持灯开关镜像。**初始 false(默认关)**:真源是手上那支电筒的 NBT
+     *  (缺标签=关,见 {@code FlashlightSwitch.resolveTag}),本值只是镜像前的占位。 */
+    private static boolean handheldOn = false;
     private static boolean gunLightOn = false;
     /** 手动覆写(调试开关):true=人工通过 !gun 显式设定,此后 tick 探针不再覆盖。 */
     private static volatile boolean gunManual = false;

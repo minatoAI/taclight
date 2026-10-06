@@ -344,7 +344,7 @@ public class ClientEvents {
         boolean probeOn = (status == GunLaserReader.Status.OUR_LIGHT);
         ClientLightState.setGunProbe(probeOn);
         // 2026-10-04 R95(⑦ 用户报"两把枪的灯共用一个开关"):枪灯开关的**真源改为手上那支枪自己的 NBT**
-        // (FlashlightItem.TAG_ON;缺标签=开,见 FlashlightSwitch.resolveTag),不再写全局静态布尔。
+        // (FlashlightItem.TAG_ON;缺标签=**关**,见 FlashlightSwitch.resolveTag),不再写全局静态布尔。
         // 这样两把枪各记各的:切到 A 亮/灭只看 A,切到 B 只看 B。
         ClientLightState.setGunLight(probeOn
                 && dev.taclight.item.FlashlightItem.isOn(mc.player.getMainHandItem()));

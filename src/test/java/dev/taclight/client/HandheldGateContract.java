@@ -117,12 +117,15 @@ public class HandheldGateContract {
         check(ClientLightState.effective(true, false, true),
                 "霓虹调试豁免持物门:它的用途是证明 SSBO 通道,与手里拿什么无关");
 
-        // ---- 2026-10-04 用户定案:开关 = **每支手电筒自己的属性**(旧 autoClear 已删除留痕) ----
-        // 纯函数核(零注册表依赖):缺标签 = 开(与旧默认 handheldOn=true 等价);有标签 = 该值。
-        check(dev.taclight.item.FlashlightSwitch.resolveTag(false, false),
-                "开关语义:缺标签 ⇒ 默认开(新拿到的电筒直接亮,「拿到还要先按一下」这条抱怨消失)");
+        // ---- 2026-10-04 定案:开关 = **每支手电筒自己的属性**(旧 autoClear 已删除留痕) ----
+        // ---- 2026-10-06 用户改判:默认**关**(旧口径"缺标签 = 开"已作废) ----
+        // 纯函数核(零注册表依赖):缺标签 = 关;有标签 = 该值。
+        check(!dev.taclight.item.FlashlightSwitch.resolveTag(false, false),
+                "开关语义:缺标签 ⇒ 默认关(新拿到的电筒/新装的枪灯不自己亮 —— 2026-10-06 定案)");
+        check(!dev.taclight.item.FlashlightSwitch.resolveTag(false, true),
+                "开关语义:缺标签时即使 value=true 也是关(有无标签才是判据,防「没写=开」回潮)");
         check(!dev.taclight.item.FlashlightSwitch.resolveTag(true, false),
-                "开关语义:显式 false ⇒ 关(这才是「这支电筒关了」)");
+                "开关语义:显式 false ⇒ 关");
         check(dev.taclight.item.FlashlightSwitch.resolveTag(true, true), "开关语义:显式 true ⇒ 开");
         // 真 NBT 往返:用户原话「我手里拿了很多个手电筒,每一个的开关状态都是它自己的」 ⇒
         // **两个标签必须各记各的**。这是本轮修复的核心判据(旧码:全局 static,必然同时变)。
@@ -130,19 +133,19 @@ public class HandheldGateContract {
         // 构造 Item/ItemStack 会撞 Bootstrap.checkBootstrapCalled(本轮实测踩到),故不在此构造物品。
         net.minecraft.nbt.CompoundTag ta = new net.minecraft.nbt.CompoundTag();
         net.minecraft.nbt.CompoundTag tb = new net.minecraft.nbt.CompoundTag();
-        check(dev.taclight.item.FlashlightSwitch.isOnTag(ta) && dev.taclight.item.FlashlightSwitch.isOnTag(tb),
-                "新建电筒默认开(两支都是:空标签 ⇒ 默认开)");
-        dev.taclight.item.FlashlightSwitch.setOnTag(ta, false);
-        check(!dev.taclight.item.FlashlightSwitch.isOnTag(ta), "★ A 自己记住了「关」");
-        check(dev.taclight.item.FlashlightSwitch.isOnTag(tb), "★ 把 A 关掉**不影响** B —— 旧全局开关在此必红");
+        check(!dev.taclight.item.FlashlightSwitch.isOnTag(ta) && !dev.taclight.item.FlashlightSwitch.isOnTag(tb),
+                "新建电筒默认关(两支都是:空标签 ⇒ 默认关)");
+        dev.taclight.item.FlashlightSwitch.setOnTag(ta, true);
+        check(dev.taclight.item.FlashlightSwitch.isOnTag(ta), "★ A 自己记住了「开」");
+        check(!dev.taclight.item.FlashlightSwitch.isOnTag(tb), "★ 把 A 打开**不影响** B —— 旧全局开关在此必红");
         check(ta.contains(dev.taclight.item.FlashlightSwitch.TAG_ON)
                         && "taclight_on".equals(dev.taclight.item.FlashlightSwitch.TAG_ON),
-                "★ 「关」是**显式写进物品自己的 NBT**(键名契约钉死),不是「没写=关」");
-        dev.taclight.item.FlashlightSwitch.setOnTag(tb, false);
-        dev.taclight.item.FlashlightSwitch.setOnTag(ta, true);
-        check(dev.taclight.item.FlashlightSwitch.isOnTag(ta) && !dev.taclight.item.FlashlightSwitch.isOnTag(tb),
-                "★ 两个堆各自独立:置位后 A 开 / B 关(单一真源 = 物品自己的 NBT)");
-        check(dev.taclight.item.FlashlightSwitch.isOnTag(null), "null 标签按「缺键」处理 ⇒ 默认开(不 NPE)");
+                "★ 开关是**显式写进物品自己的 NBT**(键名契约钉死),不是「没写=开」");
+        dev.taclight.item.FlashlightSwitch.setOnTag(ta, false);
+        dev.taclight.item.FlashlightSwitch.setOnTag(tb, true);
+        check(!dev.taclight.item.FlashlightSwitch.isOnTag(ta) && dev.taclight.item.FlashlightSwitch.isOnTag(tb),
+                "★ 两个堆各自独立:置位后 A 关 / B 开(单一真源 = 物品自己的 NBT)");
+        check(!dev.taclight.item.FlashlightSwitch.isOnTag(null), "null 标签按「缺键」处理 ⇒ 默认关(不 NPE)");
     }
 
     /** 接线层:源码文本级(非运行时行为验证)。 */

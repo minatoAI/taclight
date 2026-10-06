@@ -2,5 +2,13 @@
   "parent": "item/generated",
   "textures": {
     "layer0": "taclight:item/flashlight"
-  }
+  },
+  "overrides": [
+    {
+      "predicate": {
+        "taclight:on": 1.0
+      },
+      "model": "taclight:item/flashlight_on"
+    }
+  ]
 }

@@ -11,7 +11,7 @@ import java.util.List;
  * <p><b>为什么补这条</b>：现役契约里有 {@link VoxelDda}（逐采样路径 {@code taclight_vox_transmit} 的
  * Java 模型，雪层语义被 {@code VoxelDdaContract} 36 项守住），但**没有"建表路径"
  * {@code taclight_vox_hit_dist} 的模型** ⇒ 没有任何判据能拦住本次缺陷：
- * 该函数对**薄板**（码 4..15）命中时返回 {@code tNext}（**进入该格的距离**），
+ * 该函数对**薄板**（码 4..15）命中时返回 {@code tEntry}（**进入该格的距离**；
  * 而逐采样路径判的是"是否真的穿过板面"。对满方块两者等价（入格≈表面），
  * 对 1/8 格厚的雪层则可差近一整格 ⇒ 表里 {@code dHit} 系统性偏小 ⇒
  * {@code taclight_occl_vis_from_hit} 提前判遮挡 ⇒ **阴影朝光源方向被拉长**
@@ -54,7 +54,7 @@ public class SlabHitDistContract {
         check(!tableFn.isEmpty(), "能定位建表函数 taclight_vox_hit_dist（源码结构未变）");
         check(!tableFn.contains("if (hit) return tNext;"),
                 "建表函数薄板分支不再直接返回'入格距离'（R13 缺陷的原始写法）");
-        check(tableFn.contains("float tHit = tNext;"), "建表函数薄板分支引入 tHit 作为返回量");
+        check(tableFn.contains("float tHit = tEntry;"), "建表函数薄板分支引入 tHit 作为返回量");
         check(tableFn.contains("(yA - hi) / (-dir.y)"),
                 "底薄板：自上方进入且向下 ⇒ 返回穿越 y=cell.y+hi 的距离");
         check(tableFn.contains("(lo - yA) / dir.y"),

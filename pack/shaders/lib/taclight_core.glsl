@@ -483,22 +483,32 @@ float taclight_vox_transmit(vec3 worldA, vec3 worldB) {
                      abs(dir.y) > 1e-9 ? (dir.y > 0.0 ? (float(cell.y) + 1.0 - a.y) : (a.y - float(cell.y))) * tDelta.y : 1e9,
                      abs(dir.z) > 1e-9 ? (dir.z > 0.0 ? (float(cell.z) + 1.0 - a.z) : (a.z - float(cell.z))) * tDelta.z : 1e9);
     float T = 1.0;
+    // ★ 2026-10-06 起点格(灯所在格)也要判定。
+    // 旧实现"先步进后判定"把起点格整格豁免,前提写在上面注释里:"起点格 = 灯所在**空气格**"。
+    // 前提不成立时就是漏光:灯原点落进方块格内,那个方块自己完全不遮挡 ⇒ 光从方块另一侧
+    // 漏出,漏出的轮廓正是该方块的影子形状(用户实测条件"灯靠方块太近":手持灯光源 =
+    // 眼位 + look*0.35 ⇒ 贴墙站着灯原点就在墙格里)。
+    // 现改为"先判定当前格(首轮即起点格,入口时间 0)再步进";中间格语义逐位不变。
+    // 植被(1)/树叶(2)在起点格仍豁免:那是"体积填充"语义,不该因为走进草丛整体变暗。
+    float tEntry = 0.0;
     for (int guard = 0; guard < 384; guard++) {
-        float tNext = min(tMax.x, min(tMax.y, tMax.z));
-        float tieEps = max(1e-6, abs(tNext) * 1e-5);
-        bvec3 tied = lessThanEqual(abs(tMax - vec3(tNext)), vec3(tieEps));
-        cell += istep * ivec3(tied);
-        tMax += tDelta * vec3(tied);
-        if (any(lessThan(cell, ivec3(0))) || any(greaterThanEqual(cell, ivec3(dim)))) return T;
-        if (all(equal(cell, last))) return T;
+        if (guard > 0) {
+            // —— 步进到下一格(首轮不步进:首轮判定的就是起点格)——
+            float tieEps = max(1e-6, abs(tEntry) * 1e-5);
+            bvec3 tied = lessThanEqual(abs(tMax - vec3(tEntry)), vec3(tieEps));
+            cell += istep * ivec3(tied);
+            tMax += tDelta * vec3(tied);
+            if (any(lessThan(cell, ivec3(0))) || any(greaterThanEqual(cell, ivec3(dim)))) return T;
+            if (all(equal(cell, last))) return T;
+        }
+        float tExit = min(tMax.x, min(tMax.y, tMax.z));
         int idx = cell.x + cell.y * int(dim.x) + cell.z * int(dim.x) * int(dim.y);
         // 2026-10-03 R21:8bit/体素(4 格/uint)。低 4 位语义不变;码 ≥16 = 调色板槽。
         uint code = (voxData[idx >> 2] >> uint((idx & 3) * 8)) & 255u;
         if (code == 3u) {
             // 穿透长度软化:tMax 以归一化方向计,单位=沿射线方块数(终点在 t=len);
             // 出格时间-入格时间(钳到 len)即该格内穿透长度;≥带宽仍 T=0。
-            float tExit = min(tMax.x, min(tMax.y, tMax.z));
-            float penLen = max(0.0, min(tExit, len) - tNext);
+            float penLen = max(0.0, min(tExit, len) - tEntry);
             float f = clamp(penLen / TACLIGHT_VOX_FUZZ, 0.0, 1.0);
             if (f >= 1.0) return 0.0;
             T *= 1.0 - f;
@@ -507,7 +517,6 @@ float taclight_vox_transmit(vec3 worldA, vec3 worldB) {
         // 2026-10-03 R21 形状调色板(必须在薄板分支之前:薄板分支的条件是 code>=4,
         // 不拦的话 ≥16 也会被当成"薄板"⇒ (code−3)/8 算出十几倍格高 = 假遮挡)。
         else if (code >= 16u) {
-            float tExit = min(tMax.x, min(tMax.y, tMax.z));
             uint slot = code - 16u;
             if (slot < uint(voxPalMeta.x)) {
                 int palBase = int(slot) * voxPalMeta.y;
@@ -515,7 +524,7 @@ float taclight_vox_transmit(vec3 worldA, vec3 worldB) {
                 // 并集盒先做一次廉价否决:射线不碰形状外接盒 ⇒ 整格跳过(大多数掠过格走这条)
                 vec3 ulo; vec3 uhi;
                 taclight_vox_pal_union(slot, ulo, uhi);
-                vec2 un = taclight_vox_box_span(a, dir, tNext, tExit, cell, ulo, uhi);
+                vec2 un = taclight_vox_box_span(a, dir, tEntry, tExit, cell, ulo, uhi);
                 if (un.x <= 1e8) {
                     // 2026-10-05 R56 对齐:与 ShapePalette.MAX_BOXES=16 同步(4 面栅栏=9 盒,
                     // 旧 8 只测前 8 盒,第 9 盒漏测=孔洞假遮挡;前向桩已同改,两处一致)。
@@ -524,14 +533,14 @@ float taclight_vox_transmit(vec3 worldA, vec3 worldB) {
                         int o = palBase + TACLIGHT_VOX_PAL_BOX0 + b * 6;
                         vec3 blo = vec3(voxPalBox[o], voxPalBox[o + 1], voxPalBox[o + 2]);
                         vec3 bhi = vec3(voxPalBox[o + 3], voxPalBox[o + 4], voxPalBox[o + 5]);
-                        T *= 1.0 - clamp(taclight_vox_box_span(a, dir, tNext, tExit, cell, blo, bhi).y
+                        T *= 1.0 - clamp(taclight_vox_box_span(a, dir, tEntry, tExit, cell, blo, bhi).y
                                          / taclight_vox_box_band(blo, bhi), 0.0, 1.0);
                         if (T <= 0.0) return 0.0;
                     }
                 }
             } else {
                 // 槽越界(不该发生):保守按整格实心 —— 宁可误挡不可漏光
-                T *= taclight_vox_box_fraction(a, dir, tNext, tExit, cell, vec3(0.0), vec3(1.0));
+                T *= taclight_vox_box_fraction(a, dir, tEntry, tExit, cell, vec3(0.0), vec3(1.0));
                 if (T <= 0.0) return 0.0;
             }
         }
@@ -548,15 +557,20 @@ float taclight_vox_transmit(vec3 worldA, vec3 worldB) {
             // taclight_vox_box_fraction:band = min(FUZZ, 板厚) ⇒ 半砖(0.5)与满方块
             // 逐位一致,雪 1 层(0.125)穿满板厚仍 T=0(不会重演"细雪层穿光")。
             // 底薄板 4..11:lo=0, hi=(code−3)/8;顶薄板 12..15:lo=(code−8)/8, hi=1。
-            float tExit = min(tMax.x, min(tMax.y, tMax.z));
             float lo = code >= 12u ? (float(code) - 8.0) / 8.0 : 0.0;
             float hi = code >= 12u ? 1.0 : (float(code) - 3.0) / 8.0;
-            T *= taclight_vox_box_fraction(a, dir, tNext, tExit, cell,
+            T *= taclight_vox_box_fraction(a, dir, tEntry, tExit, cell,
                                            vec3(0.0, lo, 0.0), vec3(1.0, hi, 1.0));
             if (T <= 0.0) return 0.0;
         }
-        else if (code == 2u) T *= 0.40;      // 树叶:0.6 遮挡/格 → 透射 0.4/格
-        else if (code == 1u) T *= 0.75; // 软植被:0.25 遮挡/格
+        // 起点格(guard==0)豁免植被/树叶(体积填充语义,见函数头 2026-10-06 注)。
+        else if (code == 2u) { if (guard > 0) T *= 0.40; }   // 树叶:0.6 遮挡/格 → 透射 0.4/格
+        else if (code == 1u) { if (guard > 0) T *= 0.75; }   // 软植被:0.25 遮挡/格
+        // 终点与起点同格(灯与受光面同格)⇒ 判完这一格就停:否则 last 已被越过,射线会一路
+        // 走到栅格边界,把受光面**之后**的几何也投影上来(用户实测:贴墙时光晕上出现
+        // "方块后面的阴影形状")。
+        if (all(equal(cell, last))) return T;
+        tEntry = tExit;
     }
     return T;
 }
@@ -594,52 +608,55 @@ float taclight_vox_hit_dist(vec3 worldA, vec3 dir, float maxDist) {
                      abs(dir.y) > 1e-9 ? (dir.y > 0.0 ? (float(cell.y) + 1.0 - a.y) : (a.y - float(cell.y))) * tDelta.y : 1e9,
                      abs(dir.z) > 1e-9 ? (dir.z > 0.0 ? (float(cell.z) + 1.0 - a.z) : (a.z - float(cell.z))) * tDelta.z : 1e9);
     float T = 1.0;
+    // ★ 2026-10-06 起点格(灯所在格)也判定,口径与 taclight_vox_transmit 同源:
+    // 灯原点落进方块格内时那个方块必须挡住它(旧码整格豁免 ⇒ 体积光从方块另一侧漏出,
+    // 即用户实测的"光晕穿透方块、后面出现方块影子形状的亮区")。
+    float tEntry = 0.0;
     for (int guard = 0; guard < 384; guard++) {
-        float tNext = min(tMax.x, min(tMax.y, tMax.z));
-        if (tNext > maxDist) return maxDist;
-        float tieEps = max(1e-6, abs(tNext) * 1e-5);
-        bvec3 tied = lessThanEqual(abs(tMax - vec3(tNext)), vec3(tieEps));
-        cell += istep * ivec3(tied);
-        tMax += tDelta * vec3(tied);
-        if (any(lessThan(cell, ivec3(0))) || any(greaterThanEqual(cell, ivec3(dim)))) return maxDist;
+        if (guard > 0) {
+            float tieEps = max(1e-6, abs(tEntry) * 1e-5);
+            bvec3 tied = lessThanEqual(abs(tMax - vec3(tEntry)), vec3(tieEps));
+            cell += istep * ivec3(tied);
+            tMax += tDelta * vec3(tied);
+            if (any(lessThan(cell, ivec3(0))) || any(greaterThanEqual(cell, ivec3(dim)))) return maxDist;
+        }
+        if (tEntry > maxDist) return maxDist;
+        float tExit = min(tMax.x, min(tMax.y, tMax.z));
         int idx = cell.x + cell.y * int(dim.x) + cell.z * int(dim.x) * int(dim.y);
         // 2026-10-03 R21:8bit/体素,与 taclight_vox_transmit 逐位同源。
         uint code = (voxData[idx >> 2] >> uint((idx & 3) * 8)) & 255u;
         if (code == 3u) {
-            float tExit = min(tMax.x, min(tMax.y, tMax.z));
-            float penLen = max(0.0, min(tExit, maxDist) - tNext);
+            float penLen = max(0.0, min(tExit, maxDist) - tEntry);
             float f = clamp(penLen / TACLIGHT_VOX_FUZZ, 0.0, 1.0);
-            if (f >= 1.0) return tNext;
+            if (f >= 1.0) return tEntry;
             T *= 1.0 - f;
-            T = T * (1.0 + 0.0 * 0.130130); return tNext;   // R124: 实心格后停止射线
+            T = T * (1.0 + 0.0 * 0.130130); return tEntry;   // R124: 实心格后停止射线
         }
         // 2026-10-03 R21 形状调色板(必须在薄板分支之前,否则 ≥16 会被当成薄板):
         // 表是**纯方向函数**、每帧要按 512×256 个方向各走一遍 DDA ⇒ **不逐盒展开**,
         // 用槽里的"并集盒"一次判定(保守代理:方向一致偏暗,与表头注释的取舍方向相同)。
         // 语义:射线与该格的形状外接盒相交,且其中穿透长度 ≥ 带宽 ⇒ 视为首次遮挡。
         else if (code >= 16u) {
-            float tExit = min(tMax.x, min(tMax.y, tMax.z));
             uint slot = code - 16u;
             if (slot < uint(voxPalMeta.x)) {
                 vec3 ulo; vec3 uhi;
                 taclight_vox_pal_union(slot, ulo, uhi);
-                vec2 un = taclight_vox_box_span(a, dir, tNext, tExit, cell, ulo, uhi);
+                vec2 un = taclight_vox_box_span(a, dir, tEntry, tExit, cell, ulo, uhi);
                 if (un.x <= 1e8) {
                     float band = taclight_vox_box_band(ulo, uhi);
                     if (un.y >= band) return un.x;
                     T *= 1.0 - clamp(un.y / band, 0.0, 1.0);
                 }
             } else {
-                return tNext;
+                return tEntry;
             }
-            if (T <= TACLIGHT_OCCL_SOFT_FLOOR) return tNext;
+            if (T <= TACLIGHT_OCCL_SOFT_FLOOR) return tEntry;
         }
         else if (code >= 4u && code < 16u) {
             // 薄板:命中即视为该方向上的首次遮挡(表是纯方向函数,无终点格豁免)
-            float tExit = min(tMax.x, min(tMax.y, tMax.z));
             float lo = code >= 12u ? (float(code) - 8.0) / 8.0 : 0.0;
             float hi = code >= 12u ? 1.0 : (float(code) - 3.0) / 8.0;
-            float yA = a.y + dir.y * tNext - float(cell.y);
+            float yA = a.y + dir.y * tEntry - float(cell.y);
             float yB = a.y + dir.y * tExit - float(cell.y);
             float yLo = min(yA, yB);
             float yHi = max(yA, yB);
@@ -652,18 +669,20 @@ float taclight_vox_hit_dist(vec3 worldA, vec3 dir, float maxDist) {
                 // 提前判遮挡 ⇒ 阴影朝光源方向被拉长约 0.88 格(中位) / 1.36 格(最差)。
                 // 数值证据与修法自证(两套独立参考,修后偏差 0.0000):
                 //   docs/evidence/2026-09-30-snow-shadow/  |  台账 BACKLOG §2.123
-                float tHit = tNext;
+                float tHit = tEntry;
                 if (code >= 12u) {      // 顶薄板:自下方进入且向上 ⇒ 穿越 y = cell.y + lo
-                    if (dir.y > 0.0 && yA < lo) tHit = tNext + (lo - yA) / dir.y;
+                    if (dir.y > 0.0 && yA < lo) tHit = tEntry + (lo - yA) / dir.y;
                 } else {                // 底薄板:自上方进入且向下 ⇒ 穿越 y = cell.y + hi
-                    if (dir.y < 0.0 && yA > hi) tHit = tNext + (yA - hi) / (-dir.y);
+                    if (dir.y < 0.0 && yA > hi) tHit = tEntry + (yA - hi) / (-dir.y);
                 }
                 return tHit;
             }
         }
-        else if (code == 2u) T *= 0.40;
-        else if (code == 1u) T *= 0.75;
-        if (T <= TACLIGHT_OCCL_SOFT_FLOOR) return tNext;
+        // 起点格(guard==0)豁免植被/树叶,与 taclight_vox_transmit 同一口径。
+        else if (code == 2u) { if (guard > 0) T *= 0.40; }
+        else if (code == 1u) { if (guard > 0) T *= 0.75; }
+        if (T <= TACLIGHT_OCCL_SOFT_FLOOR) return tEntry;
+        tEntry = tExit;
     }
     return maxDist;
 }

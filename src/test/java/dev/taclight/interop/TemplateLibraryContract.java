@@ -18,6 +18,7 @@ public class TemplateLibraryContract {
         noPlaceholderResidue();
         inlineCoreThroughTemplate();
         paletteInjectionCoverage();
+        startCellCoverage();
         malformedRejected();
         missingFieldsRejected();
         missingResource();
@@ -214,6 +215,29 @@ public class TemplateLibraryContract {
         check(!full.contains("#define TACLIGHT_VOX_PAL"), "完整版无调色板宏残留");
     }
 
+
+    // ★ 2026-10-06 起点格遮挡(旧码整格豁免 ⇒ 灯埋进方块时漏光;用户实机)。
+    // 该规则必须同时出现在**两条** GLSL 路径上:完整核(iterationT/composite)与前向精简
+    // (Complementary/gbuffers)。只改一边 = 漏光只修一半,而两条路径的文本是两处独立实现
+    // (完整核在 pack/shaders/lib,前向桩是 Java 字符串)⇒ 必须各自钉住。
+    private static void startCellCoverage() {
+        String full = TemplateLibrary.inlineCoreText();
+        String fwd = TemplateLibrary.inlineCoreTextForward();
+        check(full.contains("起点格(灯所在格)也") && full.contains("float tEntry = 0.0;"),
+                "完整核:起点格参与遮挡(首轮判定起点格,入口时间 0)");
+        check(full.contains("float penLen = max(0.0, min(tExit, len) - tEntry);"),
+                "完整核:实心格穿透长度以格入口 tEntry 为基准");
+        check(full.contains("if (all(equal(cell, last))) return T;\n        tEntry = tExit;"),
+                "完整核:终点与起点同格时判完即停(tEntry 推进)");
+        check(full.contains("float penLen = max(0.0, min(tExit, maxDist) - tEntry);"),
+                "完整核:遮挡距离表 taclight_vox_hit_dist 同口径(体积光不再穿透方块)");
+        check(fwd.contains("起点格(灯所在格)也") && fwd.contains("float tEntry = 0.0;"),
+                "前向精简:起点格参与遮挡(与完整核同源)");
+        check(fwd.contains("float penLen = min(tExit, len) - tEntry;"),
+                "前向精简:实心格穿透长度以格入口 tEntry 为基准");
+        check(fwd.contains("if (guard > 0) {") && fwd.contains("tEntry = tExit;"),
+                "前向精简:先判定起点格再步进(guard>0 才步进)");
+    }
 
     private static void malformedRejected() {
         check(!TemplateLibrary.fromJson("not json at all {").isPresent(), "非 JSON = 拒绝");

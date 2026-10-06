@@ -32,6 +32,9 @@ public final class SubscriberScopeContract {
     static {
         SIDE_EFFECT_MARKERS.put("client/ClientEvents.java", "TacLightMod.LOGGER");
         SIDE_EFFECT_MARKERS.put("client/KeyBindingsModBus.java", "keybind register:");
+        // 2026-10-06:物品模型谓词注册(手电筒开/关图标)—— 注册了才有图标切换,
+        // 所以同样必须有"它确实跑过"的日志判据。
+        SIDE_EFFECT_MARKERS.put("client/ItemModelModBus.java", "item property register:");
         SIDE_EFFECT_MARKERS.put("debug/command/TacLightCommand.java", "CMDS RegisterCommandsEvent firing");
         SIDE_EFFECT_MARKERS.put("debug/TicketBridge.java", "bridge armed in");
         SIDE_EFFECT_MARKERS.put("devonly/DevLanAuthHook.java", "DEV: integrated server LAN auth disabled");

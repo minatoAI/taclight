@@ -78,30 +78,36 @@ public class OcclTableContract {
         double len = Math.sqrt(dx * dx + dy * dy + dz * dz);
         if (len < 1e-4) return maxDist;   // 与 GLSL 一致:零向量不设防(调用方保证归一)
         double T = 1.0;
+        // ★ 2026-10-06 与 GLSL taclight_vox_hit_dist 同源:起点格(灯所在格)**也要判定**。
+        // 旧口径(本模型与旧 GLSL)整格豁免起点格,前提是"灯在空气格里";灯原点落进方块格内
+        // 时那个方块不挡光 ⇒ 体积光从方块另一侧漏出(用户实测)。植被/树叶起点格仍豁免。
+        double tEntry = 0.0;
         for (int guard = 0; guard < 384; guard++) {
-            double tNext = Math.min(mX, Math.min(mY, mZ));
-            if (tNext > maxDist) return maxDist;
-            double tieEps = Math.max(1e-6, Math.abs(tNext) * 1e-5);
-            boolean tX = Math.abs(mX - tNext) <= tieEps;
-            boolean tY = Math.abs(mY - tNext) <= tieEps;
-            boolean tZ = Math.abs(mZ - tNext) <= tieEps;
-            if (tX) { cx += sx; mX += dX; }
-            if (tY) { cy += sy; mY += dY; }
-            if (tZ) { cz += sz; mZ += dZ; }
-            if (cx < 0 || cy < 0 || cz < 0 || cx >= nx || cy >= ny || cz >= nz) return maxDist;
+            if (guard > 0) {
+                double tieEps = Math.max(1e-6, Math.abs(tEntry) * 1e-5);
+                boolean tX = Math.abs(mX - tEntry) <= tieEps;
+                boolean tY = Math.abs(mY - tEntry) <= tieEps;
+                boolean tZ = Math.abs(mZ - tEntry) <= tieEps;
+                if (tX) { cx += sx; mX += dX; }
+                if (tY) { cy += sy; mY += dY; }
+                if (tZ) { cz += sz; mZ += dZ; }
+                if (cx < 0 || cy < 0 || cz < 0 || cx >= nx || cy >= ny || cz >= nz) return maxDist;
+            }
+            if (tEntry > maxDist) return maxDist;
             int code = codeAt(g, cx, cy, cz);
+            double tExit = Math.min(mX, Math.min(mY, mZ));
             if (code == VoxelField.CODE_SOLID) {
-                double tExit = Math.min(mX, Math.min(mY, mZ));
-                double pen = Math.max(0.0, Math.min(tExit, maxDist) - tNext);
+                double pen = Math.max(0.0, Math.min(tExit, maxDist) - tEntry);
                 double f = Math.min(pen / FUZZ, 1.0);
-                if (f >= 1.0) return tNext;
+                if (f >= 1.0) return tEntry;
                 T *= 1.0 - f;
             } else if (code == VoxelField.CODE_LEAF) {
-                T *= 0.40;
+                if (guard > 0) T *= 0.40;
             } else if (code == VoxelField.CODE_VEG) {
-                T *= 0.75;
+                if (guard > 0) T *= 0.75;
             }
-            if (T <= SOFT_FLOOR) return tNext;
+            if (T <= SOFT_FLOOR) return tEntry;
+            tEntry = tExit;
         }
         return maxDist;
     }
