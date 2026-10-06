@@ -8,7 +8,7 @@ TacLight 让手电筒和枪挂灯投射真实的锥形光：有明确的光锥�
 
 配合 Iris/Oculus 光影包使用时，光直接进入光影包的照明和体积光管线，所以观感跟光影包自己的光照是一致的，不会被原版光照模型拖低。
 
-**当前版本 0.11.5（预览版）**。核心功能可用，观感仍在打磨。
+**当前版本 0.11.6（预览版）**。核心功能可用，观感仍在打磨。
 
 ## 特性
 
@@ -26,7 +26,7 @@ TacLight 让手电筒和枪挂灯投射真实的锥形光：有明确的光锥�
 | 组件 | 版本 | 放哪 | 作用 |
 |---|---|---|---|
 | Minecraft Forge | 1.20.1-47.1.3 | 启动器 | 运行平台，客户端与服务端 |
-| TacLight | 0.11.5 | `mods/` | 本模组 |
+| TacLight | 0.11.6 | `mods/` | 本模组 |
 | Oculus | 1.8.0 | `mods/` | 光影管线，锥形光依赖它 |
 | Embeddium | 0.3.31 | `mods/` | 提升帧率 |
 | 光影包 Complementary Reimagined | r5.9 | `shaderpacks/` | 锥形光生效的前提，主线适配 |
@@ -44,7 +44,7 @@ TacLight 让手电筒和枪挂灯投射真实的锥形光：有明确的光锥�
 ## 安装
 
 1. 装 Forge 1.20.1。
-2. 把 `taclight-0.11.5.jar` 放进 `.minecraft/mods/`。
+2. 把 `taclight-0.11.6.jar` 放进 `.minecraft/mods/`。
 3. 客户端再放 Oculus（建议顺手放 Embeddium）。
 4. 把 Complementary Reimagined 解压或直接放 zip 到 `.minecraft/shaderpacks/`（模组不自带光影包，这一步不能省）。
 5. 进游戏，`视频设置 → 光影` 里选中 Complementary Reimagined。

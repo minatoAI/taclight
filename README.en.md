@@ -8,7 +8,7 @@ TacLight makes flashlights and gun-mounted lights cast a real cone: a defined ed
 
 When used with an Iris/Oculus shader pack, the light enters the pack's own lighting and volumetric pipeline, so it matches the look of the pack instead of being dragged down by the vanilla light model.
 
-**Current version 0.11.5 (preview).** The core works; the look is still being polished.
+**Current version 0.11.6 (preview).** The core works; the look is still being polished.
 
 ## Features
 
@@ -26,7 +26,7 @@ This is the version combination the release was tested against. It is not a hard
 | Component | Version | Where | Role |
 |---|---|---|---|
 | Minecraft Forge | 1.20.1-47.1.3 | launcher | Platform, client and server |
-| TacLight | 0.11.5 | `mods/` | This mod |
+| TacLight | 0.11.6 | `mods/` | This mod |
 | Oculus | 1.8.0 | `mods/` | The shader pipeline; the light cone needs it |
 | Embeddium | 0.3.31 | `mods/` | Frame rate |
 | Shader pack: Complementary Reimagined | r5.9 | `shaderpacks/` | What makes the cone visible; the main supported pack |
@@ -44,7 +44,7 @@ A few things worth stating plainly:
 ## Installation
 
 1. Install Forge 1.20.1.
-2. Put `taclight-0.11.5.jar` into `.minecraft/mods/`.
+2. Put `taclight-0.11.6.jar` into `.minecraft/mods/`.
 3. Add Oculus on the client, and Embeddium if you want the frame rate.
 4. Put Complementary Reimagined into `.minecraft/shaderpacks/`, zipped or unzipped. The mod ships no pack, so this step is required.
 5. In game, pick Complementary Reimagined under `Video Settings -> Shader Packs`.
