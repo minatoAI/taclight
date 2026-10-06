@@ -35,7 +35,10 @@ public final class SubscriberScopeContract {
         // 2026-10-06:物品模型谓词注册(手电筒开/关图标)—— 注册了才有图标切换,
         // 所以同样必须有"它确实跑过"的日志判据。
         SIDE_EFFECT_MARKERS.put("client/ItemModelModBus.java", "item property register:");
-        SIDE_EFFECT_MARKERS.put("debug/command/TacLightCommand.java", "CMDS RegisterCommandsEvent firing");
+        // 2026-10-06:命令树的**发布面**部分从 debug/command/ 搬回 command/(tune 是发布面功能,
+        // 见 TacLightCommand 类注释);dev-only 子命令改成非订阅类(DebugCommandChildren),
+        // 订阅站点仍是 1 处 ⇒ 本表键随文件搬移,标记字符串不变(它必须继续打印)。
+        SIDE_EFFECT_MARKERS.put("command/TacLightCommand.java", "CMDS RegisterCommandsEvent firing");
         SIDE_EFFECT_MARKERS.put("debug/TicketBridge.java", "bridge armed in");
         SIDE_EFFECT_MARKERS.put("devonly/DevLanAuthHook.java", "DEV: integrated server LAN auth disabled");
     }

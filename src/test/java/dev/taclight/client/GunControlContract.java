@@ -64,6 +64,13 @@ public class GunControlContract {
         check(GunControl.gunBlockLightEmission(true, false, false, false) == 0, "远端同步灭=0(不读本机)");
         check(GunControl.gunBlockLightEmission(true, false, true, true) == 10, "远端同步亮=10(本机开关不干扰)");
         check(GunControl.gunBlockLightEmission(true, false, true, false) == 0, "远端以同步为准");
+        // held 覆盖跟随(2026-10-06):值不再硬编码 —— 与手电共用 LightTuneOverride.heldLevel()
+        dev.taclight.channel.LightTuneOverride.configureHeld("12");
+        check(GunControl.gunBlockLightEmission(true, true, true, false) == 12, "held 覆盖跟随=12(本地)");
+        check(GunControl.gunBlockLightEmission(true, false, true, true) == 12, "held 覆盖跟随=12(远端同步亮)");
+        check(GunControl.gunBlockLightEmission(true, true, false, false) == 0, "关灯仍 0(与 held 值无关)");
+        dev.taclight.channel.LightTuneOverride.configureHeld("clear");
+        check(GunControl.gunBlockLightEmission(true, true, true, false) == 10, "clear 回默认 10");
         // 复位,免污染后续契约/运行
         ClientLightState.setGunProbe(false);
         ClientLightState.setGunLight(false);

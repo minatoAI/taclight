@@ -19,8 +19,12 @@
 - `dev/taclight/client/DebugCommandRelay*`
 - `taclight.debug.mixins.json`、`taclight.dev.mixins.json`
 
-`InteropPackagingContract` 会直接读 jar 做构件闸门：dev 面泄漏、已删调试类复活、版本号不同源都会判红。
-发布前顺手核一遍 `unzip -l` 里的 class 数量与关键条目。
+同时必须**含**玩家可用的功能面 —— 其中 `/taclight tune` 命令族
+（`dev/taclight/command/TacLightCommand`、`dev/taclight/tune/TuneService`）在 2026-09-29
+曾被按目录误剔除（用户实测发布件里无此命令），2026-10-06 修回并加了正控闸门。
+
+`InteropPackagingContract` 会直接读 jar 做构件闸门：dev 面泄漏、已删调试类复活、版本号不同源、
+以及**发布面命令族缺失**都会判红。发布前顺手核一遍 `unzip -l` 里的 class 数量与关键条目。
 
 ## 3. 环境
 

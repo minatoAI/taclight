@@ -26,11 +26,12 @@ public final class GunControl {
      * <p>本地玩家读本机有效值({@code gunLightEffective}=开关×持枪门);
      * 远端玩家读同步真源({@code PlayerLightAccess.gunLight},服务端写的已是有效值),
      * 不能读本机状态否则观察者看不到对端灯态。未装件恒返 0。 */
-    public static final int GUN_BLOCK_LIGHT = 10;
     public static int gunBlockLightEmission(boolean hasOurLight, boolean isLocal, boolean localEffective, boolean remoteSynced) {
         if (!hasOurLight) return 0;
         boolean on = isLocal ? localEffective : remoteSynced;
-        return on ? GUN_BLOCK_LIGHT : 0;
+        // 2026-10-06:值不再硬编码 —— 与手电共用 LightTuneOverride.heldLevel()
+        // (默认 10 的单一真源 = DEFAULT_HELD_LEVEL;/taclight tune held 可覆盖)。
+        return on ? dev.taclight.channel.LightTuneOverride.heldLevel() : 0;
     }
 
     private GunControl() {}

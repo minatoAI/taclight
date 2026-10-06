@@ -23,6 +23,8 @@ public final class TacLightConfig {
     public static final ForgeConfigSpec.ConfigValue<Double> SCAT_FLOOR;
     public static final ForgeConfigSpec.ConfigValue<Double> BEAM_CAP_M;
     public static final ForgeConfigSpec.ConfigValue<Boolean> VOXEL_ENABLED;
+    /** 手持光照值(Iris/Oculus 的 heldBlockLightValue):0..15 的**整数**键,持久化走 Sink.setInt/getInt。 */
+    public static final ForgeConfigSpec.ConfigValue<Integer> HELD_LIGHT_LEVEL;
     public static final ForgeConfigSpec.ConfigValue<Double> GUN_MULTIPLIER;
     public static final ForgeConfigSpec.ConfigValue<Double> REMOTE_LIGHT_MAX_DIST;
     public static final ForgeConfigSpec.ConfigValue<Integer> REMOTE_LIGHT_MAX_COUNT;
@@ -50,6 +52,12 @@ public final class TacLightConfig {
         SCAT_FLOOR = builder.comment("volumetric axial floor share f (tune scat; 0 = pure side-view)").defineInRange("scatFloor", 0.04, 0.0, 0.9);
         BEAM_CAP_M = builder.comment("volumetric overlap soft-cap multiplier m (tune beamcap; cap=2.0*m)").defineInRange("beamCapM", 1.0, 0.25, 8.0);
         VOXEL_ENABLED = builder.comment("voxel DDA occlusion grid (tune voxel; false = fallback SSO)").define("voxelEnabled", true);
+        // held(2026-10-06 用户需求"能不能调那个类似火把的亮度值"):Iris/Oculus 的 heldBlockLightValue
+        // —— 手持光照值,方块光等级量纲 0..15,光影包用它算玩家周围氛围光(Complementary 的
+        // Dynamic Handheld Lighting 选项,默认 Normal=开)。10 = 2026-09-04 用户体感定案
+        // (15 像火把太强、5 基本看不见)。**与锥形主光无关**(那条走 SSBO)。
+        // 注意:本键是整数(defineInRange 的 int 重载)⇒ Sink 必须走 setInt/getInt。
+        HELD_LIGHT_LEVEL = builder.comment("held block light value 0-15 (player ambient light, shader heldBlockLightValue; 10 = tuned default)").defineInRange("heldLightLevel", 10, 0, 15);
         GUN_MULTIPLIER = builder.comment("gun-mounted light intensity multiplier").defineInRange("gunMultiplier", 1.1, 0.1, 3.0);
         // M5 多人:远程玩家灯的收集护栏(旁观视角与多人调试方案.md §4.3)
         REMOTE_LIGHT_MAX_DIST = builder.comment("max distance (blocks) to render other players' lights").defineInRange("remoteLightMaxDist", 48.0, 8.0, 128.0);

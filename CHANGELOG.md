@@ -1,5 +1,43 @@
 > 本文所述 commit id 为 2026-09-17 历史重写前的旧 id；映射见 `docs/COMMIT-ID-REMAP-2026-09-17.md`
 
+## 10-06 修复:发布件缺 `/taclight tune`(发布面回归)
+
+- **症状(用户实测)**:发布 jar 里敲 `/taclight tune` —— 无此命令。该命令 2026-09-19 就定案为
+  发布面功能(`docs/tune-正式调参命令-2026-09-19.md` 首段写的是"发布包可用")。
+- **根因**:2026-09-29 R12 把**整族** `/taclight` 当调试面搬进 `dev/taclight/debug/**`,
+  随 `exclude 'dev/taclight/debug/**'` 一起离开发布件。当时相关闸门**全是负断言**
+  ("debug 面不得在发布件里")+ 一个被合法化删项的必需清单 ⇒ 没有任何判据要求它**在**发布件里,
+  整族消失无人报警(单侧判据盲区)。
+- **修法(按功能面重划,不按目录)**:发布面 = `dev/taclight/command/TacLightCommand`(命令树 + tune)
+  + `dev/taclight/tune/TuneService`(编排);dev-only 子命令 `kit/cam/scene/light` 移入
+  `dev/taclight/debug/command/DebugCommandChildren`,由发布面类**反射挂载**(发布件里缺类 ⇒
+  少几支命令而不崩)。
+- **新增正控闸门(防复发)**:发布 jar 条目断言 + 命令类字节码符号断言(防空壳类)+
+  `HudCommandContract` 必需清单加回两项 + `TuneContract` 由 `buildRoot()` **真建 brigadier 树**
+  断言 `/taclight tune` 与 name/value 在树里。
+- **发布件行为变化**:仅 `/taclight tune` 回归可用;debug 面仍不在发布件里(与 0.11.5 一致)。
+- **命令分层(用户反馈"调节有点杂乱")**:`/taclight tune` 改成三层上手流程 ——
+  无参/`help` = 概览(它是什么 + 一条真实可用的示例 + 指路);`list` = 索引(十个可调项,
+  一行一个短标签 + "选一个加 help"的示例);`<名> help` = 单项展开(范围/默认/当前值 +
+  调大调小 + 讲解 + 用法)。`status` 独立成"看全部当前值",`<名>` 看单项当前值。
+  `help`/`list` 是静态文案,在 MP 守卫**之前**返回(专用服也能看怎么用);
+  保留字 `list/status/help/?` 与旋钮名不撞(契约钉死);每个旋钮新增 `label`/`note` 两条文案
+  (契约要求非空、label ≤12 字、note ≥10 字,加旋钮不许只写名字)。
+- **新增第 10 个旋钮 `held`(用户需求)**:Iris/Oculus 的 `heldBlockLightValue`(手持光照值 0..15,
+  光影包用它算玩家周围氛围底光,Complementary 里叫 Dynamic Handheld Lighting)原先**硬编码 10**
+  (手电与枪灯各写一份)⇒ 现为旋钮:整数键 `heldLightLevel`、默认 10、`clear` 回默认、拒绝小数
+  (不静默取整),两处消费点(`FlashlightItemIris` / `GunControl` 枪灯)改为同一真源
+  `LightTuneOverride.DEFAULT_HELD_LEVEL`。持久化层新增整数通道 `Sink.setInt/getInt`(Forge 的
+  `ConfigValue<Integer>` 用 set(double) 会炸)。契约新增"每个非布尔旋钮都必须在生产 `TUNE_APPLIER`
+  有分支"闸门 —— 加 held 时**差点漏接生产入口**,是契约自己的 REAL applier 漏接被行为断言抓到的。
+- **用词/文案(用户反馈)**:`off` 一个词两种语义(数值旋钮=清除覆盖回默认;voxel=字面禁用),
+  且状态回显 `off(默认 intensity=6.0)` 长得像一个可填的值 ⇒ 数值旋钮的清除动词改为 **`clear`**
+  (旧写法 `off` 仍接受,兼容别名),状态回显只留覆盖态(`6.0(未覆盖)` / `12.0(已覆盖)`);
+  每项固定**四项**:当前值 → 范围 → 默认值 → 调大/调小说明(voxel 为开/关语义);
+  voxel 的 `clear` 明确拒绝并指路 `on`。`TuneContract` 新增 6 组文案闸门
+  (回显不得含 `off(`、每项必须有调大/调小、全状态表逐行四项齐全、单旋钮含范围与默认值、
+  用法用 `clear`、voxel `clear` 必须报错零写盘、`clear`/`off` 别名等价)。
+
 ## 10-06 凌晨 S4a 结案+项目限北冻结(未 push)
 
 - 用户拍板:复杂方块在体素 DDA 路线下到头,Complementary 优先,内置包冻结。

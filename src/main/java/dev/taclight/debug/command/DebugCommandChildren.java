@@ -2,6 +2,7 @@ package dev.taclight.debug.command;
 
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import com.mojang.brigadier.tree.LiteralCommandNode;
 import com.tacz.guns.api.item.IAttachment;
 import com.tacz.guns.api.item.IGun;
 import dev.taclight.TacLightMod;
@@ -13,79 +14,69 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.event.RegisterCommandsEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.registries.ForgeRegistries;
 
 /**
- * /taclight 调试命令组:
- *  kit —— 一键发放验收套件:手电筒 + HK416D(预装战术枪灯,TaCZ 官方 API;无 TaCZ 时仅给手电筒)。
- *  cam here / save <name> / goto <name> —— 确定性机位(注册表 run/config/taclight-cams.json)。
- *  scene <preset> —— 场景区程序化布景(计划 = ScenePresets 纯数据,执行 = SceneExecutor)。
- * 全组 hasPermission(0):调试工具,SP 场景使用;结果同时入日志(自动化 grep 依赖)。
- * snap —— 一键调试快照(2026-09-19 最小闭环,与 F9/!snap 同一入口;专用服回仅单人)。
- * tune —— 八旋钮正式调参(2026-09-19 由文件命令中继晋升,发布包可用):
- * /taclight tune &lt;bright/dist/atten/knee/beam/scat/beamcap/cone/voxel&gt; [&lt;值&gt;|status|off],
- * 无参=九旋钮全状态。覆盖层即时生效 + 写回 config/taclight-client.toml 重启保留;
- * 专用服无本地调参目标,直接回显"仅单人/客户端生效"不假成功。
+ * {@code /taclight} 的 <b>dev-only</b> 子命令挂载器 —— kit / cam / scene / light。
+ *
+ * <p>2026-10-06 发布面回归修复时从 {@code TacLightCommand}(当时整族都在本包)拆出来的:
+ * 发布面的 {@code tune} 搬到 {@code dev.taclight.command.TacLightCommand},dev-only 的这几支
+ * 留在 {@code dev.taclight/debug/**}(随 {@code exclude 'dev/taclight/debug/**'} 离开发布件)。
+ * 两者通过 {@code TacLightCommand.attachDevChildren} 的<b>反射</b>挂到同一个 root 上 ——
+ * 发布件里本类不存在 ⇒ 反射失败 ⇒ 只留一行日志,命令树少掉这几支而不是崩。</p>
+ *
+ * <ul>
+ *   <li>kit —— 一键发放验收套件:手电筒 + HK416D(预装战术枪灯,TaCZ 官方 API;无 TaCZ 时仅给手电筒)。</li>
+ *   <li>cam here / save &lt;name&gt; / goto &lt;name&gt; —— 确定性机位(注册表 run/config/taclight-cams.json)。</li>
+ *   <li>scene &lt;preset&gt; —— 场景区程序化布景(计划 = ScenePresets 纯数据,执行 = SceneExecutor)。</li>
+ *   <li>light &lt;on|off|toggle&gt; [player] —— M5 多人灯状态(状态真源 = Player SynchedEntityData)。</li>
+ * </ul>
+ *
+ * <p>全组 hasPermission(0):调试工具,SP 场景使用;结果同时入日志(自动化 grep 依赖)。</p>
  */
-@Mod.EventBusSubscriber(modid = TacLightMod.MODID)
-public class TacLightCommand {
-    @SubscribeEvent
-    public static void onRegister(RegisterCommandsEvent event) {
-        // 诊断:root 子节点数(含原版命令)——服务端分发器是否有货的决定性证据
-        TacLightMod.LOGGER.info("[TacLight] CMDS RegisterCommandsEvent firing, root children={} (vanilla+mods 已入树)",
-                event.getDispatcher().getRoot().getChildren().size());
-        event.getDispatcher().register(Commands.literal("taclight")
-                .then(Commands.literal("kit")
-                        .requires(s -> s.hasPermission(0))
-                        .executes(ctx -> giveKit(ctx.getSource()))
-                        // 里程碑①(2026-09-02):可选枪械 id(默认包 index 名,如 ak47)——
-                        // 白名单实测用:任意枪发下来即预装 gun_light。
-                        .then(Commands.argument("gunId", StringArgumentType.word())
-                                .executes(ctx -> giveKit(ctx.getSource(),
-                                        StringArgumentType.getString(ctx, "gunId")))))
-                .then(Commands.literal("cam")
-                        .requires(s -> s.hasPermission(0))
-                        .then(Commands.literal("here")
-                                .executes(ctx -> camHere(ctx.getSource())))
-                        .then(Commands.literal("save")
-                                .then(Commands.argument("name", StringArgumentType.string())
-                                        .executes(ctx -> camSave(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
-                        .then(Commands.literal("goto")
-                                .then(Commands.argument("name", StringArgumentType.string())
-                                        .executes(ctx -> camGoto(ctx.getSource(), StringArgumentType.getString(ctx, "name"))))))
-                .then(Commands.literal("scene")
-                        .requires(s -> s.hasPermission(0))
-                        .executes(ctx -> sceneList(ctx.getSource()))
-                        .then(Commands.literal("verify")
-                                .then(Commands.argument("preset", StringArgumentType.word())
-                                        .executes(ctx -> sceneVerify(ctx.getSource(), StringArgumentType.getString(ctx, "preset")))))
-                        .then(Commands.argument("preset", StringArgumentType.word())
-                                .executes(ctx -> sceneBuild(ctx.getSource(), StringArgumentType.getString(ctx, "preset")))))
-                .then(Commands.literal("light")
-                        .requires(s -> s.hasPermission(0))
-                        .executes(ctx -> lightStatus(ctx.getSource()))
-                        .then(Commands.literal("status")
-                                .executes(ctx -> lightStatus(ctx.getSource())))
-                        .then(Commands.argument("state", StringArgumentType.word())
-                                .executes(ctx -> lightSet(ctx.getSource(), StringArgumentType.getString(ctx, "state"), null))
-                                .then(Commands.argument("player", net.minecraft.commands.arguments.EntityArgument.player())
-                                        .executes(ctx -> lightSet(ctx.getSource(), StringArgumentType.getString(ctx, "state"),
-                                                net.minecraft.commands.arguments.EntityArgument.getPlayer(ctx, "player"))))))
-                // tune(2026-09-19):八旋钮正式入口。name/value 用 string() 而非 word()
-                // —— 数值 "0.35"/"-0.1" 含 '.',word() 拒收(同 cam name 含 '@' 的教训)。
-                .then(Commands.literal("tune")
-                        .requires(s -> s.hasPermission(0))
-                        .executes(ctx -> tuneAll(ctx.getSource()))
+public final class DebugCommandChildren {
+    /** 把 dev-only 子命令挂到已注册的 {@code /taclight} root 上(由发布面类反射调用)。 */
+    public static void attach(LiteralCommandNode<CommandSourceStack> root) {
+        root.addChild(Commands.literal("kit")
+                .requires(s -> s.hasPermission(0))
+                .executes(ctx -> giveKit(ctx.getSource()))
+                // 里程碑①(2026-09-02):可选枪械 id(默认包 index 名,如 ak47)——
+                // 白名单实测用:任意枪发下来即预装 gun_light。
+                .then(Commands.argument("gunId", StringArgumentType.word())
+                        .executes(ctx -> giveKit(ctx.getSource(),
+                                StringArgumentType.getString(ctx, "gunId"))))
+                .build());
+        root.addChild(Commands.literal("cam")
+                .requires(s -> s.hasPermission(0))
+                .then(Commands.literal("here")
+                        .executes(ctx -> camHere(ctx.getSource())))
+                .then(Commands.literal("save")
                         .then(Commands.argument("name", StringArgumentType.string())
-                                .executes(ctx -> tuneRun(ctx.getSource(),
-                                        StringArgumentType.getString(ctx, "name"), null))
-                                .then(Commands.argument("value", StringArgumentType.string())
-                                        .executes(ctx -> tuneRun(ctx.getSource(),
-                                                StringArgumentType.getString(ctx, "name"),
-                                                StringArgumentType.getString(ctx, "value")))))));
+                                .executes(ctx -> camSave(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
+                .then(Commands.literal("goto")
+                        .then(Commands.argument("name", StringArgumentType.string())
+                                .executes(ctx -> camGoto(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
+                .build());
+        root.addChild(Commands.literal("scene")
+                .requires(s -> s.hasPermission(0))
+                .executes(ctx -> sceneList(ctx.getSource()))
+                .then(Commands.literal("verify")
+                        .then(Commands.argument("preset", StringArgumentType.word())
+                                .executes(ctx -> sceneVerify(ctx.getSource(), StringArgumentType.getString(ctx, "preset")))))
+                .then(Commands.argument("preset", StringArgumentType.word())
+                        .executes(ctx -> sceneBuild(ctx.getSource(), StringArgumentType.getString(ctx, "preset"))))
+                .build());
+        root.addChild(Commands.literal("light")
+                .requires(s -> s.hasPermission(0))
+                .executes(ctx -> lightStatus(ctx.getSource()))
+                .then(Commands.literal("status")
+                        .executes(ctx -> lightStatus(ctx.getSource())))
+                .then(Commands.argument("state", StringArgumentType.word())
+                        .executes(ctx -> lightSet(ctx.getSource(), StringArgumentType.getString(ctx, "state"), null))
+                        .then(Commands.argument("player", net.minecraft.commands.arguments.EntityArgument.player())
+                                .executes(ctx -> lightSet(ctx.getSource(), StringArgumentType.getString(ctx, "state"),
+                                        net.minecraft.commands.arguments.EntityArgument.getPlayer(ctx, "player")))))
+                .build());
         // 注:cam name 用 string() 而非 word() —— 内置机位名含 '@'(bloom@inside),
         // word() 只收 [A-Za-z0-9_+-],实机 2026-08-29 "Incorrect argument" 实锤。
     }
@@ -195,73 +186,6 @@ public class TacLightCommand {
         return 1;
     }
 
-    // ---- tune:八旋钮正式调参(2026-09-19,发布包可用;中继 !bright/... 保持内存对照) ----
-
-    /** 生产覆盖层入口(与 TuneService 契约的假入口恒等;voxel 不走这里,走客户端门)。 */
-    private static final dev.taclight.tune.TunePersist.KnobApplier TUNE_APPLIER = (knob, arg) -> switch (knob) {
-        case "bright" -> dev.taclight.channel.LightTuneOverride.configureBright(arg);
-        case "dist" -> dev.taclight.channel.LightTuneOverride.configureDist(arg);
-        case "atten" -> dev.taclight.channel.LightTuneOverride.configureAtten(arg);
-        case "knee" -> dev.taclight.channel.LightTuneOverride.configureKnee(arg);
-        case "beam" -> dev.taclight.channel.LightTuneOverride.configureBeam(arg);
-        case "scat" -> dev.taclight.channel.LightTuneOverride.configureScat(arg);
-        case "beamcap" -> dev.taclight.channel.LightTuneOverride.configureBeamcap(arg);
-        case "cone" -> dev.taclight.channel.LightTuneOverride.configureCone(arg);
-        default -> "bad arg " + arg + " (unknown knob " + knob + ")";
-    };
-
-    /**
-     * MP 守卫:专用服无本地调参目标(调参只改本机覆盖层 + 本机 toml),直接回显
-     * "仅单人/客户端生效"并返回 0,<b>不碰</b>覆盖层/config/体素(后者含 client 引用,
-     * 专用服加载即炸,故守卫必须在任何调参引用之前)。
-     * 集成服(SP/LAN 主机同 JVM):直接调覆盖层 + VoxelGrid 即时生效。
-     * 注意:LAN 远端客机的命令发到主机执行,生效的是主机本机——回显明确作用域,不静默假成功。
-     */
-    private static boolean tuneMpGuard(CommandSourceStack source) {
-        var server = source.getServer();
-        if (server != null && !server.isDedicatedServer()) return false;
-        String msg = "[TacLight] tune 仅单人/客户端生效:专用服务器无本地调参目标"
-                + "(调参只改本机覆盖层+本机 config/taclight-client.toml),本次未应用。"
-                + "联机客机请在各自单人/客户端执行;LAN 远端发到主机只改主机本机。";
-        source.sendFailure(Component.literal(msg));
-        TacLightMod.LOGGER.info("[TacLight] TUNE mp-guard reject (dedicated or no-server)");
-        return true;
-    }
-
-    /** /taclight tune —— 九旋钮全状态 + 用法(只读)。 */
-    private static int tuneAll(CommandSourceStack source) {
-        if (tuneMpGuard(source)) return 0;
-        // 专用服已提前返回,到这里必是集成服:客户端门类加载安全。
-        dev.taclight.debug.tune.TuneService.Result r = dev.taclight.debug.tune.TuneService.statusAll(
-                dev.taclight.client.TuneClientGate.GATE, TUNE_APPLIER);
-        String msg = r.message() + "\n(专用服/联机客机不生效:仅单人/主机本机)";
-        source.sendSuccess(() -> Component.literal(msg), false);
-        TacLightMod.LOGGER.info("[TacLight] TUNE status-all");
-        return 1;
-    }
-
-    /** /taclight tune &lt;name&gt; [&lt;value&gt;|status|off]。 */
-    private static int tuneRun(CommandSourceStack source, String name, String value) {
-        if (tuneMpGuard(source)) return 0;
-        dev.taclight.debug.tune.TuneService.Result r = dev.taclight.debug.tune.TuneService.tune(
-                name, value,
-                dev.taclight.tune.TunePersist.forgeSink(),
-                dev.taclight.client.TuneClientGate.GATE, TUNE_APPLIER);
-        if (r.ok()) {
-            source.sendSuccess(() -> Component.literal(r.message()), false);
-            TacLightMod.LOGGER.info("[TacLight] TUNE {}", singleLine(r.message()));
-            return 1;
-        }
-        source.sendFailure(Component.literal(r.message()));
-        TacLightMod.LOGGER.warn("[TacLight] TUNE reject {}", singleLine(r.message()));
-        return 0;
-    }
-
-    /** 多行状态压一行记日志(自动化 grep 单行友好)。 */
-    private static String singleLine(String s) {
-        return s.replace('\n', '|');
-    }
-
     private static int giveKit(CommandSourceStack source) throws CommandSyntaxException {
         return giveKit(source, "hk416d");
     }
@@ -325,5 +249,5 @@ public class TacLightCommand {
         return true;
     }
 
-    private TacLightCommand() {}
+    private DebugCommandChildren() {}
 }

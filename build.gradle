@@ -294,10 +294,15 @@ tasks.named('jar', Jar).configure {
     //    DebugCommandRelay(含 $1 内部类)、两份调试 config
     //    全部剔除;manifest 只登记核心 config —— 而核心 config 已不含任何 debug. 条目,
     //    故"required:true + 缺类 ⇒ MixinApplyError"的充分条件不成立(R1 一手源码口径)。
-    //  - B1 的 `/taclight` 命令族(2026-09-28 R12)走的是**既有** `dev/taclight/debug/**` 那条:
-    //    整族搬进 `dev/taclight/debug/command/**` 与 `dev/taclight/debug/tune/**`,不新增机制。
+    //  - B1 的 `/taclight` 命令族(2026-09-28 R12)原本整族搬进 `dev/taclight/debug/**`。
+    //    ⚠️ **2026-10-06 修正**:那次整族搬移把 2026-09-19 定案为**发布面功能**的
+    //    `/taclight tune` 一起剔出了发布件(用户实测"发布件里没这个命令")。现按**功能面**重划:
+    //    发布面 = `dev/taclight/command/**`(命令树 + tune)+ `dev/taclight/tune/**`(编排);
+    //    dev-only 子命令 = `dev/taclight/debug/command/DebugCommandChildren`,由发布面类**反射**挂载。
+    //    ⇒ "按目录剔除调试面"时,**目录里混着发布面功能**这件事必须由构件正控拦住
+    //    (`InteropPackagingContract.TUNE_RELEASE_SYMBOLS` + `HudCommandContract.REQUIRED_RELEASE_ENTRIES`)。
     //    ⚠️ relayonly 变体(由 devharness jar 派生)继承全部 debug 类 ⇒ 真机 harness 的
-    //    `/taclight` 与 relay 通道**不受影响**(这是选"结构剔除"而非"默认关开关"的前提)。
+    //    `/taclight` 全族与 relay 通道**不受影响**(这是选"结构剔除"而非"默认关开关"的前提)。
     def devHarness = findProperty('devHarness') != null
             ? findProperty('devHarness').toString().toBoolean()
             : gradle.startParameter.taskNames.any { it.toLowerCase().contains('runclient') }

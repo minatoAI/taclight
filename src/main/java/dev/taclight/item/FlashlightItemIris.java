@@ -23,7 +23,9 @@ public class FlashlightItemIris extends FlashlightItem implements IrisItemLightP
         // ((10/15)^4≈1/5,暖氛围保留但收敛);锥形主光走 SSBO 通道不受此值影响。
         // 持物门生效值(2026-09-25):本接口虽由"手持该物品"的上下文调用,仍统一走同一个门,
         // 避免两条路径对"灯到底亮不亮"给出不同答案。
-        return ClientLightState.handheldEffective() ? 10 : 0;
+        // 2026-10-06:/taclight tune held 可调(默认 10 在 LightTuneOverride.DEFAULT_HELD_LEVEL,
+        // 单一真源 —— 原先这里和 GunControl 各写一份 10)。
+        return ClientLightState.handheldEffective() ? dev.taclight.channel.LightTuneOverride.heldLevel() : 0;
     }
 
     @Override

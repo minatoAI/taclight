@@ -16,12 +16,12 @@ import dev.taclight.config.TacLightConfig;
  * <ul>
  *   <li>set 值:覆盖层激活 + 每个 config 键写入 + save。cone 一写二
  *       (outer=v,inner=v×0.5);voxel 写布尔。</li>
- *   <li>off:覆盖层失活 + config 键<b>写回默认值</b> + save(否则"off 后仍是上次调参值"
+ *   <li>clear(旧写法 off):覆盖层失活 + config 键<b>写回默认值</b> + save(否则"清除后仍是上次调参值"
  *       = 静默假成功;voxel 例外:on/off 字面语义,off 写 {@code false})。</li>
  *   <li>status/无参/help:只读,<b>零</b> sink 接触(含 save 也不调)。</li>
  * </ul></p>
  *
- * <p>开机恢复 {@link #restore}:只处理新增键(atten/knee/scat/beamcap/voxel)——
+ * <p>开机恢复 {@link #restore}:只处理新增键(atten/knee/scat/beamcap/voxel/held)——
  * 既有键(bright/dist/beam/cone)的消费者每帧直读 config,无需回填;新增键的消费者
  * 只认覆盖层/GSL 默认,故非默认值才回填激活(默认值=off 态,回填与否效果一致,
  * 不回填则 status 保持诚实的 off)。调用点见 ClientEvents(客户端首 tick 一次性)。</p>
@@ -30,8 +30,11 @@ public final class TunePersist {
     /** Forge/假两用存储口:键 = toml 键名(如 "intensity"),与 TuneKnobs.configKeys 同源。 */
     public interface Sink {
         void setDouble(String key, double value);
+        /** 整数键(heldLightLevel):Forge 的 ConfigValue<Integer> 用 set(double) 会炸,必须单独一路。 */
+        void setInt(String key, int value);
         void setBoolean(String key, boolean value);
         double getDouble(String key, double fallback);
+        int getInt(String key, int fallback);
         boolean getBoolean(String key, boolean fallback);
         /** 返回 ""=成功,非空=失败原因(调用方如实回显)。 */
         String save();
@@ -58,22 +61,31 @@ public final class TunePersist {
         if ("cone".equals(knob.name())) {
             return new String[][]{{keys[0], Double.toString(value)}, {keys[1], Double.toString(value * 0.5)}};
         }
-        return new String[][]{{keys[0], Double.toString(value)}};
+        return new String[][]{{keys[0], numText(knob, value)}};
     }
 
-    /** off 后应写回的 (键,默认值) 对;voxel 不走这里(字面语义,见 setVoxel)。 */
+    /** clear 后应写回的 (键,默认值) 对;voxel 不走这里(字面语义,见 setVoxel)。 */
     public static String[][] offPairs(TuneKnobs.Knob knob) {
         String[] keys = knob.configKeys();
         double[] defs = knob.configDefaults();
         String[][] out = new String[keys.length][2];
-        for (int i = 0; i < keys.length; i++) out[i] = new String[]{keys[i], Double.toString(defs[i])};
+        for (int i = 0; i < keys.length; i++) out[i] = new String[]{keys[i], numText(knob, defs[i])};
         return out;
+    }
+
+    /** 值的文本形式:整数旋钮写整数(12 而不是 12.0 —— 契约按"键=值"逐字对账)。 */
+    private static String numText(TuneKnobs.Knob knob, double value) {
+        return TuneKnobs.isInt(knob) ? Integer.toString((int) Math.rint(value)) : Double.toString(value);
     }
 
     /** 执行 setPairs/offPairs 的写盘(含 save),返回 outcome(失败也返回,不抛)。 */
     public static SaveOutcome writePairs(Sink sink, String[][] pairs) {
         try {
-            for (String[] kv : pairs) sink.setDouble(kv[0], Double.parseDouble(kv[1]));
+            for (String[] kv : pairs) {
+                // 按**键**的类型路由(TuneKnobs 是唯一真源;此处不复制键名表)
+                if (TuneKnobs.isIntKey(kv[0])) sink.setInt(kv[0], (int) Math.rint(Double.parseDouble(kv[1])));
+                else sink.setDouble(kv[0], Double.parseDouble(kv[1]));
+            }
             String err = sink.save();
             if (err != null && !err.isEmpty()) return new SaveOutcome(false, err);
             return new SaveOutcome(true, "ok");
@@ -106,6 +118,25 @@ public final class TunePersist {
         for (TuneKnobs.Knob knob : TuneKnobs.all()) {
             if (TuneKnobs.isBoolean(knob)) continue;
             if (isLiveKey(knob)) continue;
+            if (TuneKnobs.isInt(knob)) {
+                int cur;
+                try {
+                    cur = sink.getInt(knob.configKeys()[0], (int) knob.configDefaults()[0]);
+                } catch (Throwable t) {
+                    continue;
+                }
+                if (cur != (int) knob.configDefaults()[0]) {
+                    try {
+                        applier.apply(knob.name(), Integer.toString(cur));
+                    } catch (Throwable t) {
+                        TacLightMod.LOGGER.warn("[TacLight] TUNE restore {}={} failed: {}", knob.name(), cur, t.toString());
+                        continue;
+                    }
+                    sb.append(' ').append(knob.name()).append('=').append(cur);
+                    any = true;
+                }
+                continue;
+            }
             double cur;
             try {
                 cur = sink.getDouble(knob.configKeys()[0], knob.configDefaults()[0]);
@@ -172,6 +203,15 @@ public final class TunePersist {
             }
 
             @Override
+            public void setInt(String key, int value) {
+                if ("heldLightLevel".equals(key)) {
+                    TacLightConfig.HELD_LIGHT_LEVEL.set(value);
+                    return;
+                }
+                throw new IllegalArgumentException("unknown tune int key " + key);
+            }
+
+            @Override
             public void setBoolean(String key, boolean value) {
                 if ("voxelEnabled".equals(key)) {
                     TacLightConfig.VOXEL_ENABLED.set(value);
@@ -195,6 +235,16 @@ public final class TunePersist {
                         case "beamCapM" -> TacLightConfig.BEAM_CAP_M.get();
                         default -> fallback;
                     };
+                } catch (Throwable t) {
+                    return fallback;
+                }
+            }
+
+            @Override
+            public int getInt(String key, int fallback) {
+                try {
+                    if ("heldLightLevel".equals(key)) return TacLightConfig.HELD_LIGHT_LEVEL.get();
+                    return fallback;
                 } catch (Throwable t) {
                     return fallback;
                 }

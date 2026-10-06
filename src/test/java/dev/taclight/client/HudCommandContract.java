@@ -74,6 +74,17 @@ public final class HudCommandContract {
     //      台账留痕:`docs\BACKLOG.md §2.107`(本轮)。
     //   (修法①默认关 dev 开关 / ③改权限等级 都会让这两项继续留在发布件 ⇒ 本清单才需要它们;
     //    两种修法本轮都未被采纳。)
+    //   ❌ **2026-10-06 该裁决被证伪一半(用户实测)**:R12 把**整族**当调试面,连 2026-09-19
+    //      就定案为发布面功能的 `/taclight tune`(见 `docs/tune-正式调参命令-2026-09-19.md`
+    //      首段"发布包可用")一起剔出了发布件;而 `InteropPackagingContract` 当时**全是负断言**
+    //      (debug 面不得在发布件里),没有任何一条要求 tune **在**发布件里 ⇒ "整族消失"无人报警。
+    //      修法:按**功能面**重划(tune 回发布面 `dev/taclight/command/**` + `dev/taclight/tune/**`;
+    //      dev-only 子命令留 `debug/command/DebugCommandChildren`),并把这两项**加回本必需清单**
+    //      (正控)+ 字节码级符号断言(见 `InteropPackagingContract.TUNE_RELEASE_SYMBOLS`)。
+    //      ① 这两项现在保护的 = "调参命令在发布件里"(用户真正要用的功能面);
+    //      ② 加回的理由 = 负断言只能证明"没有多余的",证明不了"该有的在"(单侧判据的经典盲区)。
+    //      台账留痕:本仓 `docs/BACKLOG.md` 与 `VERDICT.md` 已随发布清理移出(git 历史里查不到),
+    //      故本轮记在功能自身的设计文档 `docs/tune-正式调参命令-2026-09-19.md` 末节 + `CHANGELOG.md`。
     private static final int MIN_RELEASE_ENTRIES = 200;
     private static final int MIN_RELEASE_CLASSES = 100;
 
@@ -90,7 +101,10 @@ public final class HudCommandContract {
             "dev/taclight/network/TacLightNetwork.class",
             "dev/taclight/config/TacLightConfig.class",
             "dev/taclight/interop/RuntimePackInjector.class",
-            "dev/taclight/client/ClientEvents.class");
+            "dev/taclight/client/ClientEvents.class",
+            // 2026-10-06 发布面回归修复:调参命令族(玩家可用的功能面)。
+            "dev/taclight/command/TacLightCommand.class",
+            "dev/taclight/tune/TuneService.class");
 
     public static void main(String[] args) throws Exception {
         contentLayer();

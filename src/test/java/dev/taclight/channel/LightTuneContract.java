@@ -76,8 +76,8 @@ public class LightTuneContract {
         check(Math.abs(LightTuneOverride.kneeG() - 3.0f) < 1e-6, "越界不污染当前值");
         String kNaN = LightTuneOverride.configureKnee("soft");
         check(kNaN.startsWith("bad arg"), "knee 非法输入拒绝: " + kNaN);
-        check(LightTuneOverride.configureKnee("off").contains("2.0"), "knee off 回显默认 G=2.0");
-        check(Math.abs(LightTuneOverride.kneeG() - 2.0f) < 1e-6, "knee off 生效(回默认 2.0,off≠恒等)");
+        check(LightTuneOverride.configureKnee("clear").contains("2.0"), "knee clear 回显默认 G=2.0");
+        check(Math.abs(LightTuneOverride.kneeG() - 2.0f) < 1e-6, "knee clear 生效(回默认 2.0,clear≠恒等)");
         LightTuneOverride.configureKnee("3.0");   // 供后续集成段断言 cone.w=3.0 透传
 
         // ---- beam:体积光密度(2026-09-05 第五旋钮,SSBO vlParams.y 直接换值) ----
@@ -126,8 +126,10 @@ public class LightTuneContract {
         //  2026-09-05 实测定标:NORM 0.4 → 侧视空中光束项 +~32/255(旧 HG 同法 +7.7),
         //  正对残留 0.4×0.04=0.016 仍低于旧 HG 后向瓣 0.029)。
         check(SpotlightData.BEAM_SIDE_FLOOR == 0.04f, "编译期默认 BEAM_SIDE_FLOOR=0.04(侧面相位底亮)");
-        check(LightTuneOverride.configureScat("status").contains("floor 0.04"),
-                "scat 默认 off 回显: " + LightTuneOverride.configureScat("status"));
+        check(LightTuneOverride.configureScat("status").contains("0.04")
+                        && LightTuneOverride.configureScat("status").contains("未覆盖"),
+                "scat 未覆盖回显有效值+覆盖态(2026-10-06 不再用 off(...)): "
+                        + LightTuneOverride.configureScat("status"));
         check(LightTuneOverride.scatOr(0.04f) == 0.04f, "默认 scat 直通(编译期默认 floor 0.04)");
         String sc03 = LightTuneOverride.configureScat("0.3");
         check(sc03.contains("scat=0.3"), "scat 0.3 回显: " + sc03);
@@ -139,7 +141,7 @@ public class LightTuneContract {
         check(Math.abs(LightTuneOverride.scatOr(0.04f) - 0.0f) < 1e-6, "scat 越界不污染当前值");
         check(LightTuneOverride.configureScat("-0.1").startsWith("range"), "scat 越界拒绝(<0)");
         check(LightTuneOverride.configureScat("abc").startsWith("bad arg"), "scat 非法输入拒绝");
-        check(LightTuneOverride.configureScat("off").contains("floor 0.04"), "scat off 回显");
+        check(LightTuneOverride.configureScat("clear").contains("0.04"), "scat clear 回显默认 0.04");
         check(LightTuneOverride.scatOr(0.04f) == 0.04f, "scat off 生效(回编译期默认)");
         LightTuneOverride.configureScat("0.1");
 
@@ -147,8 +149,8 @@ public class LightTuneContract {
         // GLSL cap = 2.0 × m(m 默认 1):低于半帽点恒等(单灯观感零变化),多灯重叠
         // 亮度指数肩部渐近 cap(用户需求:两灯同照不许亮度无限叠加刺眼)。
         // m=0 非法即未激活哨兵(上传侧保持槽位默认 1.0),故显式 0 走 range 拒绝。
-        check(LightTuneOverride.configureBeamcap("status").contains("off"),
-                "beamcap 默认 off 回显: " + LightTuneOverride.configureBeamcap("status"));
+        check(LightTuneOverride.configureBeamcap("status").contains("未覆盖"),
+                "beamcap 未覆盖回显有效值+覆盖态: " + LightTuneOverride.configureBeamcap("status"));
         check(LightTuneOverride.beamCapM() == 0.0f, "默认 beamCapM=0(未激活,槽位保持 1.0)");
         String bc2 = LightTuneOverride.configureBeamcap("2.0");
         check(bc2.contains("beamcap=2.0"), "beamcap 2.0 回显: " + bc2);
@@ -160,7 +162,7 @@ public class LightTuneContract {
         check(LightTuneOverride.configureBeamcap("0.1").startsWith("range"), "beamcap 越界拒绝(<0.25)");
         check(LightTuneOverride.configureBeamcap("0").startsWith("range"), "beamcap 0 拒绝(0=哨兵不可显式设)");
         check(LightTuneOverride.configureBeamcap("abc").startsWith("bad arg"), "beamcap 非法输入拒绝");
-        check(LightTuneOverride.configureBeamcap("off").contains("off"), "beamcap off 回显");
+        check(LightTuneOverride.configureBeamcap("clear").contains("1.0"), "beamcap clear 回显默认 1.0");
         check(LightTuneOverride.beamCapM() == 0.0f, "beamcap off 生效(回默认槽位 1.0)");
         LightTuneOverride.configureBeamcap("2.0");
 
@@ -168,17 +170,23 @@ public class LightTuneContract {
         // 外锥半角(度)直改 cosOuter,内锥=外×0.5;旧默认 32/18 在 30m 外光斑半径
         // ≈18.7m(远距离范围过大)。0 哨兵=未激活(直通 config 默认 外8/内4)。
         check(LightTuneOverride.coneDeg() == 0.0f, "默认 coneDeg=0(直通 config 外8/内4)");
-        check(LightTuneOverride.configureCone("status").contains("off"), "cone 默认 off 回显: "
+        check(LightTuneOverride.configureCone("status").contains("未覆盖"), "cone 未覆盖回显有效值+覆盖态: "
                 + LightTuneOverride.configureCone("status"));
         String cn8 = LightTuneOverride.configureCone("8");
-        check(cn8.contains("cone=8.0"), "cone 8 回显: " + cn8);
+        check(cn8.contains("外8.0/内4.0") && cn8.contains("已覆盖"),
+                "cone 8 回显内外半角+覆盖态: " + cn8);
         check(Math.abs(LightTuneOverride.coneDeg() - 8.0f) < 1e-6, "cone 覆盖生效");
         check(LightTuneOverride.configureCone("60").startsWith("range"), "cone 越界拒绝(>45): "
                 + LightTuneOverride.configureCone("60"));
         check(LightTuneOverride.configureCone("1").startsWith("range"), "cone 越界拒绝(<2)");
         check(Math.abs(LightTuneOverride.coneDeg() - 8.0f) < 1e-6, "cone 越界不污染当前值");
         check(LightTuneOverride.configureCone("wide").startsWith("bad arg"), "cone 非法输入拒绝");
-        check(LightTuneOverride.configureCone("off").contains("off"), "cone off 回显");
+        check(LightTuneOverride.configureCone("clear").contains("未覆盖"), "cone clear 回显未覆盖");
+        // 旧写法 off 仍是别名(2026-10-06 用词改造:clear 是正名,off 只作兼容)
+        LightTuneOverride.configureCone("8");
+        check(LightTuneOverride.configureCone("off").contains("未覆盖")
+                        && LightTuneOverride.coneDeg() == 0.0f,
+                "cone 旧写法 off == clear(别名等价,不是第二个语义)");
         check(LightTuneOverride.coneDeg() == 0.0f, "cone off 生效(直通 config)");
         LightTuneOverride.configureCone("6");
 
@@ -222,6 +230,26 @@ public class LightTuneContract {
             throw new AssertionError("FAIL GLSL 源读取: " + e);
         }
 
+        // ---- held:手持光照值(heldBlockLightValue,整数 0..15;2026-10-06 用户需求) ----
+        // 与其余旋钮不同族:消费点是物品/枪的 getLightEmission(光影包的氛围光),不是 SSBO 锥形光。
+        check(LightTuneOverride.heldLevel() == LightTuneOverride.DEFAULT_HELD_LEVEL
+                        && LightTuneOverride.DEFAULT_HELD_LEVEL == 10,
+                "held 默认 10(DEFAULT_HELD_LEVEL 单一真源,替代原先两处硬编码)");
+        check(LightTuneOverride.configureHeld("status").contains("未覆盖"),
+                "held 未覆盖回显: " + LightTuneOverride.configureHeld("status"));
+        String h12 = LightTuneOverride.configureHeld("12");
+        check(h12.contains("12") && h12.contains("已覆盖"), "held 12 回显: " + h12);
+        check(LightTuneOverride.heldLevel() == 12, "held 覆盖生效");
+        check(LightTuneOverride.configureHeld("16").startsWith("range"), "held 越界拒绝(>15)");
+        check(LightTuneOverride.configureHeld("-1").startsWith("range"), "held 越界拒绝(<0)");
+        check(LightTuneOverride.configureHeld("12.5").startsWith("bad arg"),
+                "held 拒绝小数(方块光等级没有小数;静默取整=假成功)");
+        check(LightTuneOverride.heldLevel() == 12, "越界/小数不污染当前值");
+        check(LightTuneOverride.configureHeld("clear").contains("10")
+                        && LightTuneOverride.heldLevel() == 10, "held clear 回默认 10");
+        check(LightTuneOverride.configureHeld("off").contains("10")
+                        && LightTuneOverride.heldLevel() == 10, "held 旧写法 off == clear(别名等价)");
+
         // ---- buildSpotBeam 集成 ----
         LightParams p = new LightParams(36.0f, 96.0f, 6.0f, 0.848f, 0.951f, 0.05f);
         SpotlightData tuned = ClientSpotlightUploader.buildSpotBeam(
@@ -260,6 +288,7 @@ public class LightTuneContract {
         LightTuneOverride.configureScat("off");
         LightTuneOverride.configureBeamcap("off");
         LightTuneOverride.configureCone("off");
+        LightTuneOverride.configureHeld("clear");
         SpotlightData clean = ClientSpotlightUploader.buildSpotBeam(
                 0, 0, 0, 0, 0, -1, p, 1.0f);
         check(Math.abs(clean.intensity() - 6.0f) < 1e-4

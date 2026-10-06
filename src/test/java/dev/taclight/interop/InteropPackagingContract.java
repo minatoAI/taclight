@@ -78,24 +78,29 @@ public class InteropPackagingContract {
 
     /**
      * 2026-09-28 R12:dev-only 面的**禁止前缀/前缀守卫**(B1 命令族 / B3 LAN 钩子 / N1 按键注入 / N2 构建期工具)。
-     * 前三项是**当前**命名空间,后四项是**已搬走的旧路径** —— 留着当幽灵守卫,防有人"搬回去"或少搬一个类。
+     * 后三项是**已搬走的旧路径** —— 留着当幽灵守卫,防有人"搬回去"或少搬一个类。
+     *
+     * <p><b>2026-10-06 修正(B1 过度剔除的回归)</b>:原清单里还有 {@code dev/taclight/command/} 与
+     * {@code dev/taclight/tune/TuneService} 两项 —— 那是 R12 把**整族** {@code /taclight} 当调试面搬走时
+     * 立的,结果把 2026-09-19 就定案为发布面功能的 {@code tune} 一起剔出了发布件
+     * (用户实测 {@code /taclight tune} 无此命令)。现在按**功能面**重划:{@code dev/taclight/command/**}
+     * 是发布面(禁止前缀撤销),{@code TuneService} 搬回 {@code dev/taclight/tune/**}(撤销);
+     * dev-only 子命令改由 {@code dev/taclight/debug/command/DebugCommandChildren} 提供,
+     * 仍被 {@code dev/taclight/debug/**} 前缀与下面的 {@code debug.isEmpty()} 闸门覆盖。</p>
      */
     private static final String[] DEV_ONLY_PREFIXES = {
             "dev/taclight/devonly/",
-            "dev/taclight/command/",
             "dev/taclight/sync/DevLanAuthHook",
             "dev/taclight/channel/KeyInject",
             "dev/taclight/tools/PackPatcherTool",
-            "dev/taclight/tune/TuneService",
     };
 
-    /** ② 的正控清单:R12/R12c 搬进 dev-only 命名空间的 9 个类必须在构建树里(剔除 ≠ 没编译)。 */
+    /** ② 的正控清单:R12/R12c 搬进 dev-only 命名空间的类必须在构建树里(剔除 ≠ 没编译)。 */
     private static final String[] MOVED_DEV_ONLY_CLASSES = {
-            "dev/taclight/debug/command/TacLightCommand.class",
+            "dev/taclight/debug/command/DebugCommandChildren.class",
             "dev/taclight/debug/command/SceneExecutor.class",
             "dev/taclight/debug/command/ScenePresets.class",
             "dev/taclight/debug/command/CamStore.class",
-            "dev/taclight/debug/tune/TuneService.class",
             "dev/taclight/devonly/KeyInject.class",
             "dev/taclight/devonly/DevLanAuthHook.class",
             "dev/taclight/devonly/tools/PackPatcherTool.class",
@@ -103,6 +108,37 @@ public class InteropPackagingContract {
             "dev/taclight/devonly/LightCommand.class",
             "dev/taclight/devonly/BobViewControl.class",
     };
+
+    /**
+     * 2026-10-06 发布面回归修复:<b>发布面命令族必须在发布件里</b> —— 反向正控。
+     *
+     * <p>为什么必须有这条:{@code /taclight tune} 于 2026-09-19 晋升为正式命令并写明"发布包可用",
+     * 2026-09-29 R12 把它连同整族调试命令按**目录**搬进 {@code dev/taclight/debug/**},
+     * 于是随 {@code exclude 'dev/taclight/debug/**'} 静默离开发布件 —— 而当时的闸门全是
+     * **负断言**(debug 面不得在发布件里)+ 一个被"合法化"的必需清单删项,**没有任何一条判据
+     * 要求 tune 在发布件里**,所以整族消失无人报警(用户实测才发现)。
+     * 现在把"发布面命令族在发布件里"钉成<b>字节码级正断言</b>:</p>
+     * <ul>
+     *   <li>类条目在:命令类 + 编排类(在 ⇒ 不是"只搬了源码没搬构建");</li>
+     *   <li>类字节里含 {@code tune} 与反射挂载目标串(在 ⇒ 命令树真的建出来了,
+     *       不是空壳类;钉字节码不受注释影响,见 AGENTS 五 M1)。</li>
+     * </ul>
+     */
+    private static final String[] TUNE_RELEASE_CLASSES = {
+            "dev/taclight/command/TacLightCommand.class",
+            "dev/taclight/tune/TuneService.class",
+    };
+
+    /** 发布面命令族的字节码符号:类条目 → 必须能在其原始字节里搜到的 ASCII 串。 */
+    private record TuneSymbol(String entry, String symbol) {}
+
+    private static final TuneSymbol[] TUNE_RELEASE_SYMBOLS = {
+            new TuneSymbol("dev/taclight/command/TacLightCommand.class", "tune"),
+            new TuneSymbol("dev/taclight/command/TacLightCommand.class", "dev.taclight.debug.command.DebugCommandChildren"),
+            new TuneSymbol("dev/taclight/command/TacLightCommand.class", "CMDS RegisterCommandsEvent firing"),
+            new TuneSymbol("dev/taclight/tune/TuneService.class", "tune"),
+    };
+
 
     /**
      * 2026-09-29 R12c(N1 收尾):**发布侧类里"只被 dev-only 调用"的死方法** —— 按**字节码符号**判定。
@@ -194,6 +230,26 @@ public class InteropPackagingContract {
         check(devOnly.isEmpty(), "★ R12[B1/B3/N1/N2·构件] 发布 jar 不含 dev-only 面(devonly/** + 已搬走的旧路径)"
                 + "(实际 " + devOnly.size() + " 条" + (devOnly.isEmpty() ? "" : " ⇒ " + devOnly)
                 + ");选中 jar = " + jar);
+
+        // 2026-10-06 发布面回归修复:**反向**正控 —— 发布面命令族必须在发布件里。
+        //   上面全是负断言(debug 面不得在发布件里),单靠它们无法发现"连发布面功能一起被剔走"。
+        //   红态自证:拿 0.11.5 发布件(ac7342b 构建)走 -PreleaseJar ⇒ 本条必红并点名两个类。
+        List<String> tuneMissing = new ArrayList<>();
+        for (String cls : TUNE_RELEASE_CLASSES) {
+            if (!zipHasEntry(jar, cls)) tuneMissing.add(cls);
+        }
+        check(tuneMissing.isEmpty(),
+                "★ 发布面回归[构件] 发布 jar 含 /taclight tune 命令族(缺: " + tuneMissing
+                        + ");选中 jar = " + jar);
+        List<String> tuneNoSymbol = new ArrayList<>();
+        for (TuneSymbol ts : TUNE_RELEASE_SYMBOLS) {
+            if (!zipEntryContainsAscii(jar, ts.entry(), ts.symbol())) {
+                tuneNoSymbol.add(ts.entry() + "#" + ts.symbol());
+            }
+        }
+        check(tuneNoSymbol.isEmpty(),
+                "★ 发布面回归[构件] 命令族字节码含 tune/反射挂载目标/可观测标记(缺: " + tuneNoSymbol
+                        + ");选中 jar = " + jar);
         // 2026-09-29 R12c(N1 收尾):**方法级**死代码闸门。
         //   背景(VERDICT §4 N1):`GunControl.parseRelayArg` 的类在发布件里、方法却只被 dev-only 中继调用
         //   ⇒ 发布件里是死方法;查"同类还有谁"时发现 `GunControl.applyAuto` 同病,一并搬到 `devonly/GunRelay`。
@@ -302,9 +358,18 @@ public class InteropPackagingContract {
         for (String rel : MOVED_DEV_ONLY_CLASSES) {
             if (!Files.isRegularFile(Path.of("build/classes/java/main", rel))) notCompiled.add(rel);
         }
-        check(notCompiled.isEmpty(), "★ build/classes 含 R12 搬走的 8 个 dev-only 类(应 " 
+        check(notCompiled.isEmpty(), "★ build/classes 含 R12 搬走的 dev-only 类(应 "
                 + MOVED_DEV_ONLY_CLASSES.length + " 个,缺 " + notCompiled.size()
                 + (notCompiled.isEmpty() ? "" : " ⇒ " + notCompiled) + ")");
+        // 2026-10-06 发布面回归:发布面命令族也必须编译出来 —— 与上面的 dev-only 正控对称,
+        //   防"发布件里没有"被"源码被删了"冒充(两种事实对排障含义完全不同)。
+        List<String> tuneNotCompiled = new ArrayList<>();
+        for (String rel : TUNE_RELEASE_CLASSES) {
+            if (!Files.isRegularFile(Path.of("build/classes/java/main", rel))) tuneNotCompiled.add(rel);
+        }
+        check(tuneNotCompiled.isEmpty(), "★ build/classes 含发布面命令族(应 "
+                + TUNE_RELEASE_CLASSES.length + " 个,缺 " + tuneNotCompiled.size()
+                + (tuneNotCompiled.isEmpty() ? "" : " ⇒ " + tuneNotCompiled) + ")");
     }
 
     /** ③ build.gradle 的剔除规则必须在。 */
@@ -490,8 +555,14 @@ public class InteropPackagingContract {
      * R12:jar 内某条目的**原始字节**是否含给定 ASCII 串(class 常量池为 modified-UTF8,
      * ASCII 段逐字节可比)。条目不存在 ⇒ false(调用方按判红处理)。
      */
-    private static boolean zipEntryContainsAscii(Path jar, String entry, String ascii) throws IOException {
-        byte[] token = ascii.getBytes(StandardCharsets.US_ASCII);
+    /** 条目存在性(与"条目里含某串"分开:空值 ≠ 否定结论,诊断要能分清两种红)。 */
+    private static boolean zipHasEntry(Path jar, String entry) throws IOException {
+        try (ZipFile z = new ZipFile(jar.toFile())) {
+            return z.getEntry(entry) != null;
+        }
+    }
+
+    private static boolean zipEntryContainsAscii(Path jar, String entry, String ascii) throws IOException {        byte[] token = ascii.getBytes(StandardCharsets.US_ASCII);
         try (ZipFile z = new ZipFile(jar.toFile())) {
             ZipEntry e = z.getEntry(entry);
             if (e == null) return false;
